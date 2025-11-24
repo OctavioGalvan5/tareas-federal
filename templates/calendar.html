@@ -1,0 +1,527 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <h2 style="margin-bottom: 2rem;"><i class="fas fa-calendar-alt"></i> Calendario de Vencimientos</h2>
+
+    <!-- Time Period Filters -->
+    <div style="margin-bottom: 2rem;">
+        <!-- Quick Filters (Tabs) -->
+        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+            <a href="{{ url_for('main.calendar', period='today', creator=request.args.get('creator')) }}"
+                class="filter-btn {% if current_period == 'today' %}active{% endif %}">
+                <i class="fas fa-calendar-day"></i> Hoy
+            </a>
+            <a href="{{ url_for('main.calendar', period='week', creator=request.args.get('creator')) }}"
+                class="filter-btn {% if current_period == 'week' %}active{% endif %}">
+                <i class="fas fa-calendar-week"></i> Esta Semana
+            </a>
+            <a href="{{ url_for('main.calendar', period='month', creator=request.args.get('creator')) }}"
+                class="filter-btn {% if current_period == 'month' %}active{% endif %}">
+                <i class="fas fa-calendar"></i> Este Mes
+            </a>
+            <a href="{{ url_for('main.calendar', period='all', creator=request.args.get('creator')) }}"
+                class="filter-btn {% if current_period == 'all' %}active{% endif %}">
+                <i class="fas fa-calendar-alt"></i> Todas
+            </a>
+        </div>
+
+        <!-- Advanced Filters (User & Date Range) -->
+        <div style="background: #f8fafc; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+
+                <!-- User Filter -->
+                <div style="flex: 1; min-width: 200px;">
+                    <label
+                        style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-color);">Usuario</label>
+                    <select id="creator_filter" class="date-input" style="width: 100%;">
+                        <option value="">Todos los Usuarios</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}" {% if request.args.get('creator')==user.id|string %}selected{%
+                            endif %}>
+                            {{ user.full_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Date Range -->
+                <div style="flex: 2; min-width: 300px; display: flex; gap: 0.5rem;">
+                    <div style="flex: 1;">
+                        <label
+                            style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-color);">Desde</label>
+                        <input type="date" id="start_date" class="date-input" style="width: 100%;"
+                            value="{{ request.args.get('start_date', '') }}">
+                    </div>
+                    <div style="flex: 1;">
+                        <label
+                            style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-color);">Hasta</label>
+                        <input type="date" id="end_date" class="date-input" style="width: 100%;"
+                            value="{{ request.args.get('end_date', '') }}">
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div style="display: flex; gap: 0.5rem;">
+                    <button onclick="applyFilters()" class="filter-btn"
+                        style="background: var(--primary-gradient); color: white; border: none;">
+                        <i class="fas fa-filter"></i> Filtrar
+                    </button>
+                    <button onclick="exportPDF()" class="filter-btn"
+                        style="background: var(--secondary-gradient, linear-gradient(135deg, #64748b 0%, #475569 100%)); color: white; border: none;">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tasks List Grouped by Date -->
+    <div>
+        <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-list-alt"></i> Tareas por Fecha</h3>
+        {% if tasks %}
+        {% set current_date = namespace(value=None) %}
+        {% for task in tasks|sort(attribute='due_date') %}
+        {% if current_date.value != task.due_date.date() %}
+        {% if not loop.first %}
+    </div>
+    {% endif %}
+    {% set current_date.value = task.due_date.date() %}
+    <div class="date-group">
+        <h4>
+            <i class="fas fa-calendar-day"></i>
+            {{ task.due_date.strftime('%d/%m/%Y - %A') }}
+            {% if task.due_date.date() == today %}
+            <span class="today-badge">HOY</span>
+            {% endif %}
+        </h4>
+        {% endif %}
+
+        <!-- Enhanced Task Card -->
+        <div class="task-card {% if task.status == 'Completed' %}completed{% endif %}" id="task-{{ task.id }}">
+            <div class="task-header">
+                <div class="task-checkbox">
+                    <input type="checkbox" id="check-{{ task.id }}" {% if task.status=='Completed' %}checked{% endif %}
+                        onchange="toggleTaskStatus({{ task.id }})">
+                    <label for="check-{{ task.id }}"></label>
+                </div>
+                <div class="task-title-section">
+                    <strong class="task-title">{{ task.title }}</strong>
+                    <div class="task-badges">
+                        <span class="priority-badge priority-{{ task.priority|lower }}">
+                            <i class="fas fa-flag"></i> {{ task.priority }}
+                        </span>
+                        <span class="status-badge status-{{ task.status|lower }}">
+                            <i
+                                class="fas fa-{% if task.status == 'Completed' %}check-circle{% else %}clock{% endif %}"></i>
+                            {% if task.status == 'Completed' %}Completada{% else %}Pendiente{% endif %}
+                        </span>
+                    </div>
+                </div>
+                <button class="expand-btn" onclick="toggleTaskDetails({{ task.id }})">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            </div>
+
+            <!-- Task Details (Collapsible) -->
+            <div class="task-details" id="details-{{ task.id }}" style="display: none;">
+                {% if task.description %}
+                <div class="task-detail-item">
+                    <i class="fas fa-align-left"></i>
+                    <div>
+                        <strong>Descripción:</strong>
+                        <p>{{ task.description }}</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="task-detail-item">
+                    <i class="fas fa-user"></i>
+                    <div>
+                        <strong>Creado por:</strong>
+                        <p>{{ task.creator.full_name }}</p>
+                    </div>
+                </div>
+
+                <div class="task-detail-item">
+                    <i class="fas fa-users"></i>
+                    <div>
+                        <strong>Asignado a:</strong>
+                        <p>
+                            {% for assignee in task.assignees %}
+                            <span class="assignee-tag">{{ assignee.full_name }}</span>{% if not loop.last %}, {% endif
+                            %}
+                            {% endfor %}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="task-detail-item">
+                    <i class="fas fa-calendar-check"></i>
+                    <div>
+                        <strong>Fecha de vencimiento:</strong>
+                        <p>{{ task.due_date.strftime('%d/%m/%Y %H:%M') }}</p>
+                    </div>
+                </div>
+
+                <div class="task-detail-item">
+                    <i class="fas fa-info-circle"></i>
+                    <div>
+                        <strong>Creado el:</strong>
+                        <p>{{ task.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% if loop.last %}
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: var(--text-light);">
+        <i class="fas fa-calendar-times" style="font-size: 4rem; opacity: 0.3; margin-bottom: 1rem;"></i>
+        <p style="font-size: 1.2rem;">No hay tareas en el período seleccionado.</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .filter-btn {
+        padding: 0.75rem 1.5rem;
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        border: 2px solid var(--border-color);
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+        text-decoration: none;
+        color: var(--text-color);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .filter-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+        background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+    }
+
+    .filter-btn.active {
+        background: var(--primary-gradient);
+        color: white;
+        border-color: transparent;
+    }
+
+    .date-input {
+        padding: 0.75rem 1rem;
+        border: 2px solid var(--border-color);
+        border-radius: 10px;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.95rem;
+        transition: var(--transition);
+    }
+
+    .date-input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .date-group {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        border-left: 4px solid var(--primary-color);
+        transition: var(--transition);
+    }
+
+    .date-group:hover {
+        transform: translateX(5px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .date-group h4 {
+        color: var(--primary-color);
+        margin: 0 0 1rem 0;
+        font-size: 1.2rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .today-badge {
+        background: var(--primary-gradient);
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        margin-left: 0.5rem;
+    }
+
+    .task-card {
+        background: white;
+        padding: 1.25rem;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        box-shadow: var(--shadow-sm);
+        transition: var(--transition);
+        border-left: 4px solid var(--primary-color);
+    }
+
+    .task-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .task-card.completed {
+        opacity: 0.7;
+        border-left-color: var(--success-color);
+    }
+
+    .task-card.completed .task-title {
+        text-decoration: line-through;
+        color: var(--text-light);
+    }
+
+    .task-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .task-checkbox {
+        position: relative;
+    }
+
+    .task-checkbox input[type="checkbox"] {
+        appearance: none;
+        width: 24px;
+        height: 24px;
+        border: 2px solid var(--border-color);
+        border-radius: 6px;
+        cursor: pointer;
+        transition: var(--transition);
+        position: relative;
+    }
+
+    .task-checkbox input[type="checkbox"]:checked {
+        background: var(--success-gradient);
+        border-color: transparent;
+    }
+
+    .task-checkbox input[type="checkbox"]:checked::after {
+        content: '✓';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-weight: bold;
+        font-size: 16px;
+    }
+
+    .task-title-section {
+        flex: 1;
+    }
+
+    .task-title {
+        font-size: 1.1rem;
+        color: var(--text-color);
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
+    .task-badges {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .priority-badge,
+    .status-badge {
+        padding: 0.35rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .priority-badge.priority-urgente {
+        background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+        color: #dc2626;
+    }
+
+    .priority-badge.priority-media {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        color: #d97706;
+    }
+
+    .priority-badge.priority-normal {
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        color: #2563eb;
+    }
+
+    .status-badge.status-pending {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        color: #d97706;
+    }
+
+    .status-badge.status-completed {
+        background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+        color: #059669;
+    }
+
+    .expand-btn {
+        background: none;
+        border: none;
+        color: var(--text-light);
+        cursor: pointer;
+        font-size: 1.2rem;
+        transition: var(--transition);
+        padding: 0.5rem;
+    }
+
+    .expand-btn:hover {
+        color: var(--primary-color);
+        transform: scale(1.2);
+    }
+
+    .expand-btn.expanded i {
+        transform: rotate(180deg);
+    }
+
+    .task-details {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 2px solid var(--border-color);
+    }
+
+    .task-detail-item {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        align-items: flex-start;
+    }
+
+    .task-detail-item i {
+        color: var(--primary-color);
+        width: 20px;
+        margin-top: 0.25rem;
+    }
+
+    .task-detail-item strong {
+        display: block;
+        margin-bottom: 0.25rem;
+        color: var(--text-color);
+    }
+
+    .task-detail-item p {
+        margin: 0;
+        color: var(--text-light);
+    }
+
+    .assignee-tag {
+        background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+        color: #4f46e5;
+        padding: 0.25rem 0.75rem;
+        border-radius: 15px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        display: inline-block;
+    }
+</style>
+
+<script>
+    function applyFilters() {
+        const startDate = document.getElementById('start_date').value;
+        const endDate = document.getElementById('end_date').value;
+        const creator = document.getElementById('creator_filter').value;
+        const period = '{{ current_period }}';
+
+        let url = `{{ url_for('main.calendar') }}?period=${period}`;
+
+        if (startDate && endDate) {
+            url += `&start_date=${startDate}&end_date=${endDate}`;
+        }
+        if (creator) {
+            url += `&creator=${creator}`;
+        }
+
+        window.location.href = url;
+    }
+
+    function exportPDF() {
+        const startDate = document.getElementById('start_date').value;
+        const endDate = document.getElementById('end_date').value;
+        const creator = document.getElementById('creator_filter').value;
+        const period = '{{ current_period }}';
+
+        let url = `{{ url_for('main.export_pdf') }}?period=${period}`;
+
+        if (startDate && endDate) {
+            url += `&start_date=${startDate}&end_date=${endDate}`;
+        }
+        if (creator) {
+            url += `&creator=${creator}`;
+        }
+
+        window.location.href = url;
+    }
+
+    function toggleTaskDetails(taskId) {
+        const details = document.getElementById(`details-${taskId}`);
+        const btn = event.currentTarget;
+
+        if (details.style.display === 'none') {
+            details.style.display = 'block';
+            btn.classList.add('expanded');
+        } else {
+            details.style.display = 'none';
+            btn.classList.remove('expanded');
+        }
+    }
+
+    function toggleTaskStatus(taskId) {
+        fetch(`/task/${taskId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const taskCard = document.getElementById(`task-${taskId}`);
+                    const statusBadge = taskCard.querySelector('.status-badge');
+
+                    if (data.new_status === 'Completed') {
+                        taskCard.classList.add('completed');
+                        statusBadge.className = 'status-badge status-completed';
+                        statusBadge.innerHTML = '<i class="fas fa-check-circle"></i> Completada';
+                    } else {
+                        taskCard.classList.remove('completed');
+                        statusBadge.className = 'status-badge status-pending';
+                        statusBadge.innerHTML = '<i class="fas fa-clock"></i> Pendiente';
+                    }
+                } else {
+                    alert('Error al actualizar la tarea: ' + data.error);
+                    // Revert checkbox
+                    const checkbox = document.getElementById(`check-${taskId}`);
+                    checkbox.checked = !checkbox.checked;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al actualizar la tarea');
+                // Revert checkbox
+                const checkbox = document.getElementById(`check-${taskId}`);
+                checkbox.checked = !checkbox.checked;
+            });
+    }
+</script>
+{% endblock %}

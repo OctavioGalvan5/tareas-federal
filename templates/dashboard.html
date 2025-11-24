@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1><i class="fas fa-clipboard-list"></i> Mis Tareas</h1>
+    <a href="{{ url_for('main.create_task') }}" class="button">
+        <i class="fas fa-plus"></i> Nueva Tarea
+    </a>
+</div>
+
+<div class="card">
+    <div class="filters">
+        <form method="GET" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+                <label for="creator"><i class="fas fa-user"></i> Creado por:</label>
+                <select name="creator" id="creator">
+                    <option value="">Todos</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {% if request.args.get('creator')==user.id|string %}selected{% endif
+                        %}>{{ user.full_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="flex: 1; min-width: 200px;">
+                <label for="status"><i class="fas fa-tasks"></i> Estado:</label>
+                <select name="status" id="status">
+                    <option value="">Todos</option>
+                    <option value="Pending" {% if request.args.get('status')=='Pending' %}selected{% endif %}>Pendiente
+                    </option>
+                    <option value="Completed" {% if request.args.get('status')=='Completed' %}selected{% endif %}>
+                        Completado</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button type="submit"><i class="fas fa-filter"></i> Filtrar</button>
+                <button type="submit" formaction="{{ url_for('main.export_pdf') }}" class="button-secondary"
+                    title="Exportar a PDF">
+                    <i class="fas fa-file-pdf"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="task-list">
+        {% if tasks %}
+        {% for task in tasks %}
+        <div class="task-item {% if task.due_date.date() == today %}due-today{% endif %}">
+            <div class="task-info">
+                <h3>
+                    <button class="toggle-btn {% if task.status == 'Completed' %}completed{% endif %}"
+                        onclick="toggleTask({{ task.id }}, this)"
+                        title="Marcar como {% if task.status == 'Pending' %}completada{% else %}pendiente{% endif %}">
+                        <i
+                            class="fas {% if task.status == 'Completed' %}fa-check-circle{% else %}fa-circle{% endif %}"></i>
+                    </button>
+                    <span class="task-title {% if task.status == 'Completed' %}completed-text{% endif %}">{{ task.title
+                        }}</span>
+                    <span class="priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
+                </h3>
+                <p>{{ task.description }}</p>
+                <div class="task-meta">
+                    <span><i class="fas fa-user-edit"></i> Creado por: {{ task.creator.full_name }}</span>
+                    <span><i class="fas fa-user-check"></i> Asignado a: {% for assignee in task.assignees %}{{
+                        assignee.full_name }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+                </div>
+            </div>
+            <div class="task-date">
+                <i class="fas fa-calendar"></i> Vence: {{ task.due_date.strftime('%d/%m/%Y') }}
+                {% if task.due_date.date() == today %}
+                <br><span style="color: var(--danger-color); font-size: 0.8rem; font-weight: 700;"><i
+                        class="fas fa-exclamation-triangle"></i> ¡VENCE HOY!</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div style="text-align: center; padding: 3rem; color: var(--text-light);">
+            <i class="fas fa-inbox" style="font-size: 4rem; opacity: 0.3; margin-bottom: 1rem;"></i>
+            <p style="font-size: 1.2rem;">No tienes tareas pendientes.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    function toggleTask(taskId, btn) {
+        fetch(`/task/${taskId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert('Error al actualizar la tarea: ' + (data.error || 'Desconocido'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error de conexión');
+            });
+    }
+</script>
+
+<style>
+    .toggle-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 1.2rem;
+        color: var(--text-light);
+        margin-right: 0.5rem;
+        transition: color 0.2s;
+    }
+
+    .toggle-btn:hover {
+        color: var(--primary-color);
+    }
+
+    .toggle-btn.completed {
+        color: var(--success-color);
+    }
+
+    .task-title.completed-text {
+        text-decoration: line-through;
+        color: var(--text-light);
+    }
+</style>
+{% endblock %}

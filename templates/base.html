@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sistema de gestión de tareas para profesionales legales">
+    <title>Gestor Federal - Caja de Abogados</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <nav class="navbar">
+        <a href="{{ url_for('main.dashboard') }}" class="navbar-brand">
+            <i class="fas fa-gavel"></i> Gestor Federal
+        </a>
+        <div class="navbar-nav">
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('main.dashboard') }}">
+                <i class="fas fa-tasks"></i> Mis Tareas
+            </a>
+            <a href="{{ url_for('main.create_task') }}">
+                <i class="fas fa-plus-circle"></i> Nueva Tarea
+            </a>
+            <a href="{{ url_for('main.calendar') }}">
+                <i class="fas fa-calendar-alt"></i> Calendario
+            </a>
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('admin.manage_users') }}">
+                <i class="fas fa-users"></i> Usuarios
+            </a>
+            {% endif %}
+            <a href="{{ url_for('auth.logout') }}">
+                <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+            </a>
+            {% else %}
+            <a href="{{ url_for('auth.login') }}">
+                <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
+            </a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">
+            <i
+                class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-circle{% else %}info-circle{% endif %}"></i>
+            {{ message }}
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+</body>
+
+</html>

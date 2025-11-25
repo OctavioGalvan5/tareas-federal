@@ -15,7 +15,7 @@ class PDFReport(FPDF):
         self.set_font('Arial', 'B', 24)
         self.set_text_color(255, 255, 255)
         self.set_y(15)
-        self.cell(0, 10, 'Gestor Federal', 0, 1, 'C')
+        self.cell(0, 10, 'Gestor de Tareas Federal', 0, 1, 'C')
         
         self.set_font('Arial', '', 12)
         self.cell(0, 10, 'Reporte de Tareas', 0, 1, 'C')
@@ -93,6 +93,8 @@ def generate_task_pdf(tasks, filters):
         filter_text.append(f"Estado: {status_trans}")
     if filters.get('date_range'):
         filter_text.append(f"Fecha: {filters['date_range']}")
+    if filters.get('tag'):
+        filter_text.append(f"Etiqueta: {filters['tag']}")
         
     if not filter_text:
         pdf.cell(0, 6, "Ninguno (Mostrando todas las tareas)", 0, 1)

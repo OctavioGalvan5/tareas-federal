@@ -83,6 +83,8 @@ def generate_task_excel(tasks, filters):
         filter_text.append(f"Estado: {status_trans}")
     if filters.get('date_range'):
         filter_text.append(f"Fecha: {filters['date_range']}")
+    if filters.get('tag'):
+        filter_text.append(f"Etiqueta: {filters['tag']}")
     
     if not filter_text:
         ws[f'A{row}'] = "Ninguno (Mostrando todas las tareas)"
@@ -97,7 +99,7 @@ def generate_task_excel(tasks, filters):
     row += 2
     
     # --- Table Headers ---
-    headers = ['Título', 'Descripción', 'Estado', 'Prioridad', 'Vencimiento', 'Asignados', 'Completado por', 'Fecha Completado']
+    headers = ['Título', 'Descripción', 'Estado', 'Prioridad', 'Vencimiento', 'Creado por', 'Asignados', 'Completado por', 'Fecha Completado']
     header_row = row
     
     for col_num, header in enumerate(headers, 1):
@@ -136,6 +138,7 @@ def generate_task_excel(tasks, filters):
             status_text,
             task.priority,
             task.due_date.strftime('%d/%m/%Y'),
+            task.creator.full_name,
             assignees_list,
             completed_by_name,
             completed_at_str

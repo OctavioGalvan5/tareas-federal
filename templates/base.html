@@ -5,9 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Sistema de gestión de tareas para profesionales legales">
-    <title>Gestor Federal - Caja de Abogados</title>
+    <title>Gestor de Tareas Federal - Caja de Abogados</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='notifications.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='tags.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -15,7 +16,7 @@
 <body>
     <nav class="navbar">
         <a href="{{ url_for('main.dashboard') }}" class="navbar-brand">
-            <i class="fas fa-gavel"></i> Gestor Federal
+            <i class="fas fa-gavel"></i> Gestor de Tareas
         </a>
         <div class="navbar-nav">
             {% if current_user.is_authenticated %}
@@ -32,14 +33,22 @@
             <a href="{{ url_for('admin.manage_users') }}">
                 <i class="fas fa-users"></i> Usuarios
             </a>
+            <a href="{{ url_for('main.tags') }}">
+                <i class="fas fa-tags"></i> Etiquetas
+            </a>
             {% endif %}
-            {% if current_user.is_authenticated %}
+
+            <span class="user-display"
+                style="color: rgba(255, 255, 255, 0.9); margin-right: 0.5rem; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.1); padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.9rem;">
+                <i class="fas fa-user-circle"></i> {{ current_user.full_name }}
+            </span>
+
             <button id="notificationToggle"
                 class="notification-toggle {% if current_user.notifications_enabled %}active{% endif %}"
                 onclick="toggleNotifications()" title="Notificaciones">
                 <i class="fas fa-bell"></i>
             </button>
-            {% endif %}
+
             <a href="{{ url_for('auth.logout') }}">
                 <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
             </a>

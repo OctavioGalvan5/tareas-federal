@@ -8,87 +8,134 @@
     </a>
 </div>
 
-<div class="card">
-    <div class="filters">
-        <form method="GET" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
-            <div style="flex: 1; min-width: 200px;">
-                <label for="creator"><i class="fas fa-user"></i> Creado por:</label>
-                <select name="creator" id="creator">
-                    <option value="">Todos</option>
-                    {% for user in users %}
-                    <option value="{{ user.id }}" {% if request.args.get('creator')==user.id|string %}selected{% endif
-                        %}>{{ user.full_name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div style="flex: 1; min-width: 200px;">
-                <label for="status"><i class="fas fa-tasks"></i> Estado:</label>
-                <select name="status" id="status">
-                    <option value="">Todos</option>
-                    <option value="Pending" {% if request.args.get('status')=='Pending' %}selected{% endif %}>Pendiente
-                    </option>
-                    <option value="Completed" {% if request.args.get('status')=='Completed' %}selected{% endif %}>
-                        Completado</option>
-                </select>
-            </div>
-            <div style="display: flex; gap: 0.5rem;">
-                <button type="submit"><i class="fas fa-filter"></i> Filtrar</button>
-                <button type="submit" formaction="{{ url_for('main.export_pdf') }}" class="button-secondary"
-                    title="Exportar a PDF">
-                    <i class="fas fa-file-pdf"></i>
-                </button>
-                <button type="submit" formaction="{{ url_for('main.export_excel') }}" class="button-secondary"
-                    title="Exportar a Excel" style="background-color: #10793f;">
-                    <i class="fas fa-file-excel"></i>
-                </button>
-            </div>
-        </form>
-    </div>
+<div class="filters-section"
+    style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 2rem;">
+    <form method="GET" action="{{ url_for('main.dashboard') }}" class="filters-form"
+        style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 200px;">
+            <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Asignado
+                a</label>
+            <select name="assignee" onchange="this.form.submit()"
+                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                <option value="">Todos</option>
+                {% for user in users %}
+                <option value="{{ user.id }}" {% if request.args.get('assignee')|int==user.id %}selected{% endif %}>
+                    {{ user.full_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
 
-    <div class="task-list">
-        {% if tasks %}
-        {% for task in tasks %}
-        <div class="task-item {% if task.due_date.date() == today %}due-today{% endif %}">
-            <div class="task-info">
-                <h3>
-                    <button class="toggle-btn {% if task.status == 'Completed' %}completed{% endif %}"
-                        onclick="toggleTask({{ task.id }}, this)"
-                        title="Marcar como {% if task.status == 'Pending' %}completada{% else %}pendiente{% endif %}">
-                        <i
-                            class="fas {% if task.status == 'Completed' %}fa-check-circle{% else %}fa-circle{% endif %}"></i>
-                    </button>
-                    <span class="task-title {% if task.status == 'Completed' %}completed-text{% endif %}">{{ task.title
-                        }}</span>
-                    <span class="priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
-                </h3>
-                <p>{{ task.description }}</p>
-                <div class="task-meta">
-                    <span><i class="fas fa-user-edit"></i> Creado por: {{ task.creator.full_name }}</span>
-                    <span><i class="fas fa-user-check"></i> Asignado a: {% for assignee in task.assignees %}{{
-                        assignee.full_name }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
-                    {% if task.completed_by %}
-                    <span style="color: var(--success-color); font-weight: 600;"><i class="fas fa-check-circle"></i>
-                        Completado por: {{ task.completed_by.full_name }} ({{ task.completed_at.strftime('%d/%m/%Y
-                        %H:%M') }})</span>
-                    {% endif %}
+        <div style="flex: 1; min-width: 200px;">
+            <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Creado
+                por</label>
+            <select name="creator" onchange="this.form.submit()"
+                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                <option value="">Todos</option>
+                {% for user in users %}
+                <option value="{{ user.id }}" {% if request.args.get('creator')|int==user.id %}selected{% endif %}>
+                    {{ user.full_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style="flex: 1; min-width: 150px;">
+            <label
+                style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Estado</label>
+            <select name="status" onchange="this.form.submit()"
+                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                <option value="">Todos</option>
+                <option value="Pending" {% if request.args.get('status')=='Pending' %}selected{% endif %}>Pendiente
+                </option>
+                <option value="Completed" {% if request.args.get('status')=='Completed' %}selected{% endif %}>Completado
+                </option>
+            </select>
+        </div>
+
+        <div style="flex: 1; min-width: 150px;">
+            <label
+                style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Etiqueta</label>
+            <select name="tag_filter" onchange="this.form.submit()"
+                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                <option value="">Todas</option>
+                {% for tag in all_tags %}
+                <option value="{{ tag.id }}" {% if request.args.get('tag_filter')|int==tag.id %}selected{% endif %}>
+                    {{ tag.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem;">
+            <button type="submit" class="button"
+                style="padding: 0.5rem 1rem; height: 38px; display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fas fa-filter"></i> Filtrar
+            </button>
+            <button type="submit" formaction="{{ url_for('main.export_pdf') }}" class="button-secondary"
+                title="Exportar a PDF"
+                style="height: 38px; width: 38px; padding: 0; display: flex; align-items: center; justify-content: center;">
+                <i class="fas fa-file-pdf"></i>
+            </button>
+            <button type="submit" formaction="{{ url_for('main.export_excel') }}" class="button-secondary"
+                title="Exportar a Excel"
+                style="background-color: #10793f; height: 38px; width: 38px; padding: 0; display: flex; align-items: center; justify-content: center; color: white;">
+                <i class="fas fa-file-excel"></i>
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="task-list">
+    {% if tasks %}
+    {% for task in tasks %}
+    <div class="task-item {% if task.due_date.date() == today %}due-today{% endif %}">
+        <div class="task-info">
+            <h3>
+                <button class="toggle-btn {% if task.status == 'Completed' %}completed{% endif %}"
+                    onclick="toggleTask({{ task.id }}, this)"
+                    title="Marcar como {% if task.status == 'Pending' %}completada{% else %}pendiente{% endif %}">
+                    <i class="fas {% if task.status == 'Completed' %}fa-check-circle{% else %}fa-circle{% endif %}"></i>
+                </button>
+                <span class="task-title {% if task.status == 'Completed' %}completed-text{% endif %}">{{ task.title
+                    }}</span>
+                <span class="priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
+                <div class="task-tags">
+                    {% for tag in task.tags %}
+                    <span class="tag-chip"
+                        style="background-color: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}40;">
+                        {{ tag.name }}
+                    </span>
+                    {% endfor %}
                 </div>
-            </div>
-            <div class="task-date">
-                <i class="fas fa-calendar"></i> Vence: {{ task.due_date.strftime('%d/%m/%Y') }}
-                {% if task.due_date.date() == today %}
-                <br><span style="color: var(--danger-color); font-size: 0.8rem; font-weight: 700;"><i
-                        class="fas fa-exclamation-triangle"></i> ¡VENCE HOY!</span>
+            </h3>
+            <p>{{ task.description }}</p>
+            <div class="task-meta">
+                <span><i class="fas fa-user-edit"></i> Creado por: {{ task.creator.full_name }}</span>
+                <span><i class="fas fa-user-check"></i> Asignado a: {% for assignee in task.assignees %}{{
+                    assignee.full_name }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+                {% if task.completed_by %}
+                <span style="color: var(--success-color); font-weight: 600;"><i class="fas fa-check-circle"></i>
+                    Completado por: {{ task.completed_by.full_name }} ({{ task.completed_at.strftime('%d/%m/%Y %H:%M')
+                    }})</span>
                 {% endif %}
             </div>
         </div>
-        {% endfor %}
-        {% else %}
-        <div style="text-align: center; padding: 3rem; color: var(--text-light);">
-            <i class="fas fa-inbox" style="font-size: 4rem; opacity: 0.3; margin-bottom: 1rem;"></i>
-            <p style="font-size: 1.2rem;">No tienes tareas pendientes.</p>
+        <div class="task-date">
+            <i class="fas fa-calendar"></i> Vence: {{ task.due_date.strftime('%d/%m/%Y') }}
+            {% if task.due_date.date() == today %}
+            <br><span style="color: var(--danger-color); font-size: 0.8rem; font-weight: 700;"><i
+                    class="fas fa-exclamation-triangle"></i> ¡VENCE HOY!</span>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
+    {% endfor %}
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: var(--text-light);">
+        <i class="fas fa-inbox" style="font-size: 4rem; opacity: 0.3; margin-bottom: 1rem;"></i>
+        <p style="font-size: 1.2rem;">No tienes tareas pendientes.</p>
+    </div>
+    {% endif %}
 </div>
 
 <script>

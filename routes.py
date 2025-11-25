@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, make_response
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
-from models import User, Task
+from models import User, Task, Tag
 from datetime import datetime, date, timedelta
 from pdf_utils import generate_task_pdf
 from excel_utils import generate_task_excel
@@ -52,22 +52,22 @@ def dashboard():
     filter_assignee = request.args.get('assignee')
     filter_creator = request.args.get('creator')
     filter_status = request.args.get('status')
-    
-    query = Task.query
+    filter_tag = request.args.get('tag_filter')  # AGREGADO
+
+    # Base query: Show ALL tasks to ALL users by default
+    tasks_query = Task.query
     
     if filter_assignee:
-        query = query.filter(Task.assignees.any(id=filter_assignee))
-    else:
-        # Default: Show tasks assigned to current user
-        pass 
-    
-    tasks_query = Task.query.filter(Task.assignees.any(id=current_user.id))
+        tasks_query = tasks_query.filter(Task.assignees.any(id=filter_assignee))
     
     if filter_creator:
         tasks_query = tasks_query.filter(Task.creator_id == filter_creator)
         
     if filter_status and filter_status in ['Pending', 'Completed']:
         tasks_query = tasks_query.filter(Task.status == filter_status)
+
+    if filter_tag:  # NUEVO
+        tasks_query = tasks_query.filter(Task.tags.any(id=int(filter_tag)))
         
     # Sort by due_date ascending
     tasks = tasks_query.order_by(Task.due_date.asc()).all()
@@ -76,13 +76,16 @@ def dashboard():
     today = date.today()
     
     users = User.query.all() # For filters
+    all_tags = Tag.query.order_by(Tag.name).all()  # NUEVO
     
-    return render_template('dashboard.html', tasks=tasks, today=today, users=users)
+    return render_template('dashboard.html', tasks=tasks, today=today, users=users, all_tags=all_tags)
 
 @main_bp.route('/task/new', methods=['GET', 'POST'])
 @login_required
 def create_task():
     users = User.query.all()
+    available_tags = Tag.query.order_by(Tag.name).all()  # NUEVO
+
     if request.method == 'POST':
         title = request.form.get('title')
         description = request.form.get('description')
@@ -105,13 +108,20 @@ def create_task():
             user = User.query.get(int(user_id))
             if user:
                 new_task.assignees.append(user)
+
+        # Add tags  # NUEVO
+        tag_ids = request.form.getlist('tags')
+        for tag_id in tag_ids:
+            tag = Tag.query.get(int(tag_id))
+            if tag:
+                new_task.tags.append(tag)
                 
         db.session.add(new_task)
         db.session.commit()
         flash('Tarea creada exitosamente.', 'success')
         return redirect(url_for('main.dashboard'))
         
-    return render_template('create_task.html', users=users)
+    return render_template('create_task.html', users=users, available_tags=available_tags)  # MODIFICADO
 
 @main_bp.route('/calendar')
 @login_required
@@ -244,6 +254,13 @@ def export_pdf():
             filters['date_range'] = f"{start_date_str} a {end_date_str}"
         except ValueError:
             pass
+            
+    # Tag filter
+    filter_tag = request.args.get('tag_filter')
+    if filter_tag:
+        query = query.filter(Task.tags.any(id=int(filter_tag)))
+        tag = Tag.query.get(int(filter_tag))
+        filters['tag'] = tag.name if tag else ''
         
     tasks = query.order_by(Task.due_date.asc()).all()
     
@@ -312,10 +329,16 @@ def export_excel():
             filters['date_range'] = f"{start_date_str} a {end_date_str}"
         except ValueError:
             pass
+            
+    # Tag filter
+    filter_tag = request.args.get('tag_filter')
+    if filter_tag:
+        query = query.filter(Task.tags.any(id=int(filter_tag)))
+        tag = Tag.query.get(int(filter_tag))
+        filters['tag'] = tag.name if tag else ''
         
     tasks = query.order_by(Task.due_date.asc()).all()
     
-    # Generate Excel file
     wb = generate_task_excel(tasks, filters)
     
     # Save to BytesIO
@@ -402,3 +425,114 @@ def api_toggle_notifications():
         'success': True,
         'notifications_enabled': current_user.notifications_enabled
     })
+# Tags Routes - Append to routes.py
+
+# --- Tags Management Routes ---
+@main_bp.route('/tags')
+@login_required
+def tags():
+    """Tags management page"""
+    if not current_user.is_admin:
+        flash('Solo los administradores pueden gestionar tags.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    all_tags = Tag.query.order_by(Tag.name).all()
+    return render_template('tags.html', tags=all_tags)
+
+@main_bp.route('/api/tags', methods=['GET'])
+@login_required
+def api_get_tags():
+    """Get all tags"""
+    tags = Tag.query.order_by(Tag.name).all()
+    return jsonify({
+        'tags': [{
+            'id': tag.id,
+            'name': tag.name,
+            'color': tag.color
+        } for tag in tags]
+    })
+
+@main_bp.route('/api/tags', methods=['POST'])
+@login_required
+def api_create_tag():
+    """Create a new tag"""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    
+    data = request.get_json()
+    name = data.get('name', '').strip()
+    color = data.get('color', '#2563eb')
+    
+    if not name:
+        return jsonify({'success': False, 'message': 'El nombre es requerido'}), 400
+    
+    # Check if tag already exists
+    existing = Tag.query.filter_by(name=name).first()
+    if existing:
+        return jsonify({'success': False, 'message': 'Este tag ya existe'}), 400
+    
+    new_tag = Tag(
+        name=name,
+        color=color,
+        created_by_id=current_user.id
+    )
+    
+    db.session.add(new_tag)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'tag': {
+            'id': new_tag.id,
+            'name': new_tag.name,
+            'color': new_tag.color
+        }
+    })
+
+@main_bp.route('/api/tags/<int:tag_id>', methods=['PUT'])
+@login_required
+def api_update_tag(tag_id):
+    """Update a tag"""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    
+    tag = Tag.query.get_or_404(tag_id)
+    data = request.get_json()
+    
+    name = data.get('name', '').strip()
+    color = data.get('color')
+    
+    if name:
+        # Check if new name conflicts with another tag
+        existing = Tag.query.filter(Tag.name == name, Tag.id != tag_id).first()
+        if existing:
+            return jsonify({'success': False, 'message': 'Este nombre ya está en uso'}), 400
+        tag.name = name
+    
+    if color:
+        tag.color = color
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'tag': {
+            'id': tag.id,
+            'name': tag.name,
+            'color': tag.color
+        }
+    })
+
+@main_bp.route('/api/tags/<int:tag_id>', methods=['DELETE'])
+@login_required
+def api_delete_tag(tag_id):
+    """Delete a tag"""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    
+    tag = Tag.query.get_or_404(tag_id)
+    
+    db.session.delete(tag)
+    db.session.commit()
+    
+    return jsonify({'success': True})

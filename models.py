@@ -13,6 +13,12 @@ task_assignments = db.Table('task_assignments',
     db.Column('task_id', db.Integer, db.ForeignKey('task.id'), primary_key=True)
 )
 
+# Association table for Many-to-Many relationship between Tasks and Tags
+task_tags = db.Table('task_tags',
+    db.Column('task_id', db.Integer, db.ForeignKey('task.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('tag_id', db.Integer, db.ForeignKey('tag.id', ondelete='CASCADE'), primary_key=True)
+)
+
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -48,6 +54,22 @@ class Task(db.Model):
     
     # Relationship for completed_by
     completed_by = db.relationship('User', foreign_keys=[completed_by_id])
+    
+    # Relationship for tags
+    tags = db.relationship('Tag', secondary=task_tags, backref=db.backref('tasks', lazy='dynamic'))
 
     def __repr__(self):
         return f'<Task {self.title}>'
+
+class Tag(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    color = db.Column(db.String(7), nullable=False)  # Hex color code (#RRGGBB)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship for creator
+    created_by = db.relationship('User', backref='created_tags')
+    
+    def __repr__(self):
+        return f'<Tag {self.name}>'

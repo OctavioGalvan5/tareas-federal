@@ -85,6 +85,8 @@
         <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-list-alt"></i> Tareas por Fecha</h3>
         {% if tasks %}
         {% set current_date = namespace(value=None) %}
+        {% set days_map = {'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles', 'Thursday': 'Jueves',
+        'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'} %}
         {% for task in tasks|sort(attribute='due_date') %}
         {% if current_date.value != task.due_date.date() %}
         {% if not loop.first %}
@@ -94,7 +96,7 @@
     <div class="date-group">
         <h4>
             <i class="fas fa-calendar-day"></i>
-            {{ task.due_date.strftime('%d/%m/%Y - %A') }}
+            {{ task.due_date.strftime('%d/%m/%Y') }} - {{ days_map[task.due_date.strftime('%A')] }}
             {% if task.due_date.date() == today %}
             <span class="today-badge">HOY</span>
             {% endif %}

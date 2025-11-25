@@ -4,6 +4,8 @@ from extensions import db
 from models import User, Task
 from datetime import datetime, date, timedelta
 from pdf_utils import generate_task_pdf
+from excel_utils import generate_task_excel
+from io import BytesIO
 
 main_bp = Blueprint('main', __name__)
 auth_bp = Blueprint('auth', __name__)
@@ -166,11 +168,15 @@ def toggle_task_status(task_id):
     if task.creator_id != current_user.id and current_user not in task.assignees:
         return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
     
-    # Toggle status
+    # Toggle status and track completion
     if task.status == 'Pending':
         task.status = 'Completed'
+        task.completed_by_id = current_user.id
+        task.completed_at = datetime.utcnow()
     else:
         task.status = 'Pending'
+        task.completed_by_id = None
+        task.completed_at = None
     
     db.session.commit()
     
@@ -245,6 +251,80 @@ def export_pdf():
     response = make_response(pdf.output(dest='S').encode('latin-1'))
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = f'attachment; filename=reporte_tareas_{date.today()}.pdf'
+    
+    return response
+
+@main_bp.route('/export_excel')
+@login_required
+def export_excel():
+    # Re-use filter logic from export_pdf
+    filter_creator = request.args.get('creator')
+    filter_status = request.args.get('status')
+    
+    # Calendar specific filters
+    period = request.args.get('period')
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    
+    query = Task.query.filter(Task.assignees.any(id=current_user.id))
+    
+    filters = {}
+    
+    # Apply Creator Filter
+    if filter_creator:
+        query = query.filter(Task.creator_id == filter_creator)
+        creator = User.query.get(filter_creator)
+        filters['creator_name'] = creator.full_name if creator else 'Desconocido'
+        filters['creator'] = filter_creator
+        
+    # Apply Status Filter
+    if filter_status and filter_status in ['Pending', 'Completed']:
+        query = query.filter(Task.status == filter_status)
+        filters['status'] = filter_status
+
+    # Apply Date/Period Filters
+    today = date.today()
+    if period == 'today':
+        query = query.filter(db.func.date(Task.due_date) == today)
+        filters['date_range'] = 'Hoy'
+    elif period == 'week':
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+        query = query.filter(db.func.date(Task.due_date) >= week_start,
+                           db.func.date(Task.due_date) <= week_end)
+        filters['date_range'] = 'Esta Semana'
+    elif period == 'month':
+        month_start = today.replace(day=1)
+        if today.month == 12:
+            month_end = today.replace(day=31)
+        else:
+            month_end = (today.replace(month=today.month + 1, day=1) - timedelta(days=1))
+        query = query.filter(db.func.date(Task.due_date) >= month_start,
+                           db.func.date(Task.due_date) <= month_end)
+        filters['date_range'] = 'Este Mes'
+    elif start_date_str and end_date_str:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            query = query.filter(db.func.date(Task.due_date) >= start_date,
+                               db.func.date(Task.due_date) <= end_date)
+            filters['date_range'] = f"{start_date_str} a {end_date_str}"
+        except ValueError:
+            pass
+        
+    tasks = query.order_by(Task.due_date.asc()).all()
+    
+    # Generate Excel file
+    wb = generate_task_excel(tasks, filters)
+    
+    # Save to BytesIO
+    excel_file = BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)
+    
+    response = make_response(excel_file.read())
+    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    response.headers['Content-Disposition'] = f'attachment; filename=reporte_tareas_{date.today()}.xlsx'
     
     return response
 

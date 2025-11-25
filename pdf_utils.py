@@ -105,21 +105,23 @@ def generate_task_pdf(tasks, filters):
     # --- Table Header ---
     pdf.set_fill_color(0, 119, 190) # Bright Blue - Brand Color
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font('Arial', 'B', 10)
+    pdf.set_font('Arial', 'B', 9)
     
     # Column widths
-    w_title = 80
-    w_status = 30
-    w_priority = 30
-    w_date = 50
+    w_title = 60
+    w_status = 25
+    w_priority = 20
+    w_date = 30
+    w_completed = 55
     
     pdf.cell(w_title, 10, 'Título', 0, 0, 'L', True)
     pdf.cell(w_status, 10, 'Estado', 0, 0, 'C', True)
     pdf.cell(w_priority, 10, 'Prioridad', 0, 0, 'C', True)
-    pdf.cell(w_date, 10, 'Vencimiento', 0, 1, 'C', True)
+    pdf.cell(w_date, 10, 'Vencimiento', 0, 0, 'C', True)
+    pdf.cell(w_completed, 10, 'Completado por', 0, 1, 'C', True)
     
     # --- Table Content ---
-    pdf.set_font('Arial', '', 9)
+    pdf.set_font('Arial', '', 8)
     pdf.set_text_color(0, 0, 0)
     
     fill = False
@@ -131,10 +133,16 @@ def generate_task_pdf(tasks, filters):
             pdf.set_fill_color(255, 255, 255)
             
         # Truncate title if needed
-        title = task.title[:45] + '...' if len(task.title) > 45 else task.title
+        title = task.title[:35] + '...' if len(task.title) > 35 else task.title
         
         # Status Translation & Color
         status_text = "Completada" if task.status == 'Completed' else "Pendiente"
+        
+        # Completed by info
+        if task.completed_by:
+            completed_info = f"{task.completed_by.full_name}\n{task.completed_at.strftime('%d/%m/%Y')}"
+        else:
+            completed_info = "-"
         
         # Save Y position to handle heights if we wanted multi-cell, 
         # but for now single cell is safer for alignment
@@ -153,7 +161,12 @@ def generate_task_pdf(tasks, filters):
         pdf.set_text_color(0, 0, 0)
         
         pdf.cell(w_priority, 10, task.priority, 0, 0, 'C', fill)
-        pdf.cell(w_date, 10, task.due_date.strftime('%d/%m/%Y'), 0, 1, 'C', fill)
+        pdf.cell(w_date, 10, task.due_date.strftime('%d/%m/%Y'), 0, 0, 'C', fill)
+        
+        # Completed by (smaller font for multi-line)
+        pdf.set_font('Arial', '', 7)
+        pdf.multi_cell(w_completed, 5, completed_info, 0, 'C', fill)
+        pdf.set_font('Arial', '', 8)
         
         fill = not fill
         

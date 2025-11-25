@@ -21,8 +21,8 @@ class User(UserMixin, db.Model):
     full_name = db.Column(db.String(100), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     
-    # Relationships
-    created_tasks = db.relationship('Task', backref='creator', lazy=True)
+    # Relationships - specify foreign_keys to avoid ambiguity
+    created_tasks = db.relationship('Task', foreign_keys='Task.creator_id', backref='creator', lazy=True)
     assigned_tasks = db.relationship('Task', secondary=task_assignments, backref=db.backref('assignees', lazy=True))
 
     def set_password(self, password):
@@ -40,6 +40,13 @@ class Task(db.Model):
     due_date = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    # Tracking completion
+    completed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    
+    # Relationship for completed_by
+    completed_by = db.relationship('User', foreign_keys=[completed_by_id])
 
     def __repr__(self):
         return f'<Task {self.title}>'

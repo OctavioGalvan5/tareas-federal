@@ -71,6 +71,10 @@
                         style="background: var(--secondary-gradient, linear-gradient(135deg, #64748b 0%, #475569 100%)); color: white; border: none;">
                         <i class="fas fa-file-pdf"></i> PDF
                     </button>
+                    <button onclick="exportExcel()" class="filter-btn"
+                        style="background: linear-gradient(135deg, #10793f 0%, #0d5c2f 100%); color: white; border: none;">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </button>
                 </div>
             </div>
         </div>
@@ -171,6 +175,17 @@
                         <p>{{ task.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
                     </div>
                 </div>
+
+                {% if task.completed_by %}
+                <div class="task-detail-item">
+                    <i class="fas fa-user-check"></i>
+                    <div>
+                        <strong>Completado por:</strong>
+                        <p style="color: var(--success-color); font-weight: 600;">{{ task.completed_by.full_name }} - {{
+                            task.completed_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
         {% if loop.last %}
@@ -462,6 +477,24 @@
         const period = '{{ current_period }}';
 
         let url = `{{ url_for('main.export_pdf') }}?period=${period}`;
+
+        if (startDate && endDate) {
+            url += `&start_date=${startDate}&end_date=${endDate}`;
+        }
+        if (creator) {
+            url += `&creator=${creator}`;
+        }
+
+        window.location.href = url;
+    }
+
+    function exportExcel() {
+        const startDate = document.getElementById('start_date').value;
+        const endDate = document.getElementById('end_date').value;
+        const creator = document.getElementById('creator_filter').value;
+        const period = '{{ current_period }}';
+
+        let url = `{{ url_for('main.export_excel') }}?period=${period}`;
 
         if (startDate && endDate) {
             url += `&start_date=${startDate}&end_date=${endDate}`;

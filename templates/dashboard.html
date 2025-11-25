@@ -37,6 +37,10 @@
                     title="Exportar a PDF">
                     <i class="fas fa-file-pdf"></i>
                 </button>
+                <button type="submit" formaction="{{ url_for('main.export_excel') }}" class="button-secondary"
+                    title="Exportar a Excel" style="background-color: #10793f;">
+                    <i class="fas fa-file-excel"></i>
+                </button>
             </div>
         </form>
     </div>
@@ -62,6 +66,11 @@
                     <span><i class="fas fa-user-edit"></i> Creado por: {{ task.creator.full_name }}</span>
                     <span><i class="fas fa-user-check"></i> Asignado a: {% for assignee in task.assignees %}{{
                         assignee.full_name }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+                    {% if task.completed_by %}
+                    <span style="color: var(--success-color); font-weight: 600;"><i class="fas fa-check-circle"></i>
+                        Completado por: {{ task.completed_by.full_name }} ({{ task.completed_at.strftime('%d/%m/%Y
+                        %H:%M') }})</span>
+                    {% endif %}
                 </div>
             </div>
             <div class="task-date">

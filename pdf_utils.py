@@ -107,16 +107,18 @@ def generate_task_pdf(tasks, filters):
     # --- Table Header ---
     pdf.set_fill_color(0, 119, 190) # Bright Blue - Brand Color
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font('Arial', 'B', 9)
+    pdf.set_font('Arial', 'B', 8)
     
-    # Column widths
-    w_title = 60
-    w_status = 25
+    # Column widths (Total: 190)
+    w_title = 50
+    w_creator = 30
+    w_status = 20
     w_priority = 20
-    w_date = 30
-    w_completed = 55
+    w_date = 25
+    w_completed = 45
     
     pdf.cell(w_title, 10, 'Título', 0, 0, 'L', True)
+    pdf.cell(w_creator, 10, 'Creado por', 0, 0, 'L', True)
     pdf.cell(w_status, 10, 'Estado', 0, 0, 'C', True)
     pdf.cell(w_priority, 10, 'Prioridad', 0, 0, 'C', True)
     pdf.cell(w_date, 10, 'Vencimiento', 0, 0, 'C', True)
@@ -135,7 +137,10 @@ def generate_task_pdf(tasks, filters):
             pdf.set_fill_color(255, 255, 255)
             
         # Truncate title if needed
-        title = task.title[:35] + '...' if len(task.title) > 35 else task.title
+        title = task.title[:30] + '...' if len(task.title) > 30 else task.title
+        
+        # Creator name truncated
+        creator = task.creator.full_name[:18] + '..' if len(task.creator.full_name) > 18 else task.creator.full_name
         
         # Status Translation & Color
         status_text = "Completada" if task.status == 'Completed' else "Pendiente"
@@ -146,10 +151,17 @@ def generate_task_pdf(tasks, filters):
         else:
             completed_info = "-"
         
-        # Save Y position to handle heights if we wanted multi-cell, 
-        # but for now single cell is safer for alignment
+        # Save current Y position
+        y_start = pdf.get_y()
+        x_start = pdf.get_x()
         
+        # Calculate height based on multi_cell content (Completed col is the tallest potential)
+        # However, to keep it simple and aligned, we force a height of 10 for single lines
+        # But completed_info has 2 lines. So we need height 10.
+        
+        # Draw cells
         pdf.cell(w_title, 10, title, 0, 0, 'L', fill)
+        pdf.cell(w_creator, 10, creator, 0, 0, 'L', fill)
         
         # Status Color
         if task.status == 'Completed':
@@ -165,10 +177,21 @@ def generate_task_pdf(tasks, filters):
         pdf.cell(w_priority, 10, task.priority, 0, 0, 'C', fill)
         pdf.cell(w_date, 10, task.due_date.strftime('%d/%m/%Y'), 0, 0, 'C', fill)
         
-        # Completed by (smaller font for multi-line)
+        # Completed by (Multi-cell needs special handling to not break flow)
+        # We use x,y positioning
+        x_current = pdf.get_x()
+        y_current = pdf.get_y()
+        
+        # Draw background for multi-cell manually if needed, but cell() above handles fill for the row?
+        # No, cell() only fills its own rect.
+        # To fill the multi-cell area we need to pass fill=True
+        
         pdf.set_font('Arial', '', 7)
         pdf.multi_cell(w_completed, 5, completed_info, 0, 'C', fill)
         pdf.set_font('Arial', '', 8)
+        
+        # Move to next line based on max height (which is 10)
+        pdf.set_xy(x_start, y_start + 10)
         
         fill = not fill
         

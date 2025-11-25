@@ -183,7 +183,7 @@ def toggle_task_status(task_id):
     if task.status == 'Pending':
         task.status = 'Completed'
         task.completed_by_id = current_user.id
-        task.completed_at = datetime.utcnow()
+        task.completed_at = datetime.now()
     else:
         task.status = 'Pending'
         task.completed_by_id = None

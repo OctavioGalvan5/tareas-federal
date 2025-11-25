@@ -1,7 +1,8 @@
-flask
-flask-sqlalchemy
-flask-login
-psycopg2-binary
-python-dotenv
-email_validator
-fpdf
+flask>=2.3.0
+flask-sqlalchemy>=3.0.0
+flask-login>=0.6.0
+psycopg2-binary>=2.9.0
+python-dotenv>=1.0.0
+email_validator>=2.0.0
+fpdf>=1.7.2
+gunicorn>=21.0.0

@@ -7,6 +7,7 @@
     <meta name="description" content="Sistema de gestión de tareas para profesionales legales">
     <title>Gestor Federal - Caja de Abogados</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='notifications.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -31,6 +32,13 @@
             <a href="{{ url_for('admin.manage_users') }}">
                 <i class="fas fa-users"></i> Usuarios
             </a>
+            {% endif %}
+            {% if current_user.is_authenticated %}
+            <button id="notificationToggle"
+                class="notification-toggle {% if current_user.notifications_enabled %}active{% endif %}"
+                onclick="toggleNotifications()" title="Notificaciones">
+                <i class="fas fa-bell"></i>
+            </button>
             {% endif %}
             <a href="{{ url_for('auth.logout') }}">
                 <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
@@ -58,6 +66,24 @@
 
         {% block content %}{% endblock %}
     </div>
+
+    {% if current_user.is_authenticated %}
+    <!-- Notification Modal -->
+    <div id="notificationModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-exclamation-triangle"></i> ¡Tareas Próximas a Vencer!</h2>
+            </div>
+            <div class="modal-body" id="notificationContent">
+                <!-- Content will be loaded via JavaScript -->
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeNotificationModal()" class="btn-primary">Entendido</button>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='notifications.js') }}"></script>
+    {% endif %}
 </body>
 
 </html>

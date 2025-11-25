@@ -6,6 +6,7 @@ from datetime import datetime, date, timedelta
 from pdf_utils import generate_task_pdf
 from excel_utils import generate_task_excel
 from io import BytesIO
+from utils import calculate_business_days_until
 
 main_bp = Blueprint('main', __name__)
 auth_bp = Blueprint('auth', __name__)
@@ -354,3 +355,50 @@ def manage_users():
             
     users = User.query.all()
     return render_template('users.html', users=users)
+
+# --- API Routes for Notifications ---
+@main_bp.route('/api/tasks/due_soon')
+@login_required
+def api_tasks_due_soon():
+    """
+    Return tasks that are due in 2 business days.
+    Used for popup notifications.
+    """
+    if not current_user.notifications_enabled:
+        return jsonify({'tasks': []})
+    
+    # Get all pending tasks assigned to current user
+    pending_tasks = Task.query.filter(
+        Task.assignees.any(id=current_user.id),
+        Task.status == 'Pending'
+    ).all()
+    
+    # Filter tasks that are due in 2 or fewer business days
+    due_soon_tasks = []
+    for task in pending_tasks:
+        business_days = calculate_business_days_until(task.due_date)
+        if business_days <= 2:  # 0, 1, or 2 business days
+            due_soon_tasks.append({
+                'id': task.id,
+                'title': task.title,
+                'due_date': task.due_date.strftime('%d/%m/%Y'),
+                'priority': task.priority,
+                'description': task.description[:100] if task.description else '',
+                'days_remaining': business_days
+            })
+    
+    return jsonify({'tasks': due_soon_tasks})
+
+@main_bp.route('/api/user/toggle_notifications', methods=['POST'])
+@login_required
+def api_toggle_notifications():
+    """
+    Toggle user's notification preference.
+    """
+    current_user.notifications_enabled = not current_user.notifications_enabled
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'notifications_enabled': current_user.notifications_enabled
+    })

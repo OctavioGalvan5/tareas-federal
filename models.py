@@ -20,6 +20,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     full_name = db.Column(db.String(100), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
+    notifications_enabled = db.Column(db.Boolean, default=True)
     
     # Relationships - specify foreign_keys to avoid ambiguity
     created_tasks = db.relationship('Task', foreign_keys='Task.creator_id', backref='creator', lazy=True)

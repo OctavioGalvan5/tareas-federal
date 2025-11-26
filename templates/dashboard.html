@@ -8,83 +8,98 @@
     </a>
 </div>
 
-<div class="filters-section"
-    style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 2rem;">
-    <form method="GET" action="{{ url_for('main.dashboard') }}" class="filters-form"
-        style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 200px;">
-            <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Asignado
-                a</label>
-            <select name="assignee" onchange="this.form.submit()"
-                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
-                <option value="">Todos</option>
-                {% for user in users %}
-                <option value="{{ user.id }}" {% if request.args.get('assignee')|int==user.id %}selected{% endif %}>
-                    {{ user.full_name }}
-                </option>
-                {% endfor %}
-            </select>
-        </div>
+<form method="GET" action="{{ url_for('main.dashboard') }}">
+    <div class="filters-section"
+        style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem;">
+        <div class="filters-form" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Asignado
+                    a</label>
+                <select name="assignee" onchange="this.form.submit()"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    <option value="">Todos</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {% if request.args.get('assignee')|int==user.id %}selected{% endif %}>
+                        {{ user.full_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
 
-        <div style="flex: 1; min-width: 200px;">
-            <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Creado
-                por</label>
-            <select name="creator" onchange="this.form.submit()"
-                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
-                <option value="">Todos</option>
-                {% for user in users %}
-                <option value="{{ user.id }}" {% if request.args.get('creator')|int==user.id %}selected{% endif %}>
-                    {{ user.full_name }}
-                </option>
-                {% endfor %}
-            </select>
-        </div>
+            <div style="flex: 1; min-width: 200px;">
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Creado
+                    por</label>
+                <select name="creator" onchange="this.form.submit()"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    <option value="">Todos</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {% if request.args.get('creator')|int==user.id %}selected{% endif %}>
+                        {{ user.full_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
 
-        <div style="flex: 1; min-width: 150px;">
-            <label
-                style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Estado</label>
-            <select name="status" onchange="this.form.submit()"
-                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
-                <option value="">Todos</option>
-                <option value="Pending" {% if request.args.get('status')=='Pending' %}selected{% endif %}>Pendiente
-                </option>
-                <option value="Completed" {% if request.args.get('status')=='Completed' %}selected{% endif %}>Completado
-                </option>
-            </select>
-        </div>
+            <div style="flex: 1; min-width: 150px;">
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Estado</label>
+                <select name="status" onchange="this.form.submit()"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    <option value="">Todos</option>
+                    <option value="Pending" {% if request.args.get('status')=='Pending' %}selected{% endif %}>Pendiente
+                    </option>
+                    <option value="Completed" {% if request.args.get('status')=='Completed' %}selected{% endif %}>
+                        Completado
+                    </option>
+                </select>
+            </div>
 
-        <div style="flex: 1; min-width: 150px;">
-            <label
-                style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Etiqueta</label>
-            <select name="tag_filter" onchange="this.form.submit()"
-                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
-                <option value="">Todas</option>
-                {% for tag in all_tags %}
-                <option value="{{ tag.id }}" {% if request.args.get('tag_filter')|int==tag.id %}selected{% endif %}>
-                    {{ tag.name }}
-                </option>
-                {% endfor %}
-            </select>
-        </div>
+            <div style="flex: 1; min-width: 150px;">
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Etiqueta</label>
+                <select name="tag_filter" onchange="this.form.submit()"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    <option value="">Todas</option>
+                    {% for tag in all_tags %}
+                    <option value="{{ tag.id }}" {% if request.args.get('tag_filter')|int==tag.id %}selected{% endif %}>
+                        {{ tag.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
 
-        <div style="display: flex; gap: 0.5rem;">
-            <button type="submit" class="button"
-                style="padding: 0.5rem 1rem; height: 38px; display: flex; align-items: center; gap: 0.5rem;">
-                <i class="fas fa-filter"></i> Filtrar
-            </button>
-            <button type="submit" formaction="{{ url_for('main.export_pdf') }}" class="button-secondary"
-                title="Exportar a PDF"
-                style="height: 38px; width: 38px; padding: 0; display: flex; align-items: center; justify-content: center;">
-                <i class="fas fa-file-pdf"></i>
-            </button>
-            <button type="submit" formaction="{{ url_for('main.export_excel') }}" class="button-secondary"
-                title="Exportar a Excel"
-                style="background-color: #10793f; height: 38px; width: 38px; padding: 0; display: flex; align-items: center; justify-content: center; color: white;">
-                <i class="fas fa-file-excel"></i>
-            </button>
+            <div style="display: flex; gap: 0.5rem;">
+                <button type="submit" class="button"
+                    style="padding: 0.5rem 1rem; height: 38px; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-filter"></i> Filtrar
+                </button>
+                <button type="submit" formaction="{{ url_for('main.export_pdf') }}" class="button-secondary"
+                    title="Exportar a PDF"
+                    style="height: 38px; width: 38px; padding: 0; display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-file-pdf"></i>
+                </button>
+                <button type="submit" formaction="{{ url_for('main.export_excel') }}" class="button-secondary"
+                    title="Exportar a Excel"
+                    style="background-color: #10793f; height: 38px; width: 38px; padding: 0; display: flex; align-items: center; justify-content: center; color: white;">
+                    <i class="fas fa-file-excel"></i>
+                </button>
+            </div>
         </div>
-    </form>
-</div>
+    </div>
+
+    <div class="search-section"
+        style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 2rem;">
+        <div style="position: relative;">
+            <i class="fas fa-search"
+                style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-light);"></i>
+            <input type="text" name="q" placeholder="Buscar tarea por nombre o descripción..."
+                value="{{ request.args.get('q', '') }}"
+                style="width: 100%; padding: 0.8rem 1rem 0.8rem 2.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 1rem;">
+        </div>
+    </div>
+</form>
 
 <div class="task-list">
     {% if tasks %}

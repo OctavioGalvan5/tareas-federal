@@ -68,6 +68,15 @@ def dashboard():
 
     if filter_tag:  # NUEVO
         tasks_query = tasks_query.filter(Task.tags.any(id=int(filter_tag)))
+
+    # Search filter
+    search_query = request.args.get('q')
+    if search_query:
+        search_term = f"%{search_query}%"
+        tasks_query = tasks_query.filter(
+            (Task.title.ilike(search_term)) | 
+            (Task.description.ilike(search_term))
+        )
         
     # Sort by due_date ascending
     tasks = tasks_query.order_by(Task.due_date.asc()).all()

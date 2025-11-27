@@ -34,39 +34,86 @@ class PDFReport(FPDF):
         self.set_text_color(128, 128, 128)
         self.cell(0, 10, f'Página {self.page_no()}/{{nb}} - Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 0, 'C')
 
-def generate_charts_for_pdf(user_stats):
-    # Create a temporary file for the chart
-    fd, path = tempfile.mkstemp(suffix='.png')
-    os.close(fd) # Close the file descriptor immediately so matplotlib can use the path
+def generate_charts_for_pdf(data):
+    paths = {}
     
+    # 1. User Progress (Stacked Bar)
     try:
+        fd, path = tempfile.mkstemp(suffix='.png')
+        os.close(fd)
+        
+        user_stats = data['user_stats']
         names = [u['name'] for u in user_stats]
         completed = [u['completed'] for u in user_stats]
         pending = [u['pending'] for u in user_stats]
         
         plt.figure(figsize=(10, 6))
-        
-        # Stacked Bar Chart
         plt.bar(names, completed, label='Completadas', color='#10b981')
         plt.bar(names, pending, bottom=completed, label='Pendientes', color='#f59e0b')
-        
         plt.xlabel('Usuarios')
         plt.ylabel('Cantidad de Tareas')
-        plt.title('Progreso de Tareas por Usuario')
+        plt.title('Progreso por Usuario')
         plt.legend()
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
-        
         plt.savefig(path, format='png', dpi=100)
         plt.close()
-        
-        return path
+        paths['user'] = path
     except Exception as e:
-        print(f"Error generating chart: {e}")
-        # fd is already closed
-        if os.path.exists(path):
-            os.remove(path)
-        return None
+        print(f"Error generating user chart: {e}")
+        if os.path.exists(path): os.remove(path)
+
+    # 2. Status Distribution (Doughnut)
+    try:
+        fd, path = tempfile.mkstemp(suffix='.png')
+        os.close(fd)
+        
+        global_stats = data['global_stats']
+        labels = ['Completadas', 'Pendientes']
+        sizes = [global_stats['completed'], global_stats['pending']]
+        colors = ['#10b981', '#f59e0b']
+        
+        plt.figure(figsize=(6, 6))
+        plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90, pctdistance=0.85)
+        # Draw circle for doughnut
+        centre_circle = plt.Circle((0,0),0.70,fc='white')
+        fig = plt.gcf()
+        fig.gca().add_artist(centre_circle)
+        plt.title('Estado Global')
+        plt.tight_layout()
+        plt.savefig(path, format='png', dpi=100)
+        plt.close()
+        paths['status'] = path
+    except Exception as e:
+        print(f"Error generating status chart: {e}")
+        if os.path.exists(path): os.remove(path)
+
+    # 3. Trend (Line)
+    try:
+        fd, path = tempfile.mkstemp(suffix='.png')
+        os.close(fd)
+        
+        trend = data['trend']
+        dates = [datetime.strptime(d, '%Y-%m-%d').strftime('%d/%m') for d in trend['dates']]
+        counts = trend['completed_counts']
+        
+        plt.figure(figsize=(10, 6))
+        plt.plot(dates, counts, marker='o', linestyle='-', color='#3b82f6', linewidth=2)
+        plt.fill_between(dates, counts, color='#3b82f6', alpha=0.1)
+        plt.xlabel('Fecha')
+        plt.ylabel('Tareas Completadas')
+        plt.title('Tendencia de Finalización')
+        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        plt.savefig(path, format='png', dpi=100)
+        plt.close()
+        paths['trend'] = path
+    except Exception as e:
+        print(f"Error generating trend chart: {e}")
+        if os.path.exists(path): os.remove(path)
+        
+    return paths
 
 def generate_report_pdf(data):
     pdf = PDFReport()
@@ -85,21 +132,34 @@ def generate_report_pdf(data):
     
     # --- Charts Section ---
     pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, 'Gráfico de Rendimiento', 0, 1)
+    pdf.cell(0, 10, 'Tablero de Control', 0, 1)
     
-    chart_path = generate_charts_for_pdf(data['user_stats'])
-    if chart_path:
-        # Image(name, x, y, w, h)
-        pdf.image(chart_path, x=10, w=190)
-        os.remove(chart_path) # Clean up temp file
-    else:
-        pdf.cell(0, 10, "(No se pudo generar el gráfico)", 0, 1)
+    chart_paths = generate_charts_for_pdf(data)
+    
+    # Row 1: Status (Left) and Trend (Right) - Adjusted sizing
+    y_charts = pdf.get_y()
+    
+    if 'status' in chart_paths:
+        pdf.image(chart_paths['status'], x=10, y=y_charts, w=70)
+        os.remove(chart_paths['status'])
         
-    pdf.ln(10)
+    if 'trend' in chart_paths:
+        pdf.image(chart_paths['trend'], x=85, y=y_charts, w=115)
+        os.remove(chart_paths['trend'])
+        
+    pdf.ln(75) # Move down past row 1
+    
+    # Row 2: User Progress (Full Width)
+    if 'user' in chart_paths:
+        pdf.image(chart_paths['user'], x=10, w=190, h=80)
+        os.remove(chart_paths['user'])
+        
+    pdf.ln(85)
     
     # --- Detailed Stats Table ---
+    pdf.add_page()
     pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, 'Detalle por Usuario', 0, 1)
+    pdf.cell(0, 10, 'Estadísticas por Usuario', 0, 1)
     
     # Table Header
     pdf.set_fill_color(243, 244, 246)
@@ -119,46 +179,102 @@ def generate_report_pdf(data):
         
     pdf.ln(10)
     
-    # --- Task List (Brief) ---
-    pdf.add_page()
+    # --- Detailed Task List (Reusing layout from generate_task_pdf) ---
     pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, 'Listado de Tareas (Detalle)', 0, 1)
+    pdf.cell(0, 10, 'Detalle de Tareas', 0, 1)
     
     # Table Header
-    pdf.set_fill_color(0, 119, 190)
+    pdf.set_fill_color(0, 119, 190) # Bright Blue
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font('Arial', 'B', 9)
+    pdf.set_font('Arial', 'B', 8)
     
-    pdf.cell(80, 10, 'Título', 0, 0, 'L', True)
-    pdf.cell(40, 10, 'Asignado a', 0, 0, 'L', True)
-    pdf.cell(30, 10, 'Estado', 0, 0, 'C', True)
-    pdf.cell(40, 10, 'Vencimiento', 0, 1, 'C', True)
+    # Column widths (Total: 190)
+    w_title = 40
+    w_creator = 25
+    w_assigned = 25
+    w_status = 20
+    w_priority = 20
+    w_date = 25
+    w_completed = 35
     
+    pdf.cell(w_title, 10, 'Título', 0, 0, 'L', True)
+    pdf.cell(w_creator, 10, 'Creado por', 0, 0, 'L', True)
+    pdf.cell(w_assigned, 10, 'Asignado a', 0, 0, 'L', True)
+    pdf.cell(w_status, 10, 'Estado', 0, 0, 'C', True)
+    pdf.cell(w_priority, 10, 'Prioridad', 0, 0, 'C', True)
+    pdf.cell(w_date, 10, 'Vencimiento', 0, 0, 'C', True)
+    pdf.cell(w_completed, 10, 'Completado por', 0, 1, 'C', True)
+    
+    # Table Content
+    pdf.set_font('Arial', '', 8)
     pdf.set_text_color(0, 0, 0)
-    pdf.set_font('Arial', '', 9)
     
     fill = False
     for task in data['tasks']:
+        # Zebra striping
         if fill:
             pdf.set_fill_color(243, 244, 246)
         else:
             pdf.set_fill_color(255, 255, 255)
             
-        title = task.title[:35] + '...' if len(task.title) > 35 else task.title
-        assignees = ", ".join([u.full_name.split()[0] for u in task.assignees])[:20]
-        status = "Completada" if task.status == 'Completed' else "Pendiente"
+        # Truncate title
+        title = task.title[:25] + '...' if len(task.title) > 25 else task.title
         
-        pdf.cell(80, 10, title, 0, 0, 'L', fill)
-        pdf.cell(40, 10, assignees, 0, 0, 'L', fill)
+        # Creator
+        creator = task.creator.full_name[:15] + '..' if len(task.creator.full_name) > 15 else task.creator.full_name
+
+        # Assignees
+        assignees_list = [u.full_name.split()[0] for u in task.assignees]
+        assignees_str = ", ".join(assignees_list)
+        assignees_str = assignees_str[:15] + '..' if len(assignees_str) > 15 else assignees_str
         
+        # Status
+        status_text = "Completada" if task.status == 'Completed' else "Pendiente"
+        
+        # Completed by
+        if task.completed_by:
+            completed_info = f"{task.completed_by.full_name}\n{task.completed_at.strftime('%d/%m/%Y')}"
+        else:
+            completed_info = "-"
+        
+        # Save current Y position
+        y_start = pdf.get_y()
+        x_start = pdf.get_x()
+        
+        # Check page break
+        if y_start > 270:
+            pdf.add_page()
+            y_start = pdf.get_y()
+            # Re-print header? Optional, but good for readability. Skipping for brevity.
+        
+        # Draw cells
+        pdf.cell(w_title, 10, title, 0, 0, 'L', fill)
+        pdf.cell(w_creator, 10, creator, 0, 0, 'L', fill)
+        pdf.cell(w_assigned, 10, assignees_str, 0, 0, 'L', fill)
+        
+        # Status Color
         if task.status == 'Completed':
             pdf.set_text_color(4, 120, 87)
         else:
             pdf.set_text_color(193, 39, 45)
-        pdf.cell(30, 10, status, 0, 0, 'C', fill)
+            
+        pdf.cell(w_status, 10, status_text, 0, 0, 'C', fill)
         
+        # Reset color
         pdf.set_text_color(0, 0, 0)
-        pdf.cell(40, 10, task.due_date.strftime('%d/%m/%Y'), 0, 1, 'C', fill)
+        
+        pdf.cell(w_priority, 10, task.priority, 0, 0, 'C', fill)
+        pdf.cell(w_date, 10, task.due_date.strftime('%d/%m/%Y'), 0, 0, 'C', fill)
+        
+        # Completed by (Multi-cell)
+        x_current = pdf.get_x()
+        
+        pdf.set_font('Arial', '', 7)
+        pdf.multi_cell(w_completed, 5, completed_info, 0, 'C', fill)
+        pdf.set_font('Arial', '', 8)
+        
+        # Move to next line
+        pdf.set_xy(x_start, y_start + 10)
         
         fill = not fill
 

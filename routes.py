@@ -768,9 +768,40 @@ def export_report():
         completed = sum(1 for t in u_tasks if t.status == 'Completed')
         user_stats.append({'name': user.full_name, 'completed': completed, 'pending': len(u_tasks)-completed})
         
+    # Global Stats
+    global_completed = sum(1 for t in tasks if t.status == 'Completed')
+    global_pending = len(tasks) - global_completed
+    
+    # Trend Data
+    # Use the same date range logic as reports_data
+    t_start = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else datetime.now() - timedelta(days=30)
+    t_end = datetime.strptime(end_date_str, '%Y-%m-%d') if end_date_str else datetime.now()
+    
+    # Filter completed tasks for trend
+    completed_tasks_trend = [t for t in tasks if t.status == 'Completed' and t.completed_at and t_start <= t.completed_at <= t_end]
+    
+    date_counts = {}
+    current = t_start
+    while current <= t_end:
+        date_str = current.strftime('%Y-%m-%d')
+        date_counts[date_str] = 0
+        current += timedelta(days=1)
+        
+    for t in completed_tasks_trend:
+        d_str = t.completed_at.strftime('%Y-%m-%d')
+        if d_str in date_counts:
+            date_counts[d_str] += 1
+            
+    trend_data = {
+        'dates': list(date_counts.keys()),
+        'completed_counts': list(date_counts.values())
+    }
+        
     report_data = {
         'tasks': tasks,
         'user_stats': user_stats,
+        'global_stats': {'completed': global_completed, 'pending': global_pending},
+        'trend': trend_data,
         'start_date': start_date_str,
         'end_date': end_date_str,
         'filters': {'users': [u.full_name for u in target_users] if user_ids else ['Todos']}

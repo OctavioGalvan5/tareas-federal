@@ -631,3 +631,155 @@ def api_delete_tag(tag_id):
     db.session.commit()
     
     return jsonify({'success': True})
+
+# --- Reports Routes ---
+@main_bp.route('/reports')
+@login_required
+def reports():
+    users = User.query.all()
+    return render_template('reports.html', users=users)
+
+@main_bp.route('/api/reports/data', methods=['POST'])
+@login_required
+def reports_data():
+    data = request.get_json()
+    user_ids = data.get('user_ids', [])
+    start_date_str = data.get('start_date')
+    end_date_str = data.get('end_date')
+    
+    # Base query
+    query = Task.query
+    
+    # Filter by users if provided
+    if user_ids:
+        # Filter tasks where ANY of the assignees are in the selected user_ids
+        query = query.filter(Task.assignees.any(User.id.in_(user_ids)))
+    
+    # Filter by date range (using due_date for now, or maybe completed_at for trends?)
+    # Let's use due_date for general filtering
+    if start_date_str and end_date_str:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+        # Adjust end_date to end of day
+        end_date = end_date.replace(hour=23, minute=59, second=59)
+        query = query.filter(Task.due_date >= start_date, Task.due_date <= end_date)
+        
+    tasks = query.all()
+    
+    # --- Aggregation ---
+    
+    # 1. Stats per User
+    user_stats = []
+    # If specific users selected, iterate them, else iterate all users involved in these tasks
+    target_users = User.query.filter(User.id.in_(user_ids)).all() if user_ids else User.query.all()
+    
+    for user in target_users:
+        user_tasks = [t for t in tasks if user in t.assignees]
+        if not user_tasks and user_ids: continue # Skip if no tasks and not explicitly selected? No, show 0.
+        
+        completed = sum(1 for t in user_tasks if t.status == 'Completed')
+        pending = len(user_tasks) - completed
+        user_stats.append({
+            'name': user.full_name,
+            'completed': completed,
+            'pending': pending
+        })
+        
+    # 2. Global Status
+    global_completed = sum(1 for t in tasks if t.status == 'Completed')
+    global_pending = len(tasks) - global_completed
+    
+    # 3. Trend (Last 30 days completed)
+    # This needs a separate query or careful filtering of the 'tasks' list if it covers the range
+    # Let's query specifically for completed tasks in the range for the trend
+    trend_query = Task.query.filter(Task.status == 'Completed', Task.completed_at.isnot(None))
+    if user_ids:
+        trend_query = trend_query.filter(Task.assignees.any(User.id.in_(user_ids)))
+        
+    # For trend, we usually want a fixed window or the selected window
+    # If selected window is small, use it. If large, maybe group by week?
+    # Let's stick to daily counts for the selected range (or default 30 days)
+    t_start = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else datetime.now() - timedelta(days=30)
+    t_end = datetime.strptime(end_date_str, '%Y-%m-%d') if end_date_str else datetime.now()
+    
+    trend_query = trend_query.filter(Task.completed_at >= t_start, Task.completed_at <= t_end)
+    completed_tasks_trend = trend_query.all()
+    
+    # Group by date
+    date_counts = {}
+    current = t_start
+    while current <= t_end:
+        date_str = current.strftime('%Y-%m-%d')
+        date_counts[date_str] = 0
+        current += timedelta(days=1)
+        
+    for t in completed_tasks_trend:
+        d_str = t.completed_at.strftime('%Y-%m-%d')
+        if d_str in date_counts:
+            date_counts[d_str] += 1
+            
+    trend_data = {
+        'dates': list(date_counts.keys()),
+        'completed_counts': list(date_counts.values())
+    }
+    
+    return jsonify({
+        'user_stats': user_stats,
+        'global_stats': {'completed': global_completed, 'pending': global_pending},
+        'trend': trend_data
+    })
+
+@main_bp.route('/reports/export', methods=['POST'])
+@login_required
+def export_report():
+    # Get filters from form data (since it's a POST form submission)
+    user_ids_str = request.form.get('user_ids')
+    start_date_str = request.form.get('start_date')
+    end_date_str = request.form.get('end_date')
+    
+    import json
+    user_ids = json.loads(user_ids_str) if user_ids_str else []
+    
+    # Fetch data (logic similar to reports_data but we need the raw objects for PDF)
+    query = Task.query
+    if user_ids:
+        query = query.filter(Task.assignees.any(User.id.in_(user_ids)))
+    if start_date_str and end_date_str:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+        query = query.filter(Task.due_date >= start_date, Task.due_date <= end_date)
+        
+    tasks = query.order_by(Task.due_date).all()
+    
+    # Prepare data for charts
+    # We need to re-calculate stats for the PDF generator
+    # ... (Reuse logic or extract to service function? For now, duplicate slightly for speed)
+    
+    # Generate PDF
+    from pdf_utils import generate_report_pdf
+    
+    # We need to pass the stats to the PDF generator
+    # Stats calculation:
+    target_users = User.query.filter(User.id.in_(user_ids)).all() if user_ids else User.query.all()
+    user_stats = []
+    for user in target_users:
+        u_tasks = [t for t in tasks if user in t.assignees]
+        if not u_tasks and user_ids: continue
+        completed = sum(1 for t in u_tasks if t.status == 'Completed')
+        user_stats.append({'name': user.full_name, 'completed': completed, 'pending': len(u_tasks)-completed})
+        
+    report_data = {
+        'tasks': tasks,
+        'user_stats': user_stats,
+        'start_date': start_date_str,
+        'end_date': end_date_str,
+        'filters': {'users': [u.full_name for u in target_users] if user_ids else ['Todos']}
+    }
+    
+    pdf = generate_report_pdf(report_data)
+    
+    response = make_response(pdf.output(dest='S').encode('latin-1'))
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename=reporte_avanzado_{date.today()}.pdf'
+    
+    return response

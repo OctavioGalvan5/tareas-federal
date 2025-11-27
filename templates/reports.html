@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1><i class="fas fa-chart-line"></i> Reportes y Estadísticas</h1>
+    <div style="display: flex; gap: 1rem;">
+        <button onclick="exportReport()" class="button">
+            <i class="fas fa-file-pdf"></i> Descargar Reporte PDF
+        </button>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom: 2rem;">
+    <div class="filters-section" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 200px;">
+            <label
+                style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Usuarios</label>
+            <select id="userFilter" multiple
+                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; height: 100px;">
+                {% for user in users %}
+                <option value="{{ user.id }}" selected>{{ user.full_name }}</option>
+                {% endfor %}
+            </select>
+            <small style="color: var(--text-light);">Mantén presionado Ctrl para seleccionar varios</small>
+        </div>
+        <div style="flex: 1; min-width: 200px;">
+            <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Rango de
+                Fechas</label>
+            <div style="display: flex; gap: 0.5rem;">
+                <input type="date" id="startDate"
+                    style="flex: 1; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                <input type="date" id="endDate"
+                    style="flex: 1; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+            </div>
+        </div>
+        <button onclick="loadReportData()" class="button-secondary" style="height: 38px; margin-bottom: 2px;">
+            <i class="fas fa-sync"></i> Actualizar
+        </button>
+    </div>
+</div>
+
+<div
+    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
+    <div class="card">
+        <h3><i class="fas fa-tasks"></i> Tareas por Usuario</h3>
+        <canvas id="tasksByUserChart"></canvas>
+    </div>
+    <div class="card">
+        <h3><i class="fas fa-chart-pie"></i> Estado de Tareas</h3>
+        <canvas id="statusChart"></canvas>
+    </div>
+</div>
+
+<div class="card">
+    <h3><i class="fas fa-history"></i> Tendencia de Completado (Últimos 30 días)</h3>
+    <canvas id="trendChart"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    let tasksByUserChart = null;
+    let statusChart = null;
+    let trendChart = null;
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Set default dates (last 30 days)
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - 30);
+
+        document.getElementById('endDate').valueAsDate = end;
+        document.getElementById('startDate').valueAsDate = start;
+
+        loadReportData();
+    });
+
+    function getSelectedUsers() {
+        const select = document.getElementById('userFilter');
+        return Array.from(select.selectedOptions).map(option => option.value);
+    }
+
+    function loadReportData() {
+        const userIds = getSelectedUsers();
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+
+        fetch('/api/reports/data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                user_ids: userIds,
+                start_date: startDate,
+                end_date: endDate
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                updateCharts(data);
+            })
+            .catch(error => console.error('Error loading report data:', error));
+    }
+
+    function updateCharts(data) {
+        // Tasks by User Chart
+        const ctxUser = document.getElementById('tasksByUserChart').getContext('2d');
+        if (tasksByUserChart) tasksByUserChart.destroy();
+
+        tasksByUserChart = new Chart(ctxUser, {
+            type: 'bar',
+            data: {
+                labels: data.user_stats.map(u => u.name),
+                datasets: [
+                    {
+                        label: 'Completadas',
+                        data: data.user_stats.map(u => u.completed),
+                        backgroundColor: '#10b981'
+                    },
+                    {
+                        label: 'Pendientes',
+                        data: data.user_stats.map(u => u.pending),
+                        backgroundColor: '#f59e0b'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { stacked: true },
+                    y: { stacked: true, beginAtZero: true }
+                }
+            }
+        });
+
+        // Status Chart
+        const ctxStatus = document.getElementById('statusChart').getContext('2d');
+        if (statusChart) statusChart.destroy();
+
+        statusChart = new Chart(ctxStatus, {
+            type: 'doughnut',
+            data: {
+                labels: ['Completadas', 'Pendientes'],
+                datasets: [{
+                    data: [data.global_stats.completed, data.global_stats.pending],
+                    backgroundColor: ['#10b981', '#f59e0b']
+                }]
+            }
+        });
+
+        // Trend Chart
+        const ctxTrend = document.getElementById('trendChart').getContext('2d');
+        if (trendChart) trendChart.destroy();
+
+        trendChart = new Chart(ctxTrend, {
+            type: 'line',
+            data: {
+                labels: data.trend.dates,
+                datasets: [{
+                    label: 'Tareas Completadas',
+                    data: data.trend.completed_counts,
+                    borderColor: '#3b82f6',
+                    tension: 0.1,
+                    fill: true,
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)'
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                }
+            }
+        });
+    }
+
+    function exportReport() {
+        const userIds = getSelectedUsers();
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+
+        // Create a form to submit POST request for download
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/reports/export';
+
+        const inputUsers = document.createElement('input');
+        inputUsers.type = 'hidden';
+        inputUsers.name = 'user_ids';
+        inputUsers.value = JSON.stringify(userIds);
+        form.appendChild(inputUsers);
+
+        const inputStart = document.createElement('input');
+        inputStart.type = 'hidden';
+        inputStart.name = 'start_date';
+        inputStart.value = startDate;
+        form.appendChild(inputStart);
+
+        const inputEnd = document.createElement('input');
+        inputEnd.type = 'hidden';
+        inputEnd.name = 'end_date';
+        inputEnd.value = endDate;
+        form.appendChild(inputEnd);
+
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+    }
+</script>
+{% endblock %}

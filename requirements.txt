@@ -6,3 +6,4 @@ psycopg2-binary==2.9.10
 fpdf==1.7.2
 openpyxl==3.1.2
 gunicorn==21.2.0
+matplotlib==3.8.2

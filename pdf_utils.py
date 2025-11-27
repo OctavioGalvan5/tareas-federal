@@ -1,5 +1,11 @@
 from fpdf import FPDF
 from datetime import datetime
+import matplotlib
+matplotlib.use('Agg') # Non-interactive backend
+import matplotlib.pyplot as plt
+import io
+import tempfile
+import os
 
 class PDFReport(FPDF):
     def __init__(self):
@@ -27,6 +33,136 @@ class PDFReport(FPDF):
         self.set_font('Arial', 'I', 8)
         self.set_text_color(128, 128, 128)
         self.cell(0, 10, f'Página {self.page_no()}/{{nb}} - Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 0, 'C')
+
+def generate_charts_for_pdf(user_stats):
+    # Create a temporary file for the chart
+    fd, path = tempfile.mkstemp(suffix='.png')
+    os.close(fd) # Close the file descriptor immediately so matplotlib can use the path
+    
+    try:
+        names = [u['name'] for u in user_stats]
+        completed = [u['completed'] for u in user_stats]
+        pending = [u['pending'] for u in user_stats]
+        
+        plt.figure(figsize=(10, 6))
+        
+        # Stacked Bar Chart
+        plt.bar(names, completed, label='Completadas', color='#10b981')
+        plt.bar(names, pending, bottom=completed, label='Pendientes', color='#f59e0b')
+        
+        plt.xlabel('Usuarios')
+        plt.ylabel('Cantidad de Tareas')
+        plt.title('Progreso de Tareas por Usuario')
+        plt.legend()
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        
+        plt.savefig(path, format='png', dpi=100)
+        plt.close()
+        
+        return path
+    except Exception as e:
+        print(f"Error generating chart: {e}")
+        # fd is already closed
+        if os.path.exists(path):
+            os.remove(path)
+        return None
+
+def generate_report_pdf(data):
+    pdf = PDFReport()
+    pdf.alias_nb_pages()
+    pdf.add_page()
+    
+    # --- Report Header Info ---
+    pdf.set_font('Arial', 'B', 14)
+    pdf.set_text_color(50, 50, 50)
+    pdf.cell(0, 10, 'Reporte Avanzado de Progreso', 0, 1)
+    
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(0, 6, f"Periodo: {data['start_date']} al {data['end_date']}", 0, 1)
+    pdf.cell(0, 6, f"Usuarios: {', '.join(data['filters']['users'][:5])}" + ("..." if len(data['filters']['users']) > 5 else ""), 0, 1)
+    pdf.ln(5)
+    
+    # --- Charts Section ---
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, 'Gráfico de Rendimiento', 0, 1)
+    
+    chart_path = generate_charts_for_pdf(data['user_stats'])
+    if chart_path:
+        # Image(name, x, y, w, h)
+        pdf.image(chart_path, x=10, w=190)
+        os.remove(chart_path) # Clean up temp file
+    else:
+        pdf.cell(0, 10, "(No se pudo generar el gráfico)", 0, 1)
+        
+    pdf.ln(10)
+    
+    # --- Detailed Stats Table ---
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, 'Detalle por Usuario', 0, 1)
+    
+    # Table Header
+    pdf.set_fill_color(243, 244, 246)
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(80, 10, 'Usuario', 1, 0, 'L', True)
+    pdf.cell(35, 10, 'Completadas', 1, 0, 'C', True)
+    pdf.cell(35, 10, 'Pendientes', 1, 0, 'C', True)
+    pdf.cell(40, 10, 'Total', 1, 1, 'C', True)
+    
+    # Table Body
+    pdf.set_font('Arial', '', 10)
+    for stat in data['user_stats']:
+        pdf.cell(80, 10, stat['name'], 1, 0, 'L')
+        pdf.cell(35, 10, str(stat['completed']), 1, 0, 'C')
+        pdf.cell(35, 10, str(stat['pending']), 1, 0, 'C')
+        pdf.cell(40, 10, str(stat['completed'] + stat['pending']), 1, 1, 'C')
+        
+    pdf.ln(10)
+    
+    # --- Task List (Brief) ---
+    pdf.add_page()
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, 'Listado de Tareas (Detalle)', 0, 1)
+    
+    # Table Header
+    pdf.set_fill_color(0, 119, 190)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('Arial', 'B', 9)
+    
+    pdf.cell(80, 10, 'Título', 0, 0, 'L', True)
+    pdf.cell(40, 10, 'Asignado a', 0, 0, 'L', True)
+    pdf.cell(30, 10, 'Estado', 0, 0, 'C', True)
+    pdf.cell(40, 10, 'Vencimiento', 0, 1, 'C', True)
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font('Arial', '', 9)
+    
+    fill = False
+    for task in data['tasks']:
+        if fill:
+            pdf.set_fill_color(243, 244, 246)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+            
+        title = task.title[:35] + '...' if len(task.title) > 35 else task.title
+        assignees = ", ".join([u.full_name.split()[0] for u in task.assignees])[:20]
+        status = "Completada" if task.status == 'Completed' else "Pendiente"
+        
+        pdf.cell(80, 10, title, 0, 0, 'L', fill)
+        pdf.cell(40, 10, assignees, 0, 0, 'L', fill)
+        
+        if task.status == 'Completed':
+            pdf.set_text_color(4, 120, 87)
+        else:
+            pdf.set_text_color(193, 39, 45)
+        pdf.cell(30, 10, status, 0, 0, 'C', fill)
+        
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(40, 10, task.due_date.strftime('%d/%m/%Y'), 0, 1, 'C', fill)
+        
+        fill = not fill
+
+    return pdf
 
 def generate_task_pdf(tasks, filters):
     pdf = PDFReport()

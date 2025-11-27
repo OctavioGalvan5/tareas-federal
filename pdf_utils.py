@@ -110,15 +110,17 @@ def generate_task_pdf(tasks, filters):
     pdf.set_font('Arial', 'B', 8)
     
     # Column widths (Total: 190)
-    w_title = 50
-    w_creator = 30
+    w_title = 40
+    w_creator = 25
+    w_assigned = 25
     w_status = 20
     w_priority = 20
     w_date = 25
-    w_completed = 45
+    w_completed = 35
     
     pdf.cell(w_title, 10, 'Título', 0, 0, 'L', True)
     pdf.cell(w_creator, 10, 'Creado por', 0, 0, 'L', True)
+    pdf.cell(w_assigned, 10, 'Asignado a', 0, 0, 'L', True)
     pdf.cell(w_status, 10, 'Estado', 0, 0, 'C', True)
     pdf.cell(w_priority, 10, 'Prioridad', 0, 0, 'C', True)
     pdf.cell(w_date, 10, 'Vencimiento', 0, 0, 'C', True)
@@ -137,10 +139,15 @@ def generate_task_pdf(tasks, filters):
             pdf.set_fill_color(255, 255, 255)
             
         # Truncate title if needed
-        title = task.title[:30] + '...' if len(task.title) > 30 else task.title
+        title = task.title[:25] + '...' if len(task.title) > 25 else task.title
         
         # Creator name truncated
-        creator = task.creator.full_name[:18] + '..' if len(task.creator.full_name) > 18 else task.creator.full_name
+        creator = task.creator.full_name[:15] + '..' if len(task.creator.full_name) > 15 else task.creator.full_name
+
+        # Assignees
+        assignees_list = [u.full_name.split()[0] for u in task.assignees] # First names only to save space
+        assignees_str = ", ".join(assignees_list)
+        assignees_str = assignees_str[:15] + '..' if len(assignees_str) > 15 else assignees_str
         
         # Status Translation & Color
         status_text = "Completada" if task.status == 'Completed' else "Pendiente"
@@ -155,13 +162,10 @@ def generate_task_pdf(tasks, filters):
         y_start = pdf.get_y()
         x_start = pdf.get_x()
         
-        # Calculate height based on multi_cell content (Completed col is the tallest potential)
-        # However, to keep it simple and aligned, we force a height of 10 for single lines
-        # But completed_info has 2 lines. So we need height 10.
-        
         # Draw cells
         pdf.cell(w_title, 10, title, 0, 0, 'L', fill)
         pdf.cell(w_creator, 10, creator, 0, 0, 'L', fill)
+        pdf.cell(w_assigned, 10, assignees_str, 0, 0, 'L', fill)
         
         # Status Color
         if task.status == 'Completed':
@@ -181,10 +185,6 @@ def generate_task_pdf(tasks, filters):
         # We use x,y positioning
         x_current = pdf.get_x()
         y_current = pdf.get_y()
-        
-        # Draw background for multi-cell manually if needed, but cell() above handles fill for the row?
-        # No, cell() only fills its own rect.
-        # To fill the multi-cell area we need to pass fill=True
         
         pdf.set_font('Arial', '', 7)
         pdf.multi_cell(w_completed, 5, completed_info, 0, 'C', fill)

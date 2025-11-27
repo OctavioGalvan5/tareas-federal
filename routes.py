@@ -270,6 +270,16 @@ def export_pdf():
         query = query.filter(Task.tags.any(id=int(filter_tag)))
         tag = Tag.query.get(int(filter_tag))
         filters['tag'] = tag.name if tag else ''
+
+    # Search filter
+    search_query = request.args.get('q')
+    if search_query:
+        search_term = f"%{search_query}%"
+        query = query.filter(
+            (Task.title.ilike(search_term)) | 
+            (Task.description.ilike(search_term))
+        )
+        filters['search'] = search_query
         
     tasks = query.order_by(Task.due_date.asc()).all()
     
@@ -345,6 +355,16 @@ def export_excel():
         query = query.filter(Task.tags.any(id=int(filter_tag)))
         tag = Tag.query.get(int(filter_tag))
         filters['tag'] = tag.name if tag else ''
+
+    # Search filter
+    search_query = request.args.get('q')
+    if search_query:
+        search_term = f"%{search_query}%"
+        query = query.filter(
+            (Task.title.ilike(search_term)) | 
+            (Task.description.ilike(search_term))
+        )
+        filters['search'] = search_query
         
     tasks = query.order_by(Task.due_date.asc()).all()
     

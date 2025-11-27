@@ -637,13 +637,16 @@ def api_delete_tag(tag_id):
 @login_required
 def reports():
     users = User.query.all()
-    return render_template('reports.html', users=users)
+    tags = Tag.query.order_by(Tag.name).all()
+    return render_template('reports.html', users=users, tags=tags)
 
 @main_bp.route('/api/reports/data', methods=['POST'])
 @login_required
 def reports_data():
     data = request.get_json()
     user_ids = data.get('user_ids', [])
+    tag_ids = data.get('tag_ids', []) # New filter
+    status_filter = data.get('status') # New filter
     start_date_str = data.get('start_date')
     end_date_str = data.get('end_date')
     
@@ -652,15 +655,20 @@ def reports_data():
     
     # Filter by users if provided
     if user_ids:
-        # Filter tasks where ANY of the assignees are in the selected user_ids
         query = query.filter(Task.assignees.any(User.id.in_(user_ids)))
+        
+    # Filter by tags if provided
+    if tag_ids:
+        query = query.filter(Task.tags.any(Tag.id.in_(tag_ids)))
+        
+    # Filter by status if provided
+    if status_filter and status_filter != 'All':
+        query = query.filter(Task.status == status_filter)
     
-    # Filter by date range (using due_date for now, or maybe completed_at for trends?)
-    # Let's use due_date for general filtering
+    # Filter by date range
     if start_date_str and end_date_str:
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-        # Adjust end_date to end of day
         end_date = end_date.replace(hour=23, minute=59, second=59)
         query = query.filter(Task.due_date >= start_date, Task.due_date <= end_date)
         
@@ -670,12 +678,13 @@ def reports_data():
     
     # 1. Stats per User
     user_stats = []
-    # If specific users selected, iterate them, else iterate all users involved in these tasks
     target_users = User.query.filter(User.id.in_(user_ids)).all() if user_ids else User.query.all()
     
     for user in target_users:
         user_tasks = [t for t in tasks if user in t.assignees]
-        if not user_tasks and user_ids: continue # Skip if no tasks and not explicitly selected? No, show 0.
+        # Only skip if we are filtering by specific users and this user has no tasks
+        # But if we are showing all users, we might want to show 0s? 
+        # Let's keep existing logic: show all target_users
         
         completed = sum(1 for t in user_tasks if t.status == 'Completed')
         pending = len(user_tasks) - completed
@@ -689,61 +698,139 @@ def reports_data():
     global_completed = sum(1 for t in tasks if t.status == 'Completed')
     global_pending = len(tasks) - global_completed
     
-    # 3. Trend (Last 30 days completed)
-    # This needs a separate query or careful filtering of the 'tasks' list if it covers the range
-    # Let's query specifically for completed tasks in the range for the trend
+    # --- Trends (Time-based) ---
+    # We need a date range for the X-axis
+    t_start = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else datetime.now() - timedelta(days=30)
+    
+    if end_date_str:
+        t_end = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+    else:
+        t_end = datetime.now()
+    
+    # Generate list of dates
+    date_labels = []
+    current = t_start
+    while current <= t_end:
+        date_labels.append(current.strftime('%Y-%m-%d'))
+        current += timedelta(days=1)
+        
+    # 3. Global Trend (Completed tasks over time)
+    # Base trend query needs to respect the same filters as above? 
+    # Usually "Trend" implies "History", so we look at completed_at.
+    # But we should respect the User/Tag filters.
+    
     trend_query = Task.query.filter(Task.status == 'Completed', Task.completed_at.isnot(None))
+    
     if user_ids:
         trend_query = trend_query.filter(Task.assignees.any(User.id.in_(user_ids)))
+    if tag_ids:
+        trend_query = trend_query.filter(Task.tags.any(Tag.id.in_(tag_ids)))
         
-    # For trend, we usually want a fixed window or the selected window
-    # If selected window is small, use it. If large, maybe group by week?
-    # Let's stick to daily counts for the selected range (or default 30 days)
-    t_start = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else datetime.now() - timedelta(days=30)
-    t_end = datetime.strptime(end_date_str, '%Y-%m-%d') if end_date_str else datetime.now()
-    
     trend_query = trend_query.filter(Task.completed_at >= t_start, Task.completed_at <= t_end)
     completed_tasks_trend = trend_query.all()
     
-    # Group by date
-    date_counts = {}
-    current = t_start
-    while current <= t_end:
-        date_str = current.strftime('%Y-%m-%d')
-        date_counts[date_str] = 0
-        current += timedelta(days=1)
-        
+    # Group global completed by date
+    global_date_counts = {d: 0 for d in date_labels}
     for t in completed_tasks_trend:
         d_str = t.completed_at.strftime('%Y-%m-%d')
-        if d_str in date_counts:
-            date_counts[d_str] += 1
+        if d_str in global_date_counts:
+            global_date_counts[d_str] += 1
             
-    trend_data = {
-        'dates': list(date_counts.keys()),
-        'completed_counts': list(date_counts.values())
+    global_trend_data = {
+        'dates': date_labels,
+        'completed_counts': [global_date_counts[d] for d in date_labels]
     }
+
+    # 4. Employee Trend (Line chart per employee)
+    # We reuse 'completed_tasks_trend' but group by user
+    employee_trend_datasets = []
+    # If too many users, chart gets messy. Maybe limit to top 5 or selected?
+    # For now, do all selected users (or all if none selected)
     
+    for user in target_users:
+        # Get tasks for this user from the trend set
+        user_trend_tasks = [t for t in completed_tasks_trend if user in t.assignees]
+        
+        # If user has 0 completed tasks in this period, maybe skip? Or show flat line?
+        # Let's show flat line if they are in the filter list.
+        
+        u_date_counts = {d: 0 for d in date_labels}
+        for t in user_trend_tasks:
+            d_str = t.completed_at.strftime('%Y-%m-%d')
+            if d_str in u_date_counts:
+                u_date_counts[d_str] += 1
+        
+        # Only add dataset if there's at least one task or if explicitly filtered?
+        # Let's add all to be safe, frontend can hide if needed.
+        # Optimization: if sum is 0, maybe skip to keep chart clean?
+        if sum(u_date_counts.values()) > 0 or user_ids:
+             employee_trend_datasets.append({
+                'label': user.full_name,
+                'data': [u_date_counts[d] for d in date_labels],
+                'fill': False
+             })
+
+    # 5. Tag Trend (Line chart per tag)
+    # We need to query tags. If tag_ids filter is on, use those. Else all tags?
+    # If all tags, that might be too many lines. Let's use top 5 active tags or just the filtered ones.
+    
+    tag_trend_datasets = []
+    target_tags = Tag.query.filter(Tag.id.in_(tag_ids)).all() if tag_ids else Tag.query.all()
+    
+    # If no tag filter, maybe we only show tags that actually have data in this period to avoid clutter?
+    # Or just all tags. Let's try all tags but skip empty ones.
+    
+    for tag in target_tags:
+        # Filter trend tasks that have this tag
+        tag_trend_tasks = [t for t in completed_tasks_trend if tag in t.tags]
+        
+        t_date_counts = {d: 0 for d in date_labels}
+        for t in tag_trend_tasks:
+            d_str = t.completed_at.strftime('%Y-%m-%d')
+            if d_str in t_date_counts:
+                t_date_counts[d_str] += 1
+                
+        if sum(t_date_counts.values()) > 0 or tag_ids:
+            tag_trend_datasets.append({
+                'label': tag.name,
+                'borderColor': tag.color, # Use tag color!
+                'data': [t_date_counts[d] for d in date_labels],
+                'fill': False
+            })
+
     return jsonify({
         'user_stats': user_stats,
         'global_stats': {'completed': global_completed, 'pending': global_pending},
-        'trend': trend_data
+        'trend': global_trend_data,
+        'employee_trend': employee_trend_datasets,
+        'tag_trend': tag_trend_datasets
     })
 
 @main_bp.route('/reports/export', methods=['POST'])
 @login_required
 def export_report():
-    # Get filters from form data (since it's a POST form submission)
+    # Get filters from form data
     user_ids_str = request.form.get('user_ids')
+    tag_ids_str = request.form.get('tag_ids') # New
+    status_filter = request.form.get('status') # New
     start_date_str = request.form.get('start_date')
     end_date_str = request.form.get('end_date')
     
     import json
     user_ids = json.loads(user_ids_str) if user_ids_str else []
+    tag_ids = json.loads(tag_ids_str) if tag_ids_str else [] # New
     
-    # Fetch data (logic similar to reports_data but we need the raw objects for PDF)
+    # Fetch data
     query = Task.query
     if user_ids:
         query = query.filter(Task.assignees.any(User.id.in_(user_ids)))
+        
+    if tag_ids: # New
+        query = query.filter(Task.tags.any(Tag.id.in_(tag_ids)))
+        
+    if status_filter and status_filter != 'All': # New
+        query = query.filter(Task.status == status_filter)
+        
     if start_date_str and end_date_str:
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
@@ -752,19 +839,20 @@ def export_report():
     tasks = query.order_by(Task.due_date).all()
     
     # Prepare data for charts
-    # We need to re-calculate stats for the PDF generator
-    # ... (Reuse logic or extract to service function? For now, duplicate slightly for speed)
     
     # Generate PDF
     from pdf_utils import generate_report_pdf
     
-    # We need to pass the stats to the PDF generator
     # Stats calculation:
     target_users = User.query.filter(User.id.in_(user_ids)).all() if user_ids else User.query.all()
     user_stats = []
     for user in target_users:
         u_tasks = [t for t in tasks if user in t.assignees]
-        if not u_tasks and user_ids: continue
+        # If filtering by users, only show those users. If not, show all.
+        # Logic: if user_ids is set, we only iterate those. If not, we iterate all.
+        # But if we filter by tag, a user might have 0 tasks with that tag.
+        # Should we show them? Yes, with 0.
+        
         completed = sum(1 for t in u_tasks if t.status == 'Completed')
         user_stats.append({'name': user.full_name, 'completed': completed, 'pending': len(u_tasks)-completed})
         
@@ -773,11 +861,15 @@ def export_report():
     global_pending = len(tasks) - global_completed
     
     # Trend Data
-    # Use the same date range logic as reports_data
     t_start = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else datetime.now() - timedelta(days=30)
-    t_end = datetime.strptime(end_date_str, '%Y-%m-%d') if end_date_str else datetime.now()
     
-    # Filter completed tasks for trend
+    if end_date_str:
+        t_end = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+    else:
+        t_end = datetime.now()
+    
+    # Filter completed tasks for trend (respecting all filters)
+    # We can just filter 'tasks' list since it already has all filters applied
     completed_tasks_trend = [t for t in tasks if t.status == 'Completed' and t.completed_at and t_start <= t.completed_at <= t_end]
     
     date_counts = {}
@@ -796,15 +888,59 @@ def export_report():
         'dates': list(date_counts.keys()),
         'completed_counts': list(date_counts.values())
     }
+    
+    # --- Employee Trend (for PDF) ---
+    employee_trend_datasets = []
+    for user in target_users:
+        user_trend_tasks = [t for t in completed_tasks_trend if user in t.assignees]
+        u_date_counts = {d: 0 for d in date_counts.keys()}
+        for t in user_trend_tasks:
+            d_str = t.completed_at.strftime('%Y-%m-%d')
+            if d_str in u_date_counts:
+                u_date_counts[d_str] += 1
+        
+        if sum(u_date_counts.values()) > 0 or user_ids:
+             employee_trend_datasets.append({
+                'label': user.full_name,
+                'data': [u_date_counts[d] for d in date_counts.keys()]
+             })
+
+    # --- Tag Trend (for PDF) ---
+    tag_trend_datasets = []
+    target_tags = Tag.query.filter(Tag.id.in_(tag_ids)).all() if tag_ids else Tag.query.all()
+    
+    for tag in target_tags:
+        tag_trend_tasks = [t for t in completed_tasks_trend if tag in t.tags]
+        t_date_counts = {d: 0 for d in date_counts.keys()}
+        for t in tag_trend_tasks:
+            d_str = t.completed_at.strftime('%Y-%m-%d')
+            if d_str in t_date_counts:
+                t_date_counts[d_str] += 1
+                
+        if sum(t_date_counts.values()) > 0 or tag_ids:
+            tag_trend_datasets.append({
+                'label': tag.name,
+                'color': tag.color,
+                'data': [t_date_counts[d] for d in date_counts.keys()]
+            })
+    
+    # Filter Info for PDF
+    filter_info = {
+        'users': [u.full_name for u in target_users] if user_ids else ['Todos'],
+        'tags': [t.name for t in Tag.query.filter(Tag.id.in_(tag_ids)).all()] if tag_ids else ['Todas'],
+        'status': status_filter if status_filter and status_filter != 'All' else 'Todos'
+    }
         
     report_data = {
         'tasks': tasks,
         'user_stats': user_stats,
         'global_stats': {'completed': global_completed, 'pending': global_pending},
         'trend': trend_data,
+        'employee_trend': employee_trend_datasets, # New
+        'tag_trend': tag_trend_datasets, # New
         'start_date': start_date_str,
         'end_date': end_date_str,
-        'filters': {'users': [u.full_name for u in target_users] if user_ids else ['Todos']}
+        'filters': filter_info
     }
     
     pdf = generate_report_pdf(report_data)

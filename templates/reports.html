@@ -21,9 +21,34 @@
                 <option value="{{ user.id }}" selected>{{ user.full_name }}</option>
                 {% endfor %}
             </select>
-            <small style="color: var(--text-light);">Mantén presionado Ctrl para seleccionar varios</small>
+            <small style="color: var(--text-light);">Ctrl + Click para múltiple</small>
         </div>
+
+        <!-- New Filters -->
         <div style="flex: 1; min-width: 200px;">
+            <label
+                style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Etiquetas</label>
+            <select id="tagFilter" multiple
+                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; height: 100px;">
+                {% for tag in tags %}
+                <option value="{{ tag.id }}">{{ tag.name }}</option>
+                {% endfor %}
+            </select>
+            <small style="color: var(--text-light);">Ctrl + Click para múltiple</small>
+        </div>
+
+        <div style="flex: 1; min-width: 150px;">
+            <label
+                style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Estado</label>
+            <select id="statusFilter"
+                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                <option value="All">Todos</option>
+                <option value="Pending">Pendientes</option>
+                <option value="Completed">Completadas</option>
+            </select>
+        </div>
+
+        <div style="flex: 1; min-width: 300px;">
             <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Rango de
                 Fechas</label>
             <div style="display: flex; gap: 0.5rem;">
@@ -51,9 +76,22 @@
     </div>
 </div>
 
-<div class="card">
-    <h3><i class="fas fa-history"></i> Tendencia de Completado (Últimos 30 días)</h3>
+<div class="card" style="margin-bottom: 2rem;">
+    <h3><i class="fas fa-history"></i> Tendencia Global (Completadas)</h3>
     <canvas id="trendChart"></canvas>
+</div>
+
+<!-- New Charts -->
+<div
+    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
+    <div class="card">
+        <h3><i class="fas fa-user-clock"></i> Evolución por Empleado</h3>
+        <canvas id="employeeTrendChart"></canvas>
+    </div>
+    <div class="card">
+        <h3><i class="fas fa-tags"></i> Evolución por Etiqueta</h3>
+        <canvas id="tagTrendChart"></canvas>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -61,6 +99,8 @@
     let tasksByUserChart = null;
     let statusChart = null;
     let trendChart = null;
+    let employeeTrendChart = null;
+    let tagTrendChart = null;
 
     document.addEventListener('DOMContentLoaded', function () {
         // Set default dates (last 30 days)
@@ -74,13 +114,15 @@
         loadReportData();
     });
 
-    function getSelectedUsers() {
-        const select = document.getElementById('userFilter');
+    function getSelectedValues(selectId) {
+        const select = document.getElementById(selectId);
         return Array.from(select.selectedOptions).map(option => option.value);
     }
 
     function loadReportData() {
-        const userIds = getSelectedUsers();
+        const userIds = getSelectedValues('userFilter');
+        const tagIds = getSelectedValues('tagFilter');
+        const status = document.getElementById('statusFilter').value;
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
 
@@ -91,6 +133,8 @@
             },
             body: JSON.stringify({
                 user_ids: userIds,
+                tag_ids: tagIds,
+                status: status,
                 start_date: startDate,
                 end_date: endDate
             })
@@ -157,7 +201,7 @@
             data: {
                 labels: data.trend.dates,
                 datasets: [{
-                    label: 'Tareas Completadas',
+                    label: 'Tareas Completadas (Global)',
                     data: data.trend.completed_counts,
                     borderColor: '#3b82f6',
                     tension: 0.1,
@@ -172,10 +216,48 @@
                 }
             }
         });
+
+        // Employee Trend Chart
+        const ctxEmpTrend = document.getElementById('employeeTrendChart').getContext('2d');
+        if (employeeTrendChart) employeeTrendChart.destroy();
+
+        employeeTrendChart = new Chart(ctxEmpTrend, {
+            type: 'line',
+            data: {
+                labels: data.trend.dates, // Same dates
+                datasets: data.employee_trend
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                }
+            }
+        });
+
+        // Tag Trend Chart
+        const ctxTagTrend = document.getElementById('tagTrendChart').getContext('2d');
+        if (tagTrendChart) tagTrendChart.destroy();
+
+        tagTrendChart = new Chart(ctxTagTrend, {
+            type: 'line',
+            data: {
+                labels: data.trend.dates, // Same dates
+                datasets: data.tag_trend
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                }
+            }
+        });
     }
 
     function exportReport() {
-        const userIds = getSelectedUsers();
+        const userIds = getSelectedValues('userFilter');
+        const tagIds = getSelectedValues('tagFilter');
+        const status = document.getElementById('statusFilter').value;
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
 
@@ -189,6 +271,19 @@
         inputUsers.name = 'user_ids';
         inputUsers.value = JSON.stringify(userIds);
         form.appendChild(inputUsers);
+
+        // Add new inputs for export
+        const inputTags = document.createElement('input');
+        inputTags.type = 'hidden';
+        inputTags.name = 'tag_ids';
+        inputTags.value = JSON.stringify(tagIds);
+        form.appendChild(inputTags);
+
+        const inputStatus = document.createElement('input');
+        inputStatus.type = 'hidden';
+        inputStatus.name = 'status';
+        inputStatus.value = status;
+        form.appendChild(inputStatus);
 
         const inputStart = document.createElement('input');
         inputStart.type = 'hidden';

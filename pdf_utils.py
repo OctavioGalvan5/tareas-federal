@@ -102,7 +102,7 @@ def generate_charts_for_pdf(data):
         plt.fill_between(dates, counts, color='#3b82f6', alpha=0.1)
         plt.xlabel('Fecha')
         plt.ylabel('Tareas Completadas')
-        plt.title('Tendencia de Finalización')
+        plt.title('Tendencia de Finalización (Global)')
         plt.grid(True, linestyle='--', alpha=0.7)
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
@@ -111,6 +111,58 @@ def generate_charts_for_pdf(data):
         paths['trend'] = path
     except Exception as e:
         print(f"Error generating trend chart: {e}")
+        if os.path.exists(path): os.remove(path)
+
+    # 4. Employee Trend (Multi-Line)
+    try:
+        fd, path = tempfile.mkstemp(suffix='.png')
+        os.close(fd)
+        
+        emp_trends = data.get('employee_trend', [])
+        dates = [datetime.strptime(d, '%Y-%m-%d').strftime('%d/%m') for d in data['trend']['dates']]
+        
+        plt.figure(figsize=(10, 6))
+        for emp in emp_trends:
+            plt.plot(dates, emp['data'], marker='.', linestyle='-', label=emp['label'])
+            
+        plt.xlabel('Fecha')
+        plt.ylabel('Tareas Completadas')
+        plt.title('Evolución por Empleado')
+        plt.legend()
+        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        plt.savefig(path, format='png', dpi=100)
+        plt.close()
+        paths['employee_trend'] = path
+    except Exception as e:
+        print(f"Error generating employee trend chart: {e}")
+        if os.path.exists(path): os.remove(path)
+
+    # 5. Tag Trend (Multi-Line)
+    try:
+        fd, path = tempfile.mkstemp(suffix='.png')
+        os.close(fd)
+        
+        tag_trends = data.get('tag_trend', [])
+        dates = [datetime.strptime(d, '%Y-%m-%d').strftime('%d/%m') for d in data['trend']['dates']]
+        
+        plt.figure(figsize=(10, 6))
+        for tag in tag_trends:
+            plt.plot(dates, tag['data'], marker='.', linestyle='-', label=tag['label'], color=tag['color'])
+            
+        plt.xlabel('Fecha')
+        plt.ylabel('Tareas Completadas')
+        plt.title('Evolución por Etiqueta')
+        plt.legend()
+        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        plt.savefig(path, format='png', dpi=100)
+        plt.close()
+        paths['tag_trend'] = path
+    except Exception as e:
+        print(f"Error generating tag trend chart: {e}")
         if os.path.exists(path): os.remove(path)
         
     return paths
@@ -127,7 +179,19 @@ def generate_report_pdf(data):
     
     pdf.set_font('Arial', '', 10)
     pdf.cell(0, 6, f"Periodo: {data['start_date']} al {data['end_date']}", 0, 1)
-    pdf.cell(0, 6, f"Usuarios: {', '.join(data['filters']['users'][:5])}" + ("..." if len(data['filters']['users']) > 5 else ""), 0, 1)
+    
+    # Users
+    users_str = ', '.join(data['filters']['users'][:5]) + ("..." if len(data['filters']['users']) > 5 else "")
+    pdf.cell(0, 6, f"Usuarios: {users_str}", 0, 1)
+    
+    # Tags
+    tags_str = ', '.join(data['filters']['tags'][:5]) + ("..." if len(data['filters']['tags']) > 5 else "")
+    pdf.cell(0, 6, f"Etiquetas: {tags_str}", 0, 1)
+    
+    # Status
+    status_trans = "Completada" if data['filters']['status'] == 'Completed' else ("Pendiente" if data['filters']['status'] == 'Pending' else "Todos")
+    pdf.cell(0, 6, f"Estado: {status_trans}", 0, 1)
+    
     pdf.ln(5)
     
     # --- Charts Section ---
@@ -155,6 +219,34 @@ def generate_report_pdf(data):
         os.remove(chart_paths['user'])
         
     pdf.ln(85)
+
+    # --- Detailed Trends Page ---
+    pdf.add_page()
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, 'Análisis de Tendencias Detallado', 0, 1)
+    
+    y_charts = pdf.get_y()
+    
+    # Employee Trend
+    if 'employee_trend' in chart_paths:
+        pdf.image(chart_paths['employee_trend'], x=10, y=y_charts, w=190, h=100)
+        os.remove(chart_paths['employee_trend'])
+        pdf.ln(110)
+    else:
+        pdf.set_font('Arial', 'I', 10)
+        pdf.cell(0, 10, 'No hay datos suficientes para generar el gráfico de evolución por empleado.', 0, 1)
+        pdf.ln(10)
+    
+    # Tag Trend
+    y_charts = pdf.get_y()
+    if 'tag_trend' in chart_paths:
+        pdf.image(chart_paths['tag_trend'], x=10, y=y_charts, w=190, h=100)
+        os.remove(chart_paths['tag_trend'])
+        pdf.ln(10)
+    else:
+        pdf.set_font('Arial', 'I', 10)
+        pdf.cell(0, 10, 'No hay datos suficientes para generar el gráfico de evolución por etiqueta.', 0, 1)
+        pdf.ln(10)
     
     # --- Detailed Stats Table ---
     pdf.add_page()

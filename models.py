@@ -52,8 +52,15 @@ class Task(db.Model):
     completed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
     
+    # Tracking edits
+    last_edited_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    last_edited_at = db.Column(db.DateTime, nullable=True)
+    
     # Relationship for completed_by
     completed_by = db.relationship('User', foreign_keys=[completed_by_id])
+    
+    # Relationship for last_edited_by
+    last_edited_by = db.relationship('User', foreign_keys=[last_edited_by_id])
     
     # Relationship for tags
     tags = db.relationship('Tag', secondary=task_tags, backref=db.backref('tasks', lazy='dynamic'))

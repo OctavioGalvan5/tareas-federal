@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 900px; margin: 0 auto;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+        <div>
+            <h2 style="margin-bottom: 0.5rem;"><i class="fas fa-info-circle"></i> Detalles de la Tarea</h2>
+            {% if task.last_edited_by %}
+            <p style="color: var(--text-light); font-size: 0.9rem; margin: 0;">
+                <i class="fas fa-history"></i> Última edición por <strong>{{ task.last_edited_by.full_name }}</strong>
+                el {{ task.last_edited_at.strftime('%d/%m/%Y a las %H:%M') }}
+            </p>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="button">
+            <i class="fas fa-edit"></i> Editar Tarea
+        </a>
+    </div>
+
+    <div class="form-group">
+        <label><i class="fas fa-heading"></i> Título</label>
+        <div
+            style="padding: 0.8rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 1.1rem; font-weight: 500;">
+            {{ task.title }}
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label><i class="fas fa-align-left"></i> Descripción</label>
+        <div
+            style="padding: 0.8rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; min-height: 100px; white-space: pre-wrap;">
+            {{ task.description or 'Sin descripción' }}</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+        <div class="form-group">
+            <label><i class="fas fa-exclamation-circle"></i> Prioridad</label>
+            <div style="padding: 0.8rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
+                <span class="priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label><i class="fas fa-tasks"></i> Estado</label>
+            <div style="padding: 0.8rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
+                {% if task.status == 'Completed' %}
+                <span style="color: var(--success-color); font-weight: 600;"><i class="fas fa-check-circle"></i>
+                    Completado</span>
+                {% else %}
+                <span style="color: var(--warning-color); font-weight: 600;"><i class="fas fa-clock"></i>
+                    Pendiente</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label><i class="fas fa-calendar-day"></i> Fecha de Vencimiento</label>
+            <div style="padding: 0.8rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
+                {{ task.due_date.strftime('%d/%m/%Y') }}
+            </div>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label><i class="fas fa-users"></i> Asignado a</label>
+        <div style="padding: 0.8rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
+            {% if task.assignees %}
+            {% for user in task.assignees %}
+            <span
+                style="display: inline-block; background: #e5e7eb; padding: 0.2rem 0.6rem; border-radius: 15px; margin-right: 0.5rem; font-size: 0.9rem;">
+                <i class="fas fa-user"></i> {{ user.full_name }}
+            </span>
+            {% endfor %}
+            {% else %}
+            <span style="color: var(--text-light);">Sin asignados</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label><i class="fas fa-tags"></i> Etiquetas</label>
+        <div style="padding: 0.8rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
+            {% if task.tags %}
+            {% for tag in task.tags %}
+            <span class="tag-chip" style="background: {{ tag.color }};">{{ tag.name }}</span>
+            {% endfor %}
+            {% else %}
+            <span style="color: var(--text-light);">Sin etiquetas</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="form-group" style="margin-top: 2rem; border-top: 1px solid #e5e7eb; padding-top: 1rem;">
+        <label><i class="fas fa-info"></i> Información Adicional</label>
+        <div style="color: var(--text-light); font-size: 0.9rem;">
+            <p style="margin: 0.2rem 0;"><i class="fas fa-user-edit"></i> Creado por <strong>{{ task.creator.full_name
+                    }}</strong> el {{ task.created_at.strftime('%d/%m/%Y a las %H:%M') }}</p>
+            {% if task.completed_by %}
+            <p style="margin: 0.2rem 0; color: var(--success-color);"><i class="fas fa-check"></i> Completado por
+                <strong>{{ task.completed_by.full_name }}</strong> el {{ task.completed_at.strftime('%d/%m/%Y a las
+                %H:%M') }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+        <a href="{{ url_for('main.dashboard') }}"
+            style="padding: 0.9rem 2rem; text-decoration: none; color: var(--text-light); font-weight: 600; border-radius: 10px; border: 2px solid var(--border-color); transition: var(--transition);">
+            <i class="fas fa-arrow-left"></i> Volver al Tablero
+        </a>
+    </div>
+</div>
+{% endblock %}

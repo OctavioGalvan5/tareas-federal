@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 900px; margin: 0 auto;">
+    <h2><i class="fas fa-edit"></i> Editar Tarea</h2>
+    <form method="POST">
+        <div class="form-group">
+            <label for="title"><i class="fas fa-heading"></i> Título</label>
+            <input type="text" id="title" name="title" required placeholder="Título de la tarea"
+                value="{{ task.title }}">
+        </div>
+
+        <div class="form-group">
+            <label for="description"><i class="fas fa-align-left"></i> Descripción</label>
+            <textarea id="description" name="description" rows="4"
+                placeholder="Descripción detallada de la tarea">{{ task.description }}</textarea>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="priority"><i class="fas fa-exclamation-circle"></i> Prioridad</label>
+                <select id="priority" name="priority" required>
+                    <option value="Normal" {% if task.priority=='Normal' %}selected{% endif %}>Normal</option>
+                    <option value="Media" {% if task.priority=='Media' %}selected{% endif %}>Media</option>
+                    <option value="Urgente" {% if task.priority=='Urgente' %}selected{% endif %}>Urgente</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="status"><i class="fas fa-tasks"></i> Estado</label>
+                <select id="status" name="status" required>
+                    <option value="Pending" {% if task.status=='Pending' %}selected{% endif %}>Pendiente</option>
+                    <option value="Completed" {% if task.status=='Completed' %}selected{% endif %}>Completado</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="due_date"><i class="fas fa-calendar-day"></i> Fecha de Vencimiento</label>
+                <input type="date" id="due_date" name="due_date" required
+                    value="{{ task.due_date.strftime('%Y-%m-%d') }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="assignees"><i class="fas fa-users"></i> Asignar a (Mantén presionado Ctrl para seleccionar
+                varios)</label>
+            <select id="assignees" name="assignees" multiple required style="height: 150px;">
+                {% for user in users %}
+                <option value="{{ user.id }}" {% if user in task.assignees %}selected{% endif %}>{{ user.full_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label><i class="fas fa-tags"></i> Etiquetas (opcional)</label>
+            <div id="selectedTagsDisplay" class="selected-tags">
+                {% if task.tags|length == 0 %}
+                <span style="color: #9ca3af;">Sin etiquetas</span>
+                {% else %}
+                {% for tag in task.tags %}
+                <span class="tag-chip" style="background: {{ tag.color }};">{{ tag.name }}</span>
+                {% endfor %}
+                {% endif %}
+            </div>
+            <div style="margin-top: 0.5rem;">
+                {% for tag in available_tags %}
+                <label style="display: inline-flex; align-items: center; margin-right: 1rem; cursor: pointer;">
+                    <input type="checkbox" name="tags" value="{{ tag.id }}" onchange="updateSelectedTags()"
+                        style="width: auto; margin-right: 0.5rem;" {% if tag in task.tags %}checked{% endif %}>
+                    <span class="tag-chip" style="background: {{ tag.color }};">{{ tag.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+            <a href="{{ url_for('main.dashboard') }}"
+                style="padding: 0.9rem 2rem; text-decoration: none; color: var(--text-light); font-weight: 600; border-radius: 10px; border: 2px solid var(--border-color); transition: var(--transition);">
+                <i class="fas fa-times"></i> Cancelar
+            </a>
+            <button type="submit">
+                <i class="fas fa-save"></i> Guardar Cambios
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    function updateSelectedTags() {
+        const checkboxes = document.querySelectorAll('input[name="tags"]:checked');
+        const display = document.getElementById('selectedTagsDisplay');
+
+        if (checkboxes.length === 0) {
+            display.innerHTML = '<span style="color: #9ca3af;">Sin etiquetas</span>';
+        } else {
+            display.innerHTML = '';
+            checkboxes.forEach(cb => {
+                const label = cb.parentElement;
+                const chip = label.querySelector('.tag-chip');
+                const tagEl = document.createElement('span');
+                tagEl.className = 'tag-chip';
+                tagEl.style.backgroundColor = chip.style.backgroundColor;
+                tagEl.textContent = chip.textContent;
+                display.appendChild(tagEl);
+            });
+        }
+    }
+</script>
+{% endblock %}

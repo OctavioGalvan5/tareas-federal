@@ -132,6 +132,72 @@ def create_task():
         
     return render_template('create_task.html', users=users, available_tags=available_tags)  # MODIFICADO
 
+@main_bp.route('/task/<int:task_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    
+    # Verify user has access to this task (either creator or assignee)
+    # Ideally only creator or admin should edit, or maybe assignees too?
+    # For now let's allow creator and assignees to edit
+    if task.creator_id != current_user.id and current_user not in task.assignees and not current_user.is_admin:
+        flash('No tienes permiso para editar esta tarea.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    users = User.query.all()
+    available_tags = Tag.query.order_by(Tag.name).all()
+
+    if request.method == 'POST':
+        task.title = request.form.get('title')
+        task.description = request.form.get('description')
+        task.priority = request.form.get('priority')
+        task.status = request.form.get('status') # Update status
+        
+        due_date_str = request.form.get('due_date')
+        task.due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+        
+        # Update assignees
+        assignee_ids = request.form.getlist('assignees')
+        task.assignees = [] # Clear current assignees
+        for user_id in assignee_ids:
+            user = User.query.get(int(user_id))
+            if user:
+                task.assignees.append(user)
+
+        # Update tags
+        tag_ids = request.form.getlist('tags')
+        task.tags = [] # Clear current tags
+        for tag_id in tag_ids:
+            tag = Tag.query.get(int(tag_id))
+            if tag:
+                task.tags.append(tag)
+        
+        # Handle completion tracking if status changed to Completed
+        if task.status == 'Completed' and not task.completed_at:
+             task.completed_by_id = current_user.id
+             task.completed_at = datetime.now()
+        elif task.status == 'Pending':
+             task.completed_by_id = None
+             task.completed_at = None
+
+        # Track edit history
+        task.last_edited_by_id = current_user.id
+        task.last_edited_at = datetime.now()
+
+        db.session.commit()
+        flash('Tarea actualizada exitosamente.', 'success')
+        return redirect(url_for('main.dashboard'))
+        
+        return redirect(url_for('main.dashboard'))
+        
+    return render_template('edit_task.html', task=task, users=users, available_tags=available_tags)
+
+@main_bp.route('/task/<int:task_id>')
+@login_required
+def task_details(task_id):
+    task = Task.query.get_or_404(task_id)
+    return render_template('task_details.html', task=task)
+
 @main_bp.route('/calendar')
 @login_required
 def calendar():

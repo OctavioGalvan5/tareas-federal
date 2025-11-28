@@ -798,12 +798,16 @@ def reports_data():
                 'fill': False
             })
 
+    # 6. Detailed KPIs
+    kpis = calculate_kpis(tasks, global_completed)
+
     return jsonify({
         'user_stats': user_stats,
         'global_stats': {'completed': global_completed, 'pending': global_pending},
         'trend': global_trend_data,
         'employee_trend': employee_trend_datasets,
-        'tag_trend': tag_trend_datasets
+        'tag_trend': tag_trend_datasets,
+        'kpis': kpis
     })
 
 @main_bp.route('/reports/export', methods=['POST'])
@@ -815,6 +819,8 @@ def export_report():
     status_filter = request.form.get('status') # New
     start_date_str = request.form.get('start_date')
     end_date_str = request.form.get('end_date')
+    include_kpis_str = request.form.get('include_kpis')
+    include_kpis = include_kpis_str == 'true'
     
     import json
     user_ids = json.loads(user_ids_str) if user_ids_str else []
@@ -943,6 +949,9 @@ def export_report():
         'filters': filter_info
     }
     
+    if include_kpis:
+        report_data['kpis'] = calculate_kpis(tasks, global_completed)
+    
     pdf = generate_report_pdf(report_data)
     
     response = make_response(pdf.output(dest='S').encode('latin-1'))
@@ -950,3 +959,34 @@ def export_report():
     response.headers['Content-Disposition'] = f'attachment; filename=reporte_avanzado_{date.today()}.pdf'
     
     return response
+
+def calculate_kpis(tasks, global_completed):
+    # Total Tasks
+    kpi_total = len(tasks)
+    
+    # Completion Rate
+    kpi_completion_rate = round((global_completed / kpi_total * 100), 1) if kpi_total > 0 else 0
+    
+    # Overdue Tasks (Pending and due_date < now)
+    now = datetime.now()
+    kpi_overdue = sum(1 for t in tasks if t.status == 'Pending' and t.due_date < now)
+    
+    # Avg Resolution Time (Completed tasks)
+    completed_with_time = [t for t in tasks if t.status == 'Completed' and t.completed_at and t.created_at]
+    if completed_with_time:
+        total_seconds = sum((t.completed_at - t.created_at).total_seconds() for t in completed_with_time)
+        avg_seconds = total_seconds / len(completed_with_time)
+        # Format nicely: X days or X hours
+        if avg_seconds > 86400:
+            kpi_avg_time = f"{round(avg_seconds / 86400, 1)} días"
+        else:
+            kpi_avg_time = f"{round(avg_seconds / 3600, 1)} horas"
+    else:
+        kpi_avg_time = "N/A"
+
+    return {
+        'total': kpi_total,
+        'completion_rate': kpi_completion_rate,
+        'overdue': kpi_overdue,
+        'avg_time': kpi_avg_time
+    }

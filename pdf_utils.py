@@ -200,7 +200,65 @@ def generate_report_pdf(data):
     
     chart_paths = generate_charts_for_pdf(data)
     
-    # Row 1: Status (Left) and Trend (Right) - Adjusted sizing
+    # --- KPIs Section (Optional) ---
+    if 'kpis' in data:
+        kpis = data['kpis']
+        
+        # Draw 4 cards
+        y_start = pdf.get_y()
+        card_width = 45
+        spacing = 5
+        x_start = 10
+        
+        # Card 1: Total
+        pdf.set_fill_color(243, 244, 246) # Gray 100
+        pdf.rect(x_start, y_start, card_width, 25, 'F')
+        pdf.set_xy(x_start, y_start + 5)
+        pdf.set_font('Arial', 'B', 12)
+        pdf.set_text_color(0, 119, 190) # Brand Blue
+        pdf.cell(card_width, 6, str(kpis['total']), 0, 2, 'C')
+        pdf.set_font('Arial', '', 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(card_width, 6, 'Total Tareas', 0, 0, 'C')
+        
+        # Card 2: Completion Rate
+        x_pos = x_start + card_width + spacing
+        pdf.set_fill_color(209, 250, 229) # Emerald 100
+        pdf.rect(x_pos, y_start, card_width, 25, 'F')
+        pdf.set_xy(x_pos, y_start + 5)
+        pdf.set_font('Arial', 'B', 12)
+        pdf.set_text_color(4, 120, 87) # Emerald 700
+        pdf.cell(card_width, 6, f"{kpis['completion_rate']}%", 0, 2, 'C')
+        pdf.set_font('Arial', '', 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(card_width, 6, 'Tasa Finalización', 0, 0, 'C')
+        
+        # Card 3: Overdue
+        x_pos += card_width + spacing
+        pdf.set_fill_color(254, 226, 226) # Red 100
+        pdf.rect(x_pos, y_start, card_width, 25, 'F')
+        pdf.set_xy(x_pos, y_start + 5)
+        pdf.set_font('Arial', 'B', 12)
+        pdf.set_text_color(185, 28, 28) # Red 700
+        pdf.cell(card_width, 6, str(kpis['overdue']), 0, 2, 'C')
+        pdf.set_font('Arial', '', 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(card_width, 6, 'Vencidas', 0, 0, 'C')
+        
+        # Card 4: Avg Time
+        x_pos += card_width + spacing
+        pdf.set_fill_color(219, 234, 254) # Blue 100
+        pdf.rect(x_pos, y_start, card_width, 25, 'F')
+        pdf.set_xy(x_pos, y_start + 5)
+        pdf.set_font('Arial', 'B', 10) # Smaller font for text
+        pdf.set_text_color(29, 78, 216) # Blue 700
+        pdf.cell(card_width, 6, str(kpis['avg_time']), 0, 2, 'C')
+        pdf.set_font('Arial', '', 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(card_width, 6, 'Tiempo Promedio', 0, 0, 'C')
+        
+        pdf.ln(35) # Move down past cards
+
     y_charts = pdf.get_y()
     
     if 'status' in chart_paths:

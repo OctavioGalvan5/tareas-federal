@@ -11,56 +11,75 @@
 </div>
 
 <div class="card" style="margin-bottom: 2rem;">
-    <div class="filters-section" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 200px;">
-            <label
-                style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Usuarios</label>
-            <select id="userFilter" multiple
-                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; height: 100px;">
-                {% for user in users %}
-                <option value="{{ user.id }}" selected>{{ user.full_name }}</option>
-                {% endfor %}
-            </select>
-            <small style="color: var(--text-light);">Ctrl + Click para múltiple</small>
-        </div>
+    <div class="filters-section">
+        <!-- Primera fila: Selectores múltiples -->
+        <div
+            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+            <div>
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem; font-weight: 500;">
+                    <i class="fas fa-users" style="margin-right: 0.25rem;"></i> Usuarios
+                </label>
+                <select id="userFilter" multiple
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; height: 100px; background: #fff;">
+                    {% for user in users %}
+                    <option value="{{ user.id }}" selected>{{ user.full_name }}</option>
+                    {% endfor %}
+                </select>
+                <small style="color: var(--text-light); font-size: 0.75rem;">Ctrl + Click para múltiple</small>
+            </div>
 
-        <!-- New Filters -->
-        <div style="flex: 1; min-width: 200px;">
-            <label
-                style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Etiquetas</label>
-            <select id="tagFilter" multiple
-                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; height: 100px;">
-                {% for tag in tags %}
-                <option value="{{ tag.id }}">{{ tag.name }}</option>
-                {% endfor %}
-            </select>
-            <small style="color: var(--text-light);">Ctrl + Click para múltiple</small>
-        </div>
-
-        <div style="flex: 1; min-width: 150px;">
-            <label
-                style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Estado</label>
-            <select id="statusFilter"
-                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
-                <option value="All">Todos</option>
-                <option value="Pending">Pendientes</option>
-                <option value="Completed">Completadas</option>
-            </select>
-        </div>
-
-        <div style="flex: 1; min-width: 300px;">
-            <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Rango de
-                Fechas</label>
-            <div style="display: flex; gap: 0.5rem;">
-                <input type="date" id="startDate"
-                    style="flex: 1; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
-                <input type="date" id="endDate"
-                    style="flex: 1; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+            <div>
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem; font-weight: 500;">
+                    <i class="fas fa-tags" style="margin-right: 0.25rem;"></i> Etiquetas
+                </label>
+                <select id="tagFilter" multiple
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; height: 100px; background: #fff;">
+                    {% for tag in tags %}
+                    <option value="{{ tag.id }}">{{ tag.name }}</option>
+                    {% endfor %}
+                </select>
+                <small style="color: var(--text-light); font-size: 0.75rem;">Ctrl + Click para múltiple</small>
             </div>
         </div>
-        <button onclick="loadReportData()" class="button-secondary" style="height: 38px; margin-bottom: 2px;">
-            <i class="fas fa-sync"></i> Actualizar
-        </button>
+
+        <!-- Segunda fila: Filtros simples y botón -->
+        <div
+            style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; padding-top: 1rem; border-top: 1px solid #f0f0f0;">
+            <div style="min-width: 140px;">
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem; font-weight: 500;">
+                    <i class="fas fa-filter" style="margin-right: 0.25rem;"></i> Estado
+                </label>
+                <select id="statusFilter"
+                    style="width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; font-size: 0.9rem; cursor: pointer;">
+                    <option value="All">Todos</option>
+                    <option value="Pending">Pendientes</option>
+                    <option value="Completed">Completadas</option>
+                </select>
+            </div>
+
+            <div style="flex: 1; min-width: 280px; max-width: 400px;">
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem; font-weight: 500;">
+                    <i class="fas fa-calendar-alt" style="margin-right: 0.25rem;"></i> Rango de Fechas
+                </label>
+                <div
+                    style="display: flex; align-items: center; gap: 0.5rem; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 0.4rem 0.75rem;">
+                    <input type="date" id="startDate"
+                        style="flex: 1; border: none; outline: none; font-size: 0.9rem; padding: 0.2rem; background: transparent; min-width: 100px;">
+                    <span style="color: #9ca3af; font-size: 0.85rem;">—</span>
+                    <input type="date" id="endDate"
+                        style="flex: 1; border: none; outline: none; font-size: 0.9rem; padding: 0.2rem; background: transparent; min-width: 100px;">
+                </div>
+            </div>
+
+            <button onclick="loadReportData()" class="button-secondary"
+                style="height: 42px; padding: 0 1.25rem; white-space: nowrap;">
+                <i class="fas fa-sync"></i> Actualizar
+            </button>
+        </div>
     </div>
 </div>
 
@@ -81,7 +100,6 @@
     <canvas id="trendChart"></canvas>
 </div>
 
-<!-- New Charts -->
 <div
     style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
     <div class="card">
@@ -103,7 +121,6 @@
     let tagTrendChart = null;
 
     document.addEventListener('DOMContentLoaded', function () {
-        // Set default dates (last 30 days)
         const end = new Date();
         const start = new Date();
         start.setDate(start.getDate() - 30);
@@ -150,7 +167,6 @@
         // Tasks by User Chart
         const ctxUser = document.getElementById('tasksByUserChart').getContext('2d');
         if (tasksByUserChart) tasksByUserChart.destroy();
-
         tasksByUserChart = new Chart(ctxUser, {
             type: 'bar',
             data: {
@@ -180,7 +196,6 @@
         // Status Chart
         const ctxStatus = document.getElementById('statusChart').getContext('2d');
         if (statusChart) statusChart.destroy();
-
         statusChart = new Chart(ctxStatus, {
             type: 'doughnut',
             data: {
@@ -195,7 +210,6 @@
         // Trend Chart
         const ctxTrend = document.getElementById('trendChart').getContext('2d');
         if (trendChart) trendChart.destroy();
-
         trendChart = new Chart(ctxTrend, {
             type: 'line',
             data: {
@@ -220,11 +234,10 @@
         // Employee Trend Chart
         const ctxEmpTrend = document.getElementById('employeeTrendChart').getContext('2d');
         if (employeeTrendChart) employeeTrendChart.destroy();
-
         employeeTrendChart = new Chart(ctxEmpTrend, {
             type: 'line',
             data: {
-                labels: data.trend.dates, // Same dates
+                labels: data.trend.dates,
                 datasets: data.employee_trend
             },
             options: {
@@ -238,11 +251,10 @@
         // Tag Trend Chart
         const ctxTagTrend = document.getElementById('tagTrendChart').getContext('2d');
         if (tagTrendChart) tagTrendChart.destroy();
-
         tagTrendChart = new Chart(ctxTagTrend, {
             type: 'line',
             data: {
-                labels: data.trend.dates, // Same dates
+                labels: data.trend.dates,
                 datasets: data.tag_trend
             },
             options: {
@@ -261,7 +273,6 @@
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
 
-        // Create a form to submit POST request for download
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = '/reports/export';
@@ -272,7 +283,6 @@
         inputUsers.value = JSON.stringify(userIds);
         form.appendChild(inputUsers);
 
-        // Add new inputs for export
         const inputTags = document.createElement('input');
         inputTags.type = 'hidden';
         inputTags.name = 'tag_ids';

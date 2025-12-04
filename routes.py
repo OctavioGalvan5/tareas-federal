@@ -7,6 +7,7 @@ from pdf_utils import generate_task_pdf
 from excel_utils import generate_task_excel
 from io import BytesIO
 from utils import calculate_business_days_until
+from sqlalchemy.orm import joinedload
 
 main_bp = Blueprint('main', __name__)
 auth_bp = Blueprint('auth', __name__)
@@ -55,7 +56,8 @@ def dashboard():
     filter_tag = request.args.get('tag_filter')  # AGREGADO
 
     # Base query: Show ALL tasks to ALL users by default
-    tasks_query = Task.query
+    # Optimize: Eager load assignees and tags to prevent N+1 queries
+    tasks_query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
     
     if filter_assignee:
         tasks_query = tasks_query.filter(Task.assignees.any(id=filter_assignee))
@@ -63,8 +65,13 @@ def dashboard():
     if filter_creator:
         tasks_query = tasks_query.filter(Task.creator_id == filter_creator)
         
-    if filter_status and filter_status in ['Pending', 'Completed']:
-        tasks_query = tasks_query.filter(Task.status == filter_status)
+    # Handle status filter - exclude 'Anulado' by default
+    if filter_status:
+        if filter_status in ['Pending', 'Completed', 'Anulado']:
+            tasks_query = tasks_query.filter(Task.status == filter_status)
+    else:
+        # By default, exclude 'Anulado' tasks
+        tasks_query = tasks_query.filter(Task.status != 'Anulado')
 
     if filter_tag:  # NUEVO
         tasks_query = tasks_query.filter(Task.tags.any(id=int(filter_tag)))
@@ -208,7 +215,7 @@ def calendar():
     filter_creator = request.args.get('creator')
     
     # Base query: tasks assigned to current user
-    query = Task.query.filter(Task.assignees.any(id=current_user.id))
+    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(Task.assignees.any(id=current_user.id))
     
     if filter_creator:
         query = query.filter(Task.creator_id == filter_creator)
@@ -272,6 +279,28 @@ def toggle_task_status(task_id):
         'new_status': task.status
     })
 
+@main_bp.route('/task/<int:task_id>/anular', methods=['POST'])
+@login_required
+def anular_task(task_id):
+    """Mark a task as 'Anulado' (soft delete)"""
+    task = Task.query.get_or_404(task_id)
+    
+    # Only creator or admin can anular
+    if task.creator_id != current_user.id and not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Solo el creador o un admin puede anular esta tarea'}), 403
+    
+    task.status = 'Anulado'
+    task.completed_by_id = current_user.id  # Track who anulled it
+    task.completed_at = datetime.now()  # Track when
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'task_id': task.id,
+        'new_status': 'Anulado'
+    })
+
 @main_bp.route('/export_pdf')
 @login_required
 def export_pdf():
@@ -284,7 +313,7 @@ def export_pdf():
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
     
-    query = Task.query.filter(Task.assignees.any(id=current_user.id))
+    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(Task.assignees.any(id=current_user.id))
     
     filters = {}
     
@@ -369,7 +398,7 @@ def export_excel():
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
     
-    query = Task.query.filter(Task.assignees.any(id=current_user.id))
+    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(Task.assignees.any(id=current_user.id))
     
     filters = {}
     
@@ -650,8 +679,8 @@ def reports_data():
     start_date_str = data.get('start_date')
     end_date_str = data.get('end_date')
     
-    # Base query
-    query = Task.query
+    # Base query - ALWAYS exclude 'Anulado' tasks from reports
+    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(Task.status != 'Anulado')
     
     # Filter by users if provided
     if user_ids:

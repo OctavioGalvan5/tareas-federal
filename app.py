@@ -39,7 +39,7 @@ def create_app():
         app.register_blueprint(admin_bp)
 
         # Create database tables for development (if they don't exist)
-        db.create_all()
+        # db.create_all() -> Removed for production performance. Run migrations manually.
 
     return app
 

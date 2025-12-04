@@ -12,15 +12,26 @@
             </p>
             {% endif %}
         </div>
-        <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="button">
-            <i class="fas fa-edit"></i> Editar Tarea
-        </a>
+        <div style="display: flex; gap: 0.5rem;">
+            {% if task.status != 'Anulado' %}
+            <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="button">
+                <i class="fas fa-edit"></i> Editar Tarea
+            </a>
+            <button onclick="anularTask({{ task.id }})" class="button" style="background-color: #dc2626;">
+                <i class="fas fa-ban"></i> Anular
+            </button>
+            {% else %}
+            <span class="button" style="background-color: #9ca3af; cursor: not-allowed;">
+                <i class="fas fa-ban"></i> Tarea Anulada
+            </span>
+            {% endif %}
+        </div>
     </div>
 
     <div class="form-group">
         <label><i class="fas fa-heading"></i> Título</label>
         <div
-            style="padding: 0.8rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 1.1rem; font-weight: 500;">
+            style="padding: 0.8rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 1.1rem; font-weight: 500; {% if task.status == 'Anulado' %}text-decoration: line-through; color: #9ca3af;{% endif %}">
             {{ task.title }}
         </div>
     </div>
@@ -46,6 +57,9 @@
                 {% if task.status == 'Completed' %}
                 <span style="color: var(--success-color); font-weight: 600;"><i class="fas fa-check-circle"></i>
                     Completado</span>
+                {% elif task.status == 'Anulado' %}
+                <span style="color: #9ca3af; font-weight: 600;"><i class="fas fa-ban"></i>
+                    Anulado</span>
                 {% else %}
                 <span style="color: var(--warning-color); font-weight: 600;"><i class="fas fa-clock"></i>
                     Pendiente</span>
@@ -95,10 +109,16 @@
         <div style="color: var(--text-light); font-size: 0.9rem;">
             <p style="margin: 0.2rem 0;"><i class="fas fa-user-edit"></i> Creado por <strong>{{ task.creator.full_name
                     }}</strong> el {{ task.created_at.strftime('%d/%m/%Y a las %H:%M') }}</p>
-            {% if task.completed_by %}
+            {% if task.status == 'Completed' and task.completed_by %}
             <p style="margin: 0.2rem 0; color: var(--success-color);"><i class="fas fa-check"></i> Completado por
                 <strong>{{ task.completed_by.full_name }}</strong> el {{ task.completed_at.strftime('%d/%m/%Y a las
-                %H:%M') }}</p>
+                %H:%M') }}
+            </p>
+            {% elif task.status == 'Anulado' and task.completed_by %}
+            <p style="margin: 0.2rem 0; color: #9ca3af;"><i class="fas fa-ban"></i> Anulado por
+                <strong>{{ task.completed_by.full_name }}</strong> el {{ task.completed_at.strftime('%d/%m/%Y a las
+                %H:%M') }}
+            </p>
             {% endif %}
         </div>
     </div>
@@ -110,4 +130,30 @@
         </a>
     </div>
 </div>
+
+<script>
+    function anularTask(taskId) {
+        if (!confirm('¿Estás seguro de que deseas anular esta tarea? Las tareas anuladas no aparecerán en los informes.')) {
+            return;
+        }
+        fetch(`/task/${taskId}/anular`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert('Error al anular la tarea: ' + (data.error || 'Desconocido'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error de conexión');
+            });
+    }
+</script>
 {% endblock %}

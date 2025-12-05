@@ -54,6 +54,7 @@ def dashboard():
     filter_creator = request.args.get('creator')
     filter_status = request.args.get('status')
     filter_tag = request.args.get('tag_filter')  # AGREGADO
+    sort_order = request.args.get('sort', 'asc')  # Default: ascending
 
     # Base query: Show ALL tasks to ALL users by default
     # Optimize: Eager load assignees and tags to prevent N+1 queries
@@ -85,8 +86,11 @@ def dashboard():
             (Task.description.ilike(search_term))
         )
         
-    # Sort by due_date ascending
-    tasks = tasks_query.order_by(Task.due_date.asc()).all()
+    # Sort by due_date - ascending or descending
+    if sort_order == 'desc':
+        tasks = tasks_query.order_by(Task.due_date.desc()).all()
+    else:
+        tasks = tasks_query.order_by(Task.due_date.asc()).all()
     
     # Check for tasks due today for highlighting
     today = date.today()
@@ -94,7 +98,7 @@ def dashboard():
     users = User.query.all() # For filters
     all_tags = Tag.query.order_by(Tag.name).all()  # NUEVO
     
-    return render_template('dashboard.html', tasks=tasks, today=today, users=users, all_tags=all_tags)
+    return render_template('dashboard.html', tasks=tasks, today=today, users=users, all_tags=all_tags, sort_order=sort_order)
 
 @main_bp.route('/task/new', methods=['GET', 'POST'])
 @login_required
@@ -1019,3 +1023,146 @@ def calculate_kpis(tasks, global_completed):
         'overdue': kpi_overdue,
         'avg_time': kpi_avg_time
     }
+
+# --- Excel Import Routes ---
+@main_bp.route('/import/template')
+@login_required
+def download_import_template():
+    """Download the Excel template for importing tasks"""
+    import os
+    template_path = os.path.join(os.path.dirname(__file__), 'static', 'plantilla_tareas.xlsx')
+    
+    if not os.path.exists(template_path):
+        flash('Plantilla no encontrada. Contacte al administrador.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    with open(template_path, 'rb') as f:
+        data = f.read()
+    
+    response = make_response(data)
+    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    response.headers['Content-Disposition'] = 'attachment; filename=plantilla_tareas.xlsx'
+    return response
+
+@main_bp.route('/import/tasks', methods=['POST'])
+@login_required
+def import_tasks():
+    """Import tasks from an uploaded Excel file"""
+    from openpyxl import load_workbook
+    
+    if 'file' not in request.files:
+        flash('No se seleccionó ningún archivo.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        flash('No se seleccionó ningún archivo.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        flash('El archivo debe ser un Excel (.xlsx o .xls).', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    try:
+        wb = load_workbook(file)
+        ws = wb.active
+        
+        # Skip header row
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+        
+        created_count = 0
+        errors = []
+        
+        for row_num, row in enumerate(rows, start=2):
+            if not row or not row[0]:  # Skip empty rows
+                continue
+            
+            titulo = row[0] if len(row) > 0 else None
+            descripcion = row[1] if len(row) > 1 else ''
+            prioridad = row[2] if len(row) > 2 else 'Normal'
+            fecha_str = row[3] if len(row) > 3 else None
+            asignados_str = row[4] if len(row) > 4 else ''
+            etiquetas_str = row[5] if len(row) > 5 else ''
+            
+            # Validate required fields
+            if not titulo:
+                errors.append(f'Fila {row_num}: Título requerido')
+                continue
+            
+            if not fecha_str:
+                errors.append(f'Fila {row_num}: Fecha de vencimiento requerida')
+                continue
+            
+            # Parse date
+            try:
+                if isinstance(fecha_str, str):
+                    due_date = datetime.strptime(fecha_str, '%Y-%m-%d')
+                else:
+                    # Excel may return datetime object
+                    due_date = fecha_str if isinstance(fecha_str, datetime) else datetime.strptime(str(fecha_str), '%Y-%m-%d')
+            except (ValueError, TypeError):
+                errors.append(f'Fila {row_num}: Formato de fecha inválido (use AAAA-MM-DD)')
+                continue
+            
+            # Validate priority
+            if prioridad not in ['Normal', 'Media', 'Urgente']:
+                prioridad = 'Normal'
+            
+            # Parse assignees
+            assignee_usernames = [u.strip() for u in str(asignados_str).split(',') if u.strip()]
+            assignees = []
+            for username in assignee_usernames:
+                user = User.query.filter_by(username=username).first()
+                if user:
+                    assignees.append(user)
+                else:
+                    errors.append(f'Fila {row_num}: Usuario "{username}" no encontrado')
+            
+            if not assignees:
+                errors.append(f'Fila {row_num}: Ningún usuario válido asignado')
+                continue
+            
+            # Parse tags (optional, max 3)
+            tag_names = [t.strip() for t in str(etiquetas_str).split(',') if t.strip()][:3]  # Max 3 tags
+            tags = []
+            for tag_name in tag_names:
+                tag = Tag.query.filter_by(name=tag_name).first()
+                if tag:
+                    tags.append(tag)
+                # Silently ignore non-existing tags (they're optional)
+            
+            # Create task
+            new_task = Task(
+                title=str(titulo),
+                description=str(descripcion) if descripcion else '',
+                priority=prioridad,
+                due_date=due_date,
+                creator_id=current_user.id
+            )
+            
+            for user in assignees:
+                new_task.assignees.append(user)
+            
+            for tag in tags:
+                new_task.tags.append(tag)
+            
+            db.session.add(new_task)
+            created_count += 1
+        
+        db.session.commit()
+        
+        if created_count > 0:
+            flash(f'Se importaron {created_count} tareas exitosamente.', 'success')
+        
+        if errors:
+            error_msg = 'Errores encontrados: ' + '; '.join(errors[:5])
+            if len(errors) > 5:
+                error_msg += f' ... y {len(errors) - 5} más.'
+            flash(error_msg, 'warning')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al procesar el archivo: {str(e)}', 'danger')
+    
+    return redirect(url_for('main.dashboard'))

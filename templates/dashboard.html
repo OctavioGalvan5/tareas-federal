@@ -3,16 +3,64 @@
 {% block content %}
 <div class="dashboard-header">
     <h1><i class="fas fa-clipboard-list"></i> Mis Tareas</h1>
-    <a href="{{ url_for('main.create_task') }}" class="button">
-        <i class="fas fa-plus"></i> Nueva Tarea
-    </a>
+    <div style="display: flex; gap: 0.5rem;">
+        <button onclick="document.getElementById('importModal').style.display='flex'" class="button-secondary">
+            <i class="fas fa-file-import"></i> Importar Excel
+        </button>
+        <a href="{{ url_for('main.create_task') }}" class="button">
+            <i class="fas fa-plus"></i> Nueva Tarea
+        </a>
+    </div>
+</div>
+
+<!-- Import Modal -->
+<div id="importModal"
+    style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+    <div
+        style="background: white; padding: 2rem; border-radius: 12px; max-width: 500px; width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h2 style="margin: 0;"><i class="fas fa-file-excel" style="color: #10793f;"></i> Importar Tareas desde Excel
+            </h2>
+            <button onclick="document.getElementById('importModal').style.display='none'"
+                style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-light);">&times;</button>
+        </div>
+
+        <div
+            style="margin-bottom: 1.5rem; padding: 1rem; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10793f;">
+            <p style="margin: 0 0 0.5rem 0; font-weight: 600;"><i class="fas fa-download"></i> Paso 1: Descarga la
+                plantilla</p>
+            <a href="{{ url_for('main.download_import_template') }}" class="button-secondary"
+                style="display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none;">
+                <i class="fas fa-file-download"></i> Descargar Plantilla Excel
+            </a>
+        </div>
+
+        <form action="{{ url_for('main.import_tasks') }}" method="POST" enctype="multipart/form-data">
+            <div style="margin-bottom: 1rem;">
+                <p style="margin: 0 0 0.5rem 0; font-weight: 600;"><i class="fas fa-upload"></i> Paso 2: Sube tu archivo
+                </p>
+                <input type="file" name="file" accept=".xlsx,.xls" required
+                    style="width: 100%; padding: 0.8rem; border: 2px dashed #e5e7eb; border-radius: 8px; cursor: pointer;">
+            </div>
+
+            <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                <button type="button" onclick="document.getElementById('importModal').style.display='none'"
+                    class="button-secondary">
+                    Cancelar
+                </button>
+                <button type="submit" class="button">
+                    <i class="fas fa-upload"></i> Importar Tareas
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <form method="GET" action="{{ url_for('main.dashboard') }}">
     <div class="filters-section"
         style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem;">
         <div class="filters-form" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
-            <div style="flex: 1; min-width: 200px;">
+            <div style="flex: 1; min-width: 180px;">
                 <label
                     style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Asignado
                     a</label>
@@ -27,7 +75,7 @@
                 </select>
             </div>
 
-            <div style="flex: 1; min-width: 200px;">
+            <div style="flex: 1; min-width: 180px;">
                 <label
                     style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Creado
                     por</label>
@@ -42,7 +90,7 @@
                 </select>
             </div>
 
-            <div style="flex: 1; min-width: 150px;">
+            <div style="flex: 1; min-width: 140px;">
                 <label
                     style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Estado</label>
                 <select name="status" onchange="this.form.submit()"
@@ -57,7 +105,7 @@
                 </select>
             </div>
 
-            <div style="flex: 1; min-width: 150px;">
+            <div style="flex: 1; min-width: 130px;">
                 <label
                     style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Etiqueta</label>
                 <select name="tag_filter" onchange="this.form.submit()"
@@ -68,6 +116,16 @@
                         {{ tag.name }}
                     </option>
                     {% endfor %}
+                </select>
+            </div>
+
+            <div style="flex: 0 0 auto; min-width: 140px;">
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Ordenar</label>
+                <select name="sort" onchange="this.form.submit()"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    <option value="asc" {% if sort_order=='asc' %}selected{% endif %}>↑ Más próximas</option>
+                    <option value="desc" {% if sort_order=='desc' %}selected{% endif %}>↓ Más lejanas</option>
                 </select>
             </div>
 

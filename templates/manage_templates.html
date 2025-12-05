@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1><i class="fas fa-copy"></i> Plantillas de Tareas</h1>
+    <a href="{{ url_for('main.dashboard') }}" class="button-secondary">
+        <i class="fas fa-arrow-left"></i> Volver
+    </a>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+    <!-- Create Template Form -->
+    <div class="card">
+        <h3><i class="fas fa-plus"></i> Nueva Plantilla</h3>
+        <form method="POST">
+            <div class="form-group">
+                <label for="name"><i class="fas fa-bookmark"></i> Nombre de la Plantilla</label>
+                <input type="text" id="name" name="name" required placeholder="Ej: Asistencia al público">
+            </div>
+
+            <div class="form-group">
+                <label for="title"><i class="fas fa-heading"></i> Título de Tarea</label>
+                <input type="text" id="title" name="title" required placeholder="Título que tendrá la tarea">
+            </div>
+
+            <div class="form-group">
+                <label for="description"><i class="fas fa-align-left"></i> Descripción</label>
+                <textarea id="description" name="description" rows="3" placeholder="Descripción predefinida"></textarea>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label for="priority"><i class="fas fa-exclamation-circle"></i> Prioridad</label>
+                    <select id="priority" name="priority">
+                        <option value="Normal">Normal</option>
+                        <option value="Media">Media</option>
+                        <option value="Urgente">Urgente</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="default_days"><i class="fas fa-calendar-plus"></i> Días para vencimiento</label>
+                    <select id="default_days" name="default_days">
+                        <option value="0">Hoy (0 días)</option>
+                        <option value="1">Mañana (1 día)</option>
+                        <option value="2">2 días</option>
+                        <option value="3">3 días</option>
+                        <option value="5">5 días</option>
+                        <option value="7">1 semana</option>
+                        <option value="14">2 semanas</option>
+                        <option value="30">1 mes</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-tags"></i> Etiquetas</label>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    {% for tag in available_tags %}
+                    <label style="display: inline-flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" name="tags" value="{{ tag.id }}"
+                            style="width: auto; margin-right: 0.3rem;">
+                        <span class="tag-chip" style="background: {{ tag.color }};">{{ tag.name }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <button type="submit" style="width: 100%;">
+                <i class="fas fa-save"></i> Guardar Plantilla
+            </button>
+        </form>
+    </div>
+
+    <!-- Existing Templates List -->
+    <div class="card">
+        <h3><i class="fas fa-list"></i> Plantillas Existentes</h3>
+        {% if templates %}
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+            {% for template in templates %}
+            <div
+                style="padding: 1rem; background: #f9fafb; border-radius: 8px; border-left: 4px solid var(--primary-color);">
+                <div style="display: flex; justify-content: space-between; align-items: start;">
+                    <div>
+                        <h4 style="margin: 0 0 0.25rem 0; color: var(--primary-color);">{{ template.name }}</h4>
+                        <p style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: var(--text-light);">
+                            <strong>Título:</strong> {{ template.title }}
+                        </p>
+                        {% if template.description %}
+                        <p style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: #6b7280;">
+                            {{ template.description[:80] }}{% if template.description|length > 80 %}...{% endif %}
+                        </p>
+                        {% endif %}
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+                            <span class="priority-badge priority-{{ template.priority|lower }}">{{ template.priority
+                                }}</span>
+                            <span style="font-size: 0.8rem; color: var(--text-light);">
+                                <i class="fas fa-calendar"></i> +{{ template.default_days }} días
+                            </span>
+                            {% for tag in template.tags %}
+                            <span class="tag-chip" style="background: {{ tag.color }}; font-size: 0.7rem;">{{ tag.name
+                                }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <form action="{{ url_for('main.delete_template', template_id=template.id) }}" method="POST"
+                        onsubmit="return confirm('¿Eliminar esta plantilla?');" style="margin: 0;">
+                        <button type="submit" class="button-secondary" style="padding: 0.4rem 0.6rem; color: #dc2626;"
+                            title="Eliminar plantilla">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 2rem; color: var(--text-light);">
+            <i class="fas fa-copy" style="font-size: 3rem; opacity: 0.3; margin-bottom: 1rem;"></i>
+            <p>No hay plantillas creadas.</p>
+            <p style="font-size: 0.9rem;">Crea tu primera plantilla para agilizar la creación de tareas repetitivas.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

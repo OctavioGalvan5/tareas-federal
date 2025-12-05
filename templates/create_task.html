@@ -3,6 +3,36 @@
 {% block content %}
 <div class="card" style="max-width: 900px; margin: 0 auto;">
     <h2><i class="fas fa-plus-square"></i> Nueva Tarea</h2>
+
+    <!-- Template Selector -->
+    {% if templates %}
+    <div
+        style="margin-bottom: 1.5rem; padding: 1rem; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 10px; border: 1px solid #bae6fd;">
+        <label style="display: block; font-size: 0.9rem; color: #0369a1; margin-bottom: 0.5rem; font-weight: 600;">
+            <i class="fas fa-magic"></i> Usar Plantilla (opcional)
+        </label>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <select id="templateSelector" onchange="applyTemplate()"
+                style="flex: 1; padding: 0.6rem; border: 1px solid #7dd3fc; border-radius: 6px; background: white;">
+                <option value="">-- Seleccionar plantilla --</option>
+                {% for template in templates %}
+                <option value="{{ template.id }}">{{ template.name }}</option>
+                {% endfor %}
+            </select>
+            <a href="{{ url_for('main.manage_templates') }}" class="button-secondary"
+                style="padding: 0.6rem 0.8rem; white-space: nowrap;" title="Gestionar plantillas">
+                <i class="fas fa-cog"></i>
+            </a>
+        </div>
+    </div>
+    {% else %}
+    <div style="margin-bottom: 1.5rem; text-align: center;">
+        <a href="{{ url_for('main.manage_templates') }}" class="button-secondary" style="text-decoration: none;">
+            <i class="fas fa-copy"></i> Crear Plantillas de Tareas
+        </a>
+    </div>
+    {% endif %}
+
     <form method="POST">
         <div class="form-group">
             <label for="title"><i class="fas fa-heading"></i> Título</label>
@@ -41,7 +71,7 @@
             </select>
         </div>
 
-        <!-- 🔹 NUEVO: Selector de Etiquetas -->
+        <!-- 🔹 Selector de Etiquetas -->
         <div class="form-group">
             <label><i class="fas fa-tags"></i> Etiquetas (opcional)</label>
             <div id="selectedTagsDisplay" class="selected-tags">
@@ -89,6 +119,38 @@
                 display.appendChild(tagEl);
             });
         }
+    }
+
+    function applyTemplate() {
+        const selector = document.getElementById('templateSelector');
+        const templateId = selector.value;
+
+        if (!templateId) return;
+
+        fetch(`/api/templates/${templateId}`)
+            .then(response => response.json())
+            .then(data => {
+                // Fill form fields
+                document.getElementById('title').value = data.title;
+                document.getElementById('description').value = data.description;
+                document.getElementById('priority').value = data.priority;
+                document.getElementById('due_date').value = data.due_date;
+
+                // Check the corresponding tags
+                document.querySelectorAll('input[name="tags"]').forEach(cb => {
+                    cb.checked = data.tag_ids.includes(parseInt(cb.value));
+                });
+
+                updateSelectedTags();
+
+                // Visual feedback
+                selector.style.borderColor = '#10b981';
+                setTimeout(() => { selector.style.borderColor = '#7dd3fc'; }, 1000);
+            })
+            .catch(error => {
+                console.error('Error loading template:', error);
+                alert('Error al cargar la plantilla');
+            });
     }
 </script>
 {% endblock %}

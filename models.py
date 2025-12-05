@@ -80,3 +80,26 @@ class Tag(db.Model):
     
     def __repr__(self):
         return f'<Tag {self.name}>'
+
+# Association table for Many-to-Many relationship between TaskTemplates and Tags
+template_tags = db.Table('template_tags',
+    db.Column('template_id', db.Integer, db.ForeignKey('task_template.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('tag_id', db.Integer, db.ForeignKey('tag.id', ondelete='CASCADE'), primary_key=True)
+)
+
+class TaskTemplate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)  # Template name for selection
+    title = db.Column(db.String(200), nullable=False)  # Default task title
+    description = db.Column(db.Text, nullable=True)  # Default description
+    priority = db.Column(db.String(20), nullable=False, default='Normal')  # Normal, Media, Urgente
+    default_days = db.Column(db.Integer, nullable=False, default=0)  # Days from today for due date (0 = today)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    created_by = db.relationship('User', backref='created_templates')
+    tags = db.relationship('Tag', secondary=template_tags, backref=db.backref('templates', lazy='dynamic'))
+    
+    def __repr__(self):
+        return f'<TaskTemplate {self.name}>'

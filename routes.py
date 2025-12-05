@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, make_response
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
-from models import User, Task, Tag
+from models import User, Task, Tag, TaskTemplate
 from datetime import datetime, date, timedelta
 from pdf_utils import generate_task_pdf
 from excel_utils import generate_task_excel
@@ -104,7 +104,8 @@ def dashboard():
 @login_required
 def create_task():
     users = User.query.all()
-    available_tags = Tag.query.order_by(Tag.name).all()  # NUEVO
+    available_tags = Tag.query.order_by(Tag.name).all()
+    templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
 
     if request.method == 'POST':
         title = request.form.get('title')
@@ -129,7 +130,7 @@ def create_task():
             if user:
                 new_task.assignees.append(user)
 
-        # Add tags  # NUEVO
+        # Add tags
         tag_ids = request.form.getlist('tags')
         for tag_id in tag_ids:
             tag = Tag.query.get(int(tag_id))
@@ -141,7 +142,7 @@ def create_task():
         flash('Tarea creada exitosamente.', 'success')
         return redirect(url_for('main.dashboard'))
         
-    return render_template('create_task.html', users=users, available_tags=available_tags)  # MODIFICADO
+    return render_template('create_task.html', users=users, available_tags=available_tags, templates=templates)
 
 @main_bp.route('/task/<int:task_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -1166,3 +1167,81 @@ def import_tasks():
         flash(f'Error al procesar el archivo: {str(e)}', 'danger')
     
     return redirect(url_for('main.dashboard'))
+
+# --- Task Template Routes ---
+@main_bp.route('/templates', methods=['GET', 'POST'])
+@login_required
+def manage_templates():
+    """View and create task templates"""
+    if request.method == 'POST':
+        name = request.form.get('name')
+        title = request.form.get('title')
+        description = request.form.get('description', '')
+        priority = request.form.get('priority', 'Normal')
+        default_days = int(request.form.get('default_days', 0))
+        tag_ids = request.form.getlist('tags')
+        
+        # Check if template name already exists
+        if TaskTemplate.query.filter_by(name=name).first():
+            flash('Ya existe una plantilla con ese nombre.', 'danger')
+            return redirect(url_for('main.manage_templates'))
+        
+        template = TaskTemplate(
+            name=name,
+            title=title,
+            description=description,
+            priority=priority,
+            default_days=default_days,
+            created_by_id=current_user.id
+        )
+        
+        # Add tags
+        for tag_id in tag_ids:
+            tag = Tag.query.get(int(tag_id))
+            if tag:
+                template.tags.append(tag)
+        
+        db.session.add(template)
+        db.session.commit()
+        
+        flash(f'Plantilla "{name}" creada exitosamente.', 'success')
+        return redirect(url_for('main.manage_templates'))
+    
+    templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
+    available_tags = Tag.query.order_by(Tag.name).all()
+    return render_template('manage_templates.html', templates=templates, available_tags=available_tags)
+
+@main_bp.route('/templates/<int:template_id>/delete', methods=['POST'])
+@login_required
+def delete_template(template_id):
+    """Delete a task template"""
+    template = TaskTemplate.query.get_or_404(template_id)
+    
+    # Only creator or admin can delete
+    if template.created_by_id != current_user.id and not current_user.is_admin:
+        flash('No tienes permiso para eliminar esta plantilla.', 'danger')
+        return redirect(url_for('main.manage_templates'))
+    
+    name = template.name
+    db.session.delete(template)
+    db.session.commit()
+    
+    flash(f'Plantilla "{name}" eliminada.', 'success')
+    return redirect(url_for('main.manage_templates'))
+
+@main_bp.route('/api/templates/<int:template_id>')
+@login_required
+def get_template_data(template_id):
+    """API to get template data for form autofill"""
+    template = TaskTemplate.query.get_or_404(template_id)
+    
+    # Calculate due date based on default_days
+    due_date = date.today() + timedelta(days=template.default_days)
+    
+    return jsonify({
+        'title': template.title,
+        'description': template.description or '',
+        'priority': template.priority,
+        'due_date': due_date.strftime('%Y-%m-%d'),
+        'tag_ids': [tag.id for tag in template.tags]
+    })

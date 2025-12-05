@@ -1124,8 +1124,8 @@ def import_tasks():
                 errors.append(f'Fila {row_num}: Ningún usuario válido asignado')
                 continue
             
-            # Parse tags (optional, max 3)
-            tag_names = [t.strip() for t in str(etiquetas_str).split(',') if t.strip()][:3]  # Max 3 tags
+            # Parse tags (optional)
+            tag_names = [t.strip() for t in str(etiquetas_str).split(',') if t.strip()]
             tags = []
             for tag_name in tag_names:
                 tag = Tag.query.filter_by(name=tag_name).first()

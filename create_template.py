@@ -59,7 +59,7 @@ instructions = [
     '   - Prioridad: Normal, Media o Urgente (obligatorio)',
     '   - Fecha Vencimiento: Formato AAAA-MM-DD, ej: 2024-12-20 (obligatorio)',
     '   - Asignados: Username(s) separados por coma, ej: admin, usuario1 (obligatorio)',
-    '   - Etiquetas: Nombre(s) de etiquetas separadas por coma (opcional, max 3)',
+    '   - Etiquetas: Nombre(s) de etiquetas separadas por coma (opcional)',
     '',
     '3. Importante:',
     '   - No modifique los encabezados de las columnas',

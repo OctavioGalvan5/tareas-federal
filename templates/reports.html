@@ -120,25 +120,25 @@
         <div style="flex: 1; min-width: 200px;">
             <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem;">Etiqueta
                 A</label>
-            <select id="calcTagA"
-                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff;">
-                <option value="">Seleccionar Etiqueta...</option>
+            <select id="calcTagA" multiple
+                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; height: 120px; background: #fff;">
                 {% for tag in tags %}
                 <option value="{{ tag.id }}">{{ tag.name }}</option>
                 {% endfor %}
             </select>
+            <small style="color: var(--text-light); font-size: 0.75rem;">Ctrl + Click para múltiple</small>
         </div>
         <div style="font-size: 1.5rem; color: var(--text-light); padding-top: 1.5rem;">-</div>
         <div style="flex: 1; min-width: 200px;">
-            <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem;">Etiqueta
+            <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem;">Etiquetas
                 B</label>
-            <select id="calcTagB"
-                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff;">
-                <option value="">Seleccionar Etiqueta...</option>
+            <select id="calcTagB" multiple
+                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; height: 120px; background: #fff;">
                 {% for tag in tags %}
                 <option value="{{ tag.id }}">{{ tag.name }}</option>
                 {% endfor %}
             </select>
+            <small style="color: var(--text-light); font-size: 0.75rem;">Ctrl + Click para múltiple</small>
         </div>
         <button onclick="calculateDifference()" class="button" style="margin-top: 1.5rem;">
             <i class="fas fa-equals"></i> Calcular
@@ -412,20 +412,20 @@
 
         // Add calc tags if visible and selected
         if (includeKpis) {
-            const tagA = document.getElementById('calcTagA').value;
-            const tagB = document.getElementById('calcTagB').value;
+            const tagA = getSelectedValues('calcTagA');
+            const tagB = getSelectedValues('calcTagB');
 
-            if (tagA && tagB) {
+            if (tagA.length > 0 && tagB.length > 0) {
                 const inputDiffA = document.createElement('input');
                 inputDiffA.type = 'hidden';
                 inputDiffA.name = 'diff_tag_a';
-                inputDiffA.value = tagA;
+                inputDiffA.value = JSON.stringify(tagA); // Send as JSON array
                 form.appendChild(inputDiffA);
 
                 const inputDiffB = document.createElement('input');
                 inputDiffB.type = 'hidden';
                 inputDiffB.name = 'diff_tag_b';
-                inputDiffB.value = tagB;
+                inputDiffB.value = JSON.stringify(tagB); // Send as JSON array
                 form.appendChild(inputDiffB);
             }
         }
@@ -438,18 +438,21 @@
     function calculateDifference() {
         const tagASelect = document.getElementById('calcTagA');
         const tagBSelect = document.getElementById('calcTagB');
-        const tagA = tagASelect.value;
-        const tagB = tagBSelect.value;
+
+        // Use getSelectedValues helper that already exists or manual
+        const tagAIds = Array.from(tagASelect.selectedOptions).map(opt => opt.value);
+        const tagBIds = Array.from(tagBSelect.selectedOptions).map(opt => opt.value);
+
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
 
-        if (!tagA || !tagB) {
-            alert('Por favor selecciona ambas etiquetas.');
+        if (tagAIds.length === 0 || tagBIds.length === 0) {
+            alert('Por favor selecciona al menos una etiqueta en cada grupo.');
             return;
         }
 
-        const tagNameA = tagASelect.options[tagASelect.selectedIndex].text;
-        const tagNameB = tagBSelect.options[tagBSelect.selectedIndex].text;
+        const tagNamesA = Array.from(tagASelect.selectedOptions).map(opt => opt.text).join(', ');
+        const tagNamesB = Array.from(tagBSelect.selectedOptions).map(opt => opt.text).join(', ');
 
         fetch('/api/reports/calculate_difference', {
             method: 'POST',
@@ -457,8 +460,8 @@
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                tag_a_id: tagA,
-                tag_b_id: tagB,
+                tag_a_ids: tagAIds,
+                tag_b_ids: tagBIds,
                 start_date: startDate,
                 end_date: endDate
             })
@@ -479,7 +482,10 @@
                     return `${h}h ${m}m`;
                 };
 
-                diffDetails.textContent = `(${tagNameA}: ${formatTime(data.time_a)} - ${tagNameB}: ${formatTime(data.time_b)})`;
+                // Truncate names if too long
+                const truncate = (str, n) => (str.length > n) ? str.substr(0, n - 1) + '&hellip;' : str;
+
+                diffDetails.innerHTML = `(${truncate(tagNamesA, 30)}: ${formatTime(data.time_a)} - ${truncate(tagNamesB, 30)}: ${formatTime(data.time_b)})`;
 
                 if (data.diff < 0) {
                     diffValue.style.color = '#ef4444'; // Red for negative

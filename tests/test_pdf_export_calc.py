@@ -62,13 +62,14 @@ class TestPDFExportCalc(unittest.TestCase):
             db.drop_all()
 
     def test_export_pdf_with_calc(self):
-        # Simulate form data for export with calc tags
+        import json
+        # Simulate form data for export with calc tags (JSON lists)
         response = self.client.post('/reports/export', data={
             'start_date': date.today().strftime('%Y-%m-%d'),
             'end_date': date.today().strftime('%Y-%m-%d'),
             'include_kpis': 'true',
-            'diff_tag_a': str(self.tag_a_id),
-            'diff_tag_b': str(self.tag_b_id)
+            'diff_tag_a': json.dumps([self.tag_a_id]),
+            'diff_tag_b': json.dumps([self.tag_b_id])
         })
         
         self.assertEqual(response.status_code, 200)

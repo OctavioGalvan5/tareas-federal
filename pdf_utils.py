@@ -291,9 +291,18 @@ def generate_report_pdf(data):
         pdf.cell(0, 8, 'Diferencia de Horas', 0, 1, 'C') # Centered title
         
         pdf.set_font('Arial', '', 11)
-        # Construct the string: "TagA: time - TagB: time"
-        info_str = f"{diff['tag_a']['name']}: {diff['tag_a']['time']}  -  {diff['tag_b']['name']}: {diff['tag_b']['time']}"
-        pdf.cell(0, 8, info_str, 0, 1, 'C')
+        # Construct the string: "TagA, TagB: time  -  TagC: time"
+        # We'll split this into two lines if needed or use multi_cell centered.
+        
+        # Format:
+        # Group A: [Names] ([Time])
+        # Group B: [Names] ([Time])
+        
+        info_a = f"{diff['tag_a']['name']} ({diff['tag_a']['time']})"
+        info_b = f"{diff['tag_b']['name']} ({diff['tag_b']['time']})"
+        
+        pdf.set_x(15)
+        pdf.multi_cell(180, 6, f"{info_a}  -  {info_b}", 0, 'C')
         
         pdf.set_font('Arial', 'B', 14)
         if diff['result'].startswith('-'):
@@ -301,10 +310,10 @@ def generate_report_pdf(data):
         else:
              pdf.set_text_color(5, 150, 105) # Emerald 600
              
-        pdf.cell(0, 8, f"Diferencia: {diff['result']}", 0, 1, 'C')
+        pdf.cell(0, 10, f"Diferencia: {diff['result']}", 0, 1, 'C')
         
         pdf.set_text_color(0, 0, 0) # Reset
-        pdf.set_y(y_start + 40) # Ensure we move past the box
+        pdf.set_y(pdf.get_y() + 5) # Ensure spacing
 
     y_charts = pdf.get_y()
     

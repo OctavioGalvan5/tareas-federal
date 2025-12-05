@@ -868,40 +868,49 @@ def reports_data():
 @login_required
 def api_calculate_difference():
     data = request.get_json()
-    tag_a_id = data.get('tag_a_id')
-    tag_b_id = data.get('tag_b_id')
+    tag_a_ids = data.get('tag_a_ids', [])
+    tag_b_ids = data.get('tag_b_ids', [])
+    
+    # Fallback for old single ID calls
+    if not tag_a_ids and 'tag_a_id' in data:
+        tag_a_ids = [data['tag_a_id']]
+    if not tag_b_ids and 'tag_b_id' in data:
+        tag_b_ids = [data['tag_b_id']]
+        
     start_date_str = data.get('start_date')
     end_date_str = data.get('end_date')
     
-    # helper to get sum of time for a tag
-    def get_tag_time(tag_id):
-        if not tag_id: return 0
-        
+    def get_group_time(t_ids):
+        if not t_ids: return 0
         q = Task.query.filter(Task.status != 'Anulado')
-        q = q.filter(Task.tags.any(Tag.id == tag_id))
+        # Filter tasks that have ANY of the tags in t_ids
+        q = q.filter(Task.tags.any(Tag.id.in_(t_ids)))
         
         if start_date_str and end_date_str:
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
-            q = q.filter(Task.due_date >= start_date, Task.due_date <= end_date)
-            
+            try:
+                s_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                e_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+                q = q.filter(Task.due_date >= s_date, Task.due_date <= e_date)
+            except ValueError:
+                pass
+                
         tasks = q.all()
-        return sum(t.time_spent for t in tasks if t.time_spent)
+        # Sum time_spent (Task objects are unique due to SQLAlchemys identity map in this query context)
+        total = sum(t.time_spent for t in tasks if t.time_spent)
+        return total
 
-    time_a = get_tag_time(tag_a_id)
-    time_b = get_tag_time(tag_b_id)
+    time_a = get_group_time(tag_a_ids)
+    time_b = get_group_time(tag_b_ids)
     
     diff = time_a - time_b
     
-    # Format result
     abs_diff = abs(diff)
     hours = int(abs_diff / 60)
     minutes = int(abs_diff % 60)
-    
     formatted = f"{hours}h {minutes}m"
     if diff < 0:
         formatted = f"- {formatted}"
-        
+    
     return jsonify({
         'time_a': time_a,
         'time_b': time_b,
@@ -1052,16 +1061,21 @@ def export_report():
         report_data['kpis'] = calculate_kpis(tasks, global_completed)
         
     # Calculate difference if tags provided
-    diff_tag_a_id = request.form.get('diff_tag_a')
-    diff_tag_b_id = request.form.get('diff_tag_b')
+    # Input names are 'diff_tag_a' and 'diff_tag_b' which now contain JSON lists
+    import json
+    diff_tag_a_json = request.form.get('diff_tag_a')
+    diff_tag_b_json = request.form.get('diff_tag_b')
     
-    if diff_tag_a_id and diff_tag_b_id:
+    if diff_tag_a_json and diff_tag_b_json:
         try:
-            # Re-use logic (maybe refactor to shared function later if needed)
-            def get_tag_time_export(tag_id):
-                if not tag_id: return 0, "N/A"
+            tag_a_ids = json.loads(diff_tag_a_json)
+            tag_b_ids = json.loads(diff_tag_b_json)
+            
+            # Helper to calculate group time (duplicated logic, should be refactored)
+            def get_group_time_export(t_ids):
+                if not t_ids: return 0, "0h 0m"
                 q = Task.query.filter(Task.status != 'Anulado')
-                q = q.filter(Task.tags.any(Tag.id == tag_id))
+                q = q.filter(Task.tags.any(Tag.id.in_(t_ids)))
                 if start_date_str and end_date_str:
                     s_date = datetime.strptime(start_date_str, '%Y-%m-%d')
                     e_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
@@ -1073,12 +1087,17 @@ def export_report():
                 m = int(total_min % 60)
                 return total_min, f"{h}h {m}m"
 
-            tag_a = Tag.query.get(int(diff_tag_a_id))
-            tag_b = Tag.query.get(int(diff_tag_b_id))
+            # Get objects for names
+            tags_a = Tag.query.filter(Tag.id.in_(tag_a_ids)).all()
+            tags_b = Tag.query.filter(Tag.id.in_(tag_b_ids)).all()
             
-            if tag_a and tag_b:
-                time_a, str_a = get_tag_time_export(diff_tag_a_id)
-                time_b, str_b = get_tag_time_export(diff_tag_b_id)
+            # Format names (e.g. "TagA, TagB")
+            name_a = ", ".join([t.name for t in tags_a])
+            name_b = ", ".join([t.name for t in tags_b])
+            
+            if tags_a and tags_b:
+                time_a, str_a = get_group_time_export(tag_a_ids)
+                time_b, str_b = get_group_time_export(tag_b_ids)
                 
                 diff = time_a - time_b
                 abs_diff = abs(diff)
@@ -1088,8 +1107,8 @@ def export_report():
                 if diff < 0: diff_str = "- " + diff_str
                 
                 report_data['diff_calc'] = {
-                    'tag_a': {'name': tag_a.name, 'time': str_a},
-                    'tag_b': {'name': tag_b.name, 'time': str_b},
+                    'tag_a': {'name': name_a, 'time': str_a},
+                    'tag_b': {'name': name_b, 'time': str_b},
                     'result': diff_str
                 }
         except Exception as e:

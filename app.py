@@ -2,6 +2,7 @@ import os
 from flask import Flask, render_template, redirect, url_for, flash, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -15,6 +16,10 @@ from extensions import db, login_manager
 
 def create_app():
     app = Flask(__name__)
+    
+    # Fix for running behind a reverse proxy (Traefik/Nginx)
+    # This ensures Flask uses HTTPS in url_for() when behind a proxy
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     
     # Configuration
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev')

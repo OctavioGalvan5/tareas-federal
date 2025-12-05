@@ -207,8 +207,9 @@ def generate_report_pdf(data):
         # Draw 4 cards
         y_start = pdf.get_y()
         card_width = 45
-        spacing = 5
+        spacing = 4
         x_start = 10
+        card_width = 35  # Narrower to fit 5 cards
         
         # Card 1: Total
         pdf.set_fill_color(243, 244, 246) # Gray 100
@@ -253,9 +254,21 @@ def generate_report_pdf(data):
         pdf.set_font('Arial', 'B', 10) # Smaller font for text
         pdf.set_text_color(29, 78, 216) # Blue 700
         pdf.cell(card_width, 6, str(kpis['avg_time']), 0, 2, 'C')
-        pdf.set_font('Arial', '', 8)
+        pdf.set_font('Arial', '', 7)
         pdf.set_text_color(100, 100, 100)
         pdf.cell(card_width, 6, 'Tiempo Promedio', 0, 0, 'C')
+        
+        # Card 5: Total Time
+        x_pos += card_width + spacing
+        pdf.set_fill_color(237, 233, 254) # Violet 100
+        pdf.rect(x_pos, y_start, card_width, 25, 'F')
+        pdf.set_xy(x_pos, y_start + 5)
+        pdf.set_font('Arial', 'B', 9)
+        pdf.set_text_color(109, 40, 217) # Violet 700
+        pdf.cell(card_width, 6, str(kpis.get('total_time', '0 min')), 0, 2, 'C')
+        pdf.set_font('Arial', '', 7)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(card_width, 6, 'Tiempo Total', 0, 0, 'C')
         
         pdf.ln(35) # Move down past cards
 
@@ -339,11 +352,12 @@ def generate_report_pdf(data):
     pdf.set_font('Arial', 'B', 8)
     
     # Column widths (Total: 190)
-    w_title = 40
-    w_creator = 25
-    w_assigned = 25
-    w_status = 20
-    w_priority = 20
+    w_title = 35
+    w_creator = 22
+    w_assigned = 22
+    w_status = 18
+    w_priority = 18
+    w_time = 15
     w_date = 25
     w_completed = 35
     
@@ -352,6 +366,7 @@ def generate_report_pdf(data):
     pdf.cell(w_assigned, 10, 'Asignado a', 0, 0, 'L', True)
     pdf.cell(w_status, 10, 'Estado', 0, 0, 'C', True)
     pdf.cell(w_priority, 10, 'Prioridad', 0, 0, 'C', True)
+    pdf.cell(w_time, 10, 'Tiempo', 0, 0, 'C', True)
     pdf.cell(w_date, 10, 'Vencimiento', 0, 0, 'C', True)
     pdf.cell(w_completed, 10, 'Completado por', 0, 1, 'C', True)
     
@@ -414,6 +429,17 @@ def generate_report_pdf(data):
         pdf.set_text_color(0, 0, 0)
         
         pdf.cell(w_priority, 10, task.priority, 0, 0, 'C', fill)
+        
+        # Time spent formatted
+        if task.time_spent and task.time_spent > 0:
+            if task.time_spent >= 60:
+                time_str = f"{round(task.time_spent / 60, 1)}h"
+            else:
+                time_str = f"{task.time_spent}m"
+        else:
+            time_str = "-"
+        pdf.cell(w_time, 10, time_str, 0, 0, 'C', fill)
+        
         pdf.cell(w_date, 10, task.due_date.strftime('%d/%m/%Y'), 0, 0, 'C', fill)
         
         # Completed by (Multi-cell)

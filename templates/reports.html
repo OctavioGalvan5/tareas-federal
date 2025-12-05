@@ -14,7 +14,7 @@
 </div>
 
 <div id="kpiSection"
-    style="display: none; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+    style="display: none; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
     <div class="card" style="text-align: center; padding: 1.5rem;">
         <h3 style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 0.5rem;">Total Tareas</h3>
         <p id="kpiTotal" style="font-size: 2rem; font-weight: bold; color: var(--primary-color); margin: 0;">-</p>
@@ -30,6 +30,10 @@
     <div class="card" style="text-align: center; padding: 1.5rem;">
         <h3 style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 0.5rem;">Tiempo Promedio</h3>
         <p id="kpiAvgTime" style="font-size: 1.5rem; font-weight: bold; color: #3b82f6; margin: 0;">-</p>
+    </div>
+    <div class="card" style="text-align: center; padding: 1.5rem;">
+        <h3 style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 0.5rem;">Tiempo Total</h3>
+        <p id="kpiTotalTime" style="font-size: 1.5rem; font-weight: bold; color: #8b5cf6; margin: 0;">-</p>
     </div>
 </div>
 
@@ -293,202 +297,8 @@
             document.getElementById('kpiTotal').textContent = data.kpis.total;
             document.getElementById('kpiCompletion').textContent = data.kpis.completion_rate + '%';
             document.getElementById('kpiOverdue').textContent = data.kpis.overdue;
-            document.getElementById('kpiAvgTime').textContent = data.kpis.avg_time;
-        }
-    }
-
-    function toggleKPIs() {
-        const section = document.getElementById('kpiSection');
-        if (section.style.display === 'none') {
-            section.style.display = 'grid';
-<div
-    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
-    <div class="card">
-        <h3><i class="fas fa-tasks"></i> Tareas por Usuario</h3>
-        <canvas id="tasksByUserChart"></canvas>
-    </div>
-    <div class="card">
-        <h3><i class="fas fa-chart-pie"></i> Estado de Tareas</h3>
-        <canvas id="statusChart"></canvas>
-    </div>
-</div>
-
-<div class="card" style="margin-bottom: 2rem;">
-    <h3><i class="fas fa-history"></i> Tendencia Global (Completadas)</h3>
-    <canvas id="trendChart"></canvas>
-</div>
-
-<div
-    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
-    <div class="card">
-        <h3><i class="fas fa-user-clock"></i> Evolución por Empleado</h3>
-        <canvas id="employeeTrendChart"></canvas>
-    </div>
-    <div class="card">
-        <h3><i class="fas fa-tags"></i> Evolución por Etiqueta</h3>
-        <canvas id="tagTrendChart"></canvas>
-    </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    let tasksByUserChart = null;
-    let statusChart = null;
-    let trendChart = null;
-    let employeeTrendChart = null;
-    let tagTrendChart = null;
-
-    document.addEventListener('DOMContentLoaded', function () {
-        const end = new Date();
-        const start = new Date();
-        start.setDate(start.getDate() - 30);
-
-        document.getElementById('endDate').valueAsDate = end;
-        document.getElementById('startDate').valueAsDate = start;
-
-        loadReportData();
-    });
-
-    function getSelectedValues(selectId) {
-        const select = document.getElementById(selectId);
-        return Array.from(select.selectedOptions).map(option => option.value);
-    }
-
-    function loadReportData() {
-        const userIds = getSelectedValues('userFilter');
-        const tagIds = getSelectedValues('tagFilter');
-        const status = document.getElementById('statusFilter').value;
-        const startDate = document.getElementById('startDate').value;
-        const endDate = document.getElementById('endDate').value;
-
-        fetch('/api/reports/data', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                user_ids: userIds,
-                tag_ids: tagIds,
-                status: status,
-                start_date: startDate,
-                end_date: endDate
-            })
-        })
-            .then(response => response.json())
-            .then(data => {
-                updateCharts(data);
-            })
-            .catch(error => console.error('Error loading report data:', error));
-    }
-
-    function updateCharts(data) {
-        // Tasks by User Chart
-        const ctxUser = document.getElementById('tasksByUserChart').getContext('2d');
-        if (tasksByUserChart) tasksByUserChart.destroy();
-        tasksByUserChart = new Chart(ctxUser, {
-            type: 'bar',
-            data: {
-                labels: data.user_stats.map(u => u.name),
-                datasets: [
-                    {
-                        label: 'Completadas',
-                        data: data.user_stats.map(u => u.completed),
-                        backgroundColor: '#10b981'
-                    },
-                    {
-                        label: 'Pendientes',
-                        data: data.user_stats.map(u => u.pending),
-                        backgroundColor: '#f59e0b'
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    x: { stacked: true },
-                    y: { stacked: true, beginAtZero: true }
-                }
-            }
-        });
-
-        // Status Chart
-        const ctxStatus = document.getElementById('statusChart').getContext('2d');
-        if (statusChart) statusChart.destroy();
-        statusChart = new Chart(ctxStatus, {
-            type: 'doughnut',
-            data: {
-                labels: ['Completadas', 'Pendientes'],
-                datasets: [{
-                    data: [data.global_stats.completed, data.global_stats.pending],
-                    backgroundColor: ['#10b981', '#f59e0b']
-                }]
-            }
-        });
-
-        // Trend Chart
-        const ctxTrend = document.getElementById('trendChart').getContext('2d');
-        if (trendChart) trendChart.destroy();
-        trendChart = new Chart(ctxTrend, {
-            type: 'line',
-            data: {
-                labels: data.trend.dates,
-                datasets: [{
-                    label: 'Tareas Completadas (Global)',
-                    data: data.trend.completed_counts,
-                    borderColor: '#3b82f6',
-                    tension: 0.1,
-                    fill: true,
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)'
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
-                }
-            }
-        });
-
-        // Employee Trend Chart
-        const ctxEmpTrend = document.getElementById('employeeTrendChart').getContext('2d');
-        if (employeeTrendChart) employeeTrendChart.destroy();
-        employeeTrendChart = new Chart(ctxEmpTrend, {
-            type: 'line',
-            data: {
-                labels: data.trend.dates,
-                datasets: data.employee_trend
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
-                }
-            }
-        });
-
-        // Tag Trend Chart
-        const ctxTagTrend = document.getElementById('tagTrendChart').getContext('2d');
-        if (tagTrendChart) tagTrendChart.destroy();
-        tagTrendChart = new Chart(ctxTagTrend, {
-            type: 'line',
-            data: {
-                labels: data.trend.dates,
-                datasets: data.tag_trend
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
-                }
-            }
-        });
-
-        // Update KPIs if available
-        if (data.kpis) {
-            document.getElementById('kpiTotal').textContent = data.kpis.total;
-            document.getElementById('kpiCompletion').textContent = data.kpis.completion_rate + '%';
-            document.getElementById('kpiOverdue').textContent = data.kpis.overdue;
-            document.getElementById('kpiAvgTime').textContent = data.kpis.avg_time;
+            document.getElementById('kpiAvgTime').textContent = data.kpis.avg_time || '-';
+            document.getElementById('kpiTotalTime').textContent = data.kpis.total_time || '-';
         }
     }
 
@@ -507,7 +317,7 @@
         const status = document.getElementById('statusFilter').value;
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
-        
+
         // Check if KPIs are visible
         const kpiSection = document.getElementById('kpiSection');
         const includeKpis = kpiSection.style.display !== 'none';
@@ -545,7 +355,7 @@
         inputEnd.name = 'end_date';
         inputEnd.value = endDate;
         form.appendChild(inputEnd);
-        
+
         const inputKpis = document.createElement('input');
         inputKpis.type = 'hidden';
         inputKpis.name = 'include_kpis';

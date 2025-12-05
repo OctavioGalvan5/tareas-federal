@@ -54,6 +54,24 @@
             </div>
 
             <div class="form-group">
+                <label for="time_spent"><i class="fas fa-clock"></i> Tiempo Estimado (minutos)</label>
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <input type="number" id="time_spent" name="time_spent" min="0" step="1" placeholder="Ej: 30"
+                        style="flex: 1; min-width: 80px; max-width: 120px;">
+                    <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                        <button type="button" onclick="document.getElementById('time_spent').value=15"
+                            class="time-preset-btn">15m</button>
+                        <button type="button" onclick="document.getElementById('time_spent').value=30"
+                            class="time-preset-btn">30m</button>
+                        <button type="button" onclick="document.getElementById('time_spent').value=60"
+                            class="time-preset-btn">1h</button>
+                        <button type="button" onclick="document.getElementById('time_spent').value=120"
+                            class="time-preset-btn">2h</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
                 <label><i class="fas fa-tags"></i> Etiquetas</label>
                 <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
                     {% for tag in available_tags %}

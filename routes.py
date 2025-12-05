@@ -113,15 +113,25 @@ def create_task():
         priority = request.form.get('priority')
         due_date_str = request.form.get('due_date')
         assignee_ids = request.form.getlist('assignees')
+        time_spent_str = request.form.get('time_spent')
         
         due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+        
+        # Parse time_spent (in minutes)
+        time_spent = None
+        if time_spent_str and time_spent_str.strip():
+            try:
+                time_spent = int(time_spent_str)
+            except ValueError:
+                time_spent = None
         
         new_task = Task(
             title=title,
             description=description,
             priority=priority,
             due_date=due_date,
-            creator_id=current_user.id
+            creator_id=current_user.id,
+            time_spent=time_spent
         )
         
         # Add assignees
@@ -167,6 +177,16 @@ def edit_task(task_id):
         
         due_date_str = request.form.get('due_date')
         task.due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+        
+        # Update time_spent
+        time_spent_str = request.form.get('time_spent')
+        if time_spent_str and time_spent_str.strip():
+            try:
+                task.time_spent = int(time_spent_str)
+            except ValueError:
+                pass  # Keep existing value if invalid
+        else:
+            task.time_spent = None
         
         # Update assignees
         assignee_ids = request.form.getlist('assignees')
@@ -1005,24 +1025,33 @@ def calculate_kpis(tasks, global_completed):
     now = datetime.now()
     kpi_overdue = sum(1 for t in tasks if t.status == 'Pending' and t.due_date < now)
     
-    # Avg Resolution Time (Completed tasks)
-    completed_with_time = [t for t in tasks if t.status == 'Completed' and t.completed_at and t.created_at]
-    if completed_with_time:
-        total_seconds = sum((t.completed_at - t.created_at).total_seconds() for t in completed_with_time)
-        avg_seconds = total_seconds / len(completed_with_time)
-        # Format nicely: X days or X hours
-        if avg_seconds > 86400:
-            kpi_avg_time = f"{round(avg_seconds / 86400, 1)} días"
+    # Time calculations (using time_spent field in minutes)
+    tasks_with_time = [t for t in tasks if t.time_spent and t.time_spent > 0]
+    
+    if tasks_with_time:
+        total_minutes = sum(t.time_spent for t in tasks_with_time)
+        avg_minutes = total_minutes / len(tasks_with_time)
+        
+        # Format avg_time: show hours if >= 60 min, otherwise minutes
+        if avg_minutes >= 60:
+            hours = avg_minutes / 60
+            kpi_avg_time = f"{round(hours, 1)} horas"
         else:
-            kpi_avg_time = f"{round(avg_seconds / 3600, 1)} horas"
+            kpi_avg_time = f"{round(avg_minutes)} min"
+        
+        # Format total_time: show both minutes and hours
+        total_hours = total_minutes / 60
+        kpi_total_time = f"{int(total_minutes)} min ({round(total_hours, 1)} hs)"
     else:
         kpi_avg_time = "N/A"
+        kpi_total_time = "0 min"
 
     return {
         'total': kpi_total,
         'completion_rate': kpi_completion_rate,
         'overdue': kpi_overdue,
-        'avg_time': kpi_avg_time
+        'avg_time': kpi_avg_time,
+        'total_time': kpi_total_time
     }
 
 # --- Excel Import Routes ---
@@ -1085,6 +1114,8 @@ def import_tasks():
             fecha_str = row[3] if len(row) > 3 else None
             asignados_str = row[4] if len(row) > 4 else ''
             etiquetas_str = row[5] if len(row) > 5 else ''
+            tiempo_str = row[6] if len(row) > 6 else ''
+            estado_str = row[7] if len(row) > 7 else 'Pendiente'
             
             # Validate required fields
             if not titulo:
@@ -1109,6 +1140,23 @@ def import_tasks():
             # Validate priority
             if prioridad not in ['Normal', 'Media', 'Urgente']:
                 prioridad = 'Normal'
+            
+            # Parse time_spent (optional, in minutes)
+            time_spent = None
+            if tiempo_str:
+                try:
+                    time_spent = int(tiempo_str)
+                except (ValueError, TypeError):
+                    pass  # Ignore invalid time values
+            
+            # Parse status
+            status = 'Pending'  # Default
+            if estado_str:
+                estado_lower = str(estado_str).strip().lower()
+                if estado_lower in ['completada', 'completed', 'completado', 'c']:
+                    status = 'Completed'
+                elif estado_lower in ['pendiente', 'pending', 'p']:
+                    status = 'Pending'
             
             # Parse assignees
             assignee_usernames = [u.strip() for u in str(asignados_str).split(',') if u.strip()]
@@ -1139,8 +1187,15 @@ def import_tasks():
                 description=str(descripcion) if descripcion else '',
                 priority=prioridad,
                 due_date=due_date,
-                creator_id=current_user.id
+                creator_id=current_user.id,
+                time_spent=time_spent,
+                status=status
             )
+            
+            # Set completed info if status is Completed
+            if status == 'Completed':
+                new_task.completed_by_id = current_user.id
+                new_task.completed_at = datetime.now()
             
             for user in assignees:
                 new_task.assignees.append(user)
@@ -1181,6 +1236,13 @@ def manage_templates():
         default_days = int(request.form.get('default_days', 0))
         tag_ids = request.form.getlist('tags')
         
+        # Parse time_spent
+        time_spent_str = request.form.get('time_spent', '0')
+        try:
+            time_spent = int(time_spent_str) if time_spent_str else 0
+        except ValueError:
+            time_spent = 0
+        
         # Check if template name already exists
         if TaskTemplate.query.filter_by(name=name).first():
             flash('Ya existe una plantilla con ese nombre.', 'danger')
@@ -1192,7 +1254,8 @@ def manage_templates():
             description=description,
             priority=priority,
             default_days=default_days,
-            created_by_id=current_user.id
+            created_by_id=current_user.id,
+            time_spent=time_spent
         )
         
         # Add tags
@@ -1243,5 +1306,6 @@ def get_template_data(template_id):
         'description': template.description or '',
         'priority': template.priority,
         'due_date': due_date.strftime('%Y-%m-%d'),
-        'tag_ids': [tag.id for tag in template.tags]
+        'tag_ids': [tag.id for tag in template.tags],
+        'time_spent': template.time_spent or 0
     })

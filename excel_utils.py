@@ -99,7 +99,7 @@ def generate_task_excel(tasks, filters):
     row += 2
     
     # --- Table Headers ---
-    headers = ['Título', 'Descripción', 'Estado', 'Prioridad', 'Vencimiento', 'Creado por', 'Asignados', 'Completado por', 'Fecha Completado']
+    headers = ['Título', 'Descripción', 'Estado', 'Prioridad', 'Vencimiento', 'Tiempo', 'Creado por', 'Asignados', 'Completado por', 'Fecha Completado']
     header_row = row
     
     for col_num, header in enumerate(headers, 1):
@@ -132,12 +132,22 @@ def generate_task_excel(tasks, filters):
         # Status translation
         status_text = "Completada" if task.status == 'Completed' else "Pendiente"
         
+        # Time spent formatted
+        if task.time_spent and task.time_spent > 0:
+            if task.time_spent >= 60:
+                time_str = f"{round(task.time_spent / 60, 1)} hs"
+            else:
+                time_str = f"{task.time_spent} min"
+        else:
+            time_str = '-'
+        
         row_data = [
             task.title,
             task.description or '-',
             status_text,
             task.priority,
             task.due_date.strftime('%d/%m/%Y'),
+            time_str,
             task.creator.full_name,
             assignees_list,
             completed_by_name,
@@ -173,7 +183,7 @@ def generate_task_excel(tasks, filters):
         row += 1
     
     # --- Adjust column widths ---
-    column_widths = [30, 40, 15, 12, 15, 25, 20, 18]
+    column_widths = [30, 40, 15, 12, 15, 12, 25, 20, 18, 18]
     for col_num, width in enumerate(column_widths, 1):
         ws.column_dimensions[get_column_letter(col_num)].width = width
     

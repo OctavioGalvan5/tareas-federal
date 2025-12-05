@@ -64,6 +64,9 @@ class Task(db.Model):
     
     # Relationship for tags
     tags = db.relationship('Tag', secondary=task_tags, backref=db.backref('tasks', lazy='dynamic'))
+    
+    # Time tracking (in minutes)
+    time_spent = db.Column(db.Integer, nullable=True)  # Time spent in minutes
 
     def __repr__(self):
         return f'<Task {self.title}>'
@@ -96,6 +99,7 @@ class TaskTemplate(db.Model):
     default_days = db.Column(db.Integer, nullable=False, default=0)  # Days from today for due date (0 = today)
     created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    time_spent = db.Column(db.Integer, nullable=True, default=0)  # Default time spent in minutes
     
     # Relationships
     created_by = db.relationship('User', backref='created_templates')

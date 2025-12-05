@@ -272,6 +272,40 @@ def generate_report_pdf(data):
         
         pdf.ln(35) # Move down past cards
 
+    # --- Difference Calculator Section ---
+    if 'diff_calc' in data:
+        diff = data['diff_calc']
+        
+        # Check if we have space, else add page
+        if pdf.get_y() > 250:
+             pdf.add_page()
+
+        pdf.set_fill_color(248, 250, 252) # Slate 50
+        # Draw background box for this section
+        y_start = pdf.get_y()
+        pdf.rect(10, y_start, 190, 35, 'F')
+        
+        pdf.set_xy(10, y_start + 5)
+        pdf.set_font('Arial', 'B', 12)
+        pdf.set_text_color(50, 50, 50)
+        pdf.cell(0, 8, 'Diferencia de Horas', 0, 1, 'C') # Centered title
+        
+        pdf.set_font('Arial', '', 11)
+        # Construct the string: "TagA: time - TagB: time"
+        info_str = f"{diff['tag_a']['name']}: {diff['tag_a']['time']}  -  {diff['tag_b']['name']}: {diff['tag_b']['time']}"
+        pdf.cell(0, 8, info_str, 0, 1, 'C')
+        
+        pdf.set_font('Arial', 'B', 14)
+        if diff['result'].startswith('-'):
+             pdf.set_text_color(220, 38, 38) # Red 600
+        else:
+             pdf.set_text_color(5, 150, 105) # Emerald 600
+             
+        pdf.cell(0, 8, f"Diferencia: {diff['result']}", 0, 1, 'C')
+        
+        pdf.set_text_color(0, 0, 0) # Reset
+        pdf.set_y(y_start + 40) # Ensure we move past the box
+
     y_charts = pdf.get_y()
     
     if 'status' in chart_paths:

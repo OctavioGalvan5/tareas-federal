@@ -864,6 +864,51 @@ def reports_data():
         'kpis': kpis
     })
 
+@main_bp.route('/api/reports/calculate_difference', methods=['POST'])
+@login_required
+def api_calculate_difference():
+    data = request.get_json()
+    tag_a_id = data.get('tag_a_id')
+    tag_b_id = data.get('tag_b_id')
+    start_date_str = data.get('start_date')
+    end_date_str = data.get('end_date')
+    
+    # helper to get sum of time for a tag
+    def get_tag_time(tag_id):
+        if not tag_id: return 0
+        
+        q = Task.query.filter(Task.status != 'Anulado')
+        q = q.filter(Task.tags.any(Tag.id == tag_id))
+        
+        if start_date_str and end_date_str:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            q = q.filter(Task.due_date >= start_date, Task.due_date <= end_date)
+            
+        tasks = q.all()
+        return sum(t.time_spent for t in tasks if t.time_spent)
+
+    time_a = get_tag_time(tag_a_id)
+    time_b = get_tag_time(tag_b_id)
+    
+    diff = time_a - time_b
+    
+    # Format result
+    abs_diff = abs(diff)
+    hours = int(abs_diff / 60)
+    minutes = int(abs_diff % 60)
+    
+    formatted = f"{hours}h {minutes}m"
+    if diff < 0:
+        formatted = f"- {formatted}"
+        
+    return jsonify({
+        'time_a': time_a,
+        'time_b': time_b,
+        'diff': diff,
+        'formatted': formatted
+    })
+
 @main_bp.route('/reports/export', methods=['POST'])
 @login_required
 def export_report():
@@ -1005,6 +1050,50 @@ def export_report():
     
     if include_kpis:
         report_data['kpis'] = calculate_kpis(tasks, global_completed)
+        
+    # Calculate difference if tags provided
+    diff_tag_a_id = request.form.get('diff_tag_a')
+    diff_tag_b_id = request.form.get('diff_tag_b')
+    
+    if diff_tag_a_id and diff_tag_b_id:
+        try:
+            # Re-use logic (maybe refactor to shared function later if needed)
+            def get_tag_time_export(tag_id):
+                if not tag_id: return 0, "N/A"
+                q = Task.query.filter(Task.status != 'Anulado')
+                q = q.filter(Task.tags.any(Tag.id == tag_id))
+                if start_date_str and end_date_str:
+                    s_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                    e_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+                    q = q.filter(Task.due_date >= s_date, Task.due_date <= e_date)
+                ts = q.all()
+                total_min = sum(t.time_spent for t in ts if t.time_spent)
+                
+                h = int(total_min / 60)
+                m = int(total_min % 60)
+                return total_min, f"{h}h {m}m"
+
+            tag_a = Tag.query.get(int(diff_tag_a_id))
+            tag_b = Tag.query.get(int(diff_tag_b_id))
+            
+            if tag_a and tag_b:
+                time_a, str_a = get_tag_time_export(diff_tag_a_id)
+                time_b, str_b = get_tag_time_export(diff_tag_b_id)
+                
+                diff = time_a - time_b
+                abs_diff = abs(diff)
+                d_h = int(abs_diff / 60)
+                d_m = int(abs_diff % 60)
+                diff_str = f"{d_h}h {d_m}m"
+                if diff < 0: diff_str = "- " + diff_str
+                
+                report_data['diff_calc'] = {
+                    'tag_a': {'name': tag_a.name, 'time': str_a},
+                    'tag_b': {'name': tag_b.name, 'time': str_b},
+                    'result': diff_str
+                }
+        except Exception as e:
+            print(f"Error calculating diff for export: {e}")
     
     pdf = generate_report_pdf(report_data)
     

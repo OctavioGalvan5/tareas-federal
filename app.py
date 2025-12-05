@@ -14,7 +14,7 @@ from extensions import db, login_manager
 # db = SQLAlchemy() -> Moved to extensions.py
 # login_manager = LoginManager() -> Moved to extensions.py
 
-def create_app():
+def create_app(test_config=None):
     app = Flask(__name__)
     
     # Fix for running behind a reverse proxy (Traefik/Nginx)
@@ -24,6 +24,10 @@ def create_app():
     # Configuration
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev')
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///local.db')
+
+    if test_config:
+        app.config.update(test_config)
+
     print(f"DEBUG: Database URI: {app.config['SQLALCHEMY_DATABASE_URI']}")
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 

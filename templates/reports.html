@@ -110,6 +110,50 @@
     </div>
 </div>
 
+<div id="calcSection" class="card" style="margin-bottom: 2rem; display: none;">
+    <h3><i class="fas fa-calculator"></i> Calculadora de Diferencia de Horas</h3>
+    <p style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 1rem;">
+        Calcula la diferencia de tiempo invertido entre dos etiquetas (Etiqueta A - Etiqueta B).
+        Respeta el rango de fechas seleccionado arriba.
+    </p>
+    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 200px;">
+            <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem;">Etiqueta
+                A</label>
+            <select id="calcTagA"
+                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff;">
+                <option value="">Seleccionar Etiqueta...</option>
+                {% for tag in tags %}
+                <option value="{{ tag.id }}">{{ tag.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div style="font-size: 1.5rem; color: var(--text-light); padding-top: 1.5rem;">-</div>
+        <div style="flex: 1; min-width: 200px;">
+            <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem;">Etiqueta
+                B</label>
+            <select id="calcTagB"
+                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff;">
+                <option value="">Seleccionar Etiqueta...</option>
+                {% for tag in tags %}
+                <option value="{{ tag.id }}">{{ tag.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button onclick="calculateDifference()" class="button" style="margin-top: 1.5rem;">
+            <i class="fas fa-equals"></i> Calcular
+        </button>
+    </div>
+    <div id="calcResult"
+        style="margin-top: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 6px; display: none; text-align: center;">
+        <span style="font-size: 0.9rem; color: var(--text-light);">Diferencia:</span>
+        <span id="diffValue"
+            style="font-size: 1.5rem; font-weight: bold; color: var(--primary-color); margin-left: 0.5rem;"></span>
+        <p id="diffDetails" style="font-size: 0.8rem; color: var(--text-light); margin-top: 0.5rem; margin-bottom: 0;">
+        </p>
+    </div>
+</div>
+
 <div
     style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
     <div class="card">
@@ -304,10 +348,14 @@
 
     function toggleKPIs() {
         const section = document.getElementById('kpiSection');
+        const calcSection = document.getElementById('calcSection');
+
         if (section.style.display === 'none') {
             section.style.display = 'grid';
+            calcSection.style.display = 'block';
         } else {
             section.style.display = 'none';
+            calcSection.style.display = 'none';
         }
     }
 
@@ -362,9 +410,87 @@
         inputKpis.value = includeKpis;
         form.appendChild(inputKpis);
 
+        // Add calc tags if visible and selected
+        if (includeKpis) {
+            const tagA = document.getElementById('calcTagA').value;
+            const tagB = document.getElementById('calcTagB').value;
+
+            if (tagA && tagB) {
+                const inputDiffA = document.createElement('input');
+                inputDiffA.type = 'hidden';
+                inputDiffA.name = 'diff_tag_a';
+                inputDiffA.value = tagA;
+                form.appendChild(inputDiffA);
+
+                const inputDiffB = document.createElement('input');
+                inputDiffB.type = 'hidden';
+                inputDiffB.name = 'diff_tag_b';
+                inputDiffB.value = tagB;
+                form.appendChild(inputDiffB);
+            }
+        }
+
         document.body.appendChild(form);
         form.submit();
         document.body.removeChild(form);
+    }
+
+    function calculateDifference() {
+        const tagASelect = document.getElementById('calcTagA');
+        const tagBSelect = document.getElementById('calcTagB');
+        const tagA = tagASelect.value;
+        const tagB = tagBSelect.value;
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+
+        if (!tagA || !tagB) {
+            alert('Por favor selecciona ambas etiquetas.');
+            return;
+        }
+
+        const tagNameA = tagASelect.options[tagASelect.selectedIndex].text;
+        const tagNameB = tagBSelect.options[tagBSelect.selectedIndex].text;
+
+        fetch('/api/reports/calculate_difference', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                tag_a_id: tagA,
+                tag_b_id: tagB,
+                start_date: startDate,
+                end_date: endDate
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('calcResult');
+                const diffValue = document.getElementById('diffValue');
+                const diffDetails = document.getElementById('diffDetails');
+
+                resultDiv.style.display = 'block';
+                diffValue.textContent = data.formatted;
+
+                // Format time A and time B for details
+                const formatTime = (minutes) => {
+                    const h = Math.floor(minutes / 60);
+                    const m = Math.floor(minutes % 60);
+                    return `${h}h ${m}m`;
+                };
+
+                diffDetails.textContent = `(${tagNameA}: ${formatTime(data.time_a)} - ${tagNameB}: ${formatTime(data.time_b)})`;
+
+                if (data.diff < 0) {
+                    diffValue.style.color = '#ef4444'; // Red for negative
+                } else {
+                    diffValue.style.color = '#10b981'; // Green (or primary) for positive
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al calcular la diferencia.');
+            });
     }
 </script>
 {% endblock %}

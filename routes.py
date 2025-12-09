@@ -334,7 +334,8 @@ def anular_task(task_id):
 @main_bp.route('/export_pdf')
 @login_required
 def export_pdf():
-    # Re-use filter logic
+    # Re-use filter logic from dashboard
+    filter_assignee = request.args.get('assignee')
     filter_creator = request.args.get('creator')
     filter_status = request.args.get('status')
     
@@ -343,9 +344,17 @@ def export_pdf():
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
     
-    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(Task.assignees.any(id=current_user.id))
+    # Base query - start without user filter to match dashboard behavior
+    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
     
     filters = {}
+    
+    # Apply Assignee Filter
+    if filter_assignee:
+        query = query.filter(Task.assignees.any(id=filter_assignee))
+        assignee = User.query.get(filter_assignee)
+        filters['assignee_name'] = assignee.full_name if assignee else 'Desconocido'
+    # If no assignee filter, show ALL tasks (matching dashboard behavior)
     
     # Apply Creator Filter
     if filter_creator:
@@ -354,10 +363,14 @@ def export_pdf():
         filters['creator_name'] = creator.full_name if creator else 'Desconocido'
         filters['creator'] = filter_creator
         
-    # Apply Status Filter
-    if filter_status and filter_status in ['Pending', 'Completed']:
-        query = query.filter(Task.status == filter_status)
-        filters['status'] = filter_status
+    # Apply Status Filter - exclude 'Anulado' by default like dashboard
+    if filter_status:
+        if filter_status in ['Pending', 'Completed', 'Anulado']:
+            query = query.filter(Task.status == filter_status)
+            filters['status'] = filter_status
+    else:
+        # By default, exclude 'Anulado' tasks (matching dashboard behavior)
+        query = query.filter(Task.status != 'Anulado')
 
     # Apply Date/Period Filters
     today = date.today()
@@ -419,7 +432,8 @@ def export_pdf():
 @main_bp.route('/export_excel')
 @login_required
 def export_excel():
-    # Re-use filter logic from export_pdf
+    # Re-use filter logic from dashboard (same as export_pdf)
+    filter_assignee = request.args.get('assignee')
     filter_creator = request.args.get('creator')
     filter_status = request.args.get('status')
     
@@ -428,9 +442,17 @@ def export_excel():
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
     
-    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(Task.assignees.any(id=current_user.id))
+    # Base query - start without user filter to match dashboard behavior
+    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
     
     filters = {}
+    
+    # Apply Assignee Filter
+    if filter_assignee:
+        query = query.filter(Task.assignees.any(id=filter_assignee))
+        assignee = User.query.get(filter_assignee)
+        filters['assignee_name'] = assignee.full_name if assignee else 'Desconocido'
+    # If no assignee filter, show ALL tasks (matching dashboard behavior)
     
     # Apply Creator Filter
     if filter_creator:
@@ -439,10 +461,14 @@ def export_excel():
         filters['creator_name'] = creator.full_name if creator else 'Desconocido'
         filters['creator'] = filter_creator
         
-    # Apply Status Filter
-    if filter_status and filter_status in ['Pending', 'Completed']:
-        query = query.filter(Task.status == filter_status)
-        filters['status'] = filter_status
+    # Apply Status Filter - exclude 'Anulado' by default like dashboard
+    if filter_status:
+        if filter_status in ['Pending', 'Completed', 'Anulado']:
+            query = query.filter(Task.status == filter_status)
+            filters['status'] = filter_status
+    else:
+        # By default, exclude 'Anulado' tasks (matching dashboard behavior)
+        query = query.filter(Task.status != 'Anulado')
 
     # Apply Date/Period Filters
     today = date.today()

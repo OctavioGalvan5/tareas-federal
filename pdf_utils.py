@@ -557,15 +557,20 @@ def generate_task_pdf(tasks, filters):
     pdf.set_font('Arial', '', 10)
     
     filter_text = []
+    if filters.get('assignee_name'):
+        filter_text.append(f"Asignado a: {filters['assignee_name']}")
     if filters.get('creator'):
-        filter_text.append(f"Usuario: {filters['creator_name']}")
+        filter_text.append(f"Creado por: {filters['creator_name']}")
     if filters.get('status'):
-        status_trans = "Completada" if filters['status'] == 'Completed' else "Pendiente"
+        status_map = {'Completed': 'Completada', 'Pending': 'Pendiente', 'Anulado': 'Anulado'}
+        status_trans = status_map.get(filters['status'], filters['status'])
         filter_text.append(f"Estado: {status_trans}")
     if filters.get('date_range'):
         filter_text.append(f"Fecha: {filters['date_range']}")
     if filters.get('tag'):
         filter_text.append(f"Etiqueta: {filters['tag']}")
+    if filters.get('search'):
+        filter_text.append(f"Búsqueda: {filters['search']}")
         
     if not filter_text:
         pdf.cell(0, 6, "Ninguno (Mostrando todas las tareas)", 0, 1)

@@ -242,13 +242,17 @@ def calendar():
     period = request.args.get('period', 'all')  # today, week, month, all
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
-    filter_creator = request.args.get('creator')
+    filter_user = request.args.get('creator')  # Keep 'creator' param name for backward compatibility
     
-    # Base query: tasks assigned to current user
-    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(Task.assignees.any(id=current_user.id))
+    # Base query: show ALL tasks by default (matching dashboard behavior)
+    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
     
-    if filter_creator:
-        query = query.filter(Task.creator_id == filter_creator)
+    # Exclude 'Anulado' tasks by default
+    query = query.filter(Task.status != 'Anulado')
+    
+    # Filter by user (assignee) if selected
+    if filter_user:
+        query = query.filter(Task.assignees.any(id=filter_user))
     
     # Apply date filters
     today = date.today()
@@ -344,24 +348,36 @@ def export_pdf():
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
     
-    # Base query - start without user filter to match dashboard behavior
-    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
-    
     filters = {}
     
-    # Apply Assignee Filter
-    if filter_assignee:
-        query = query.filter(Task.assignees.any(id=filter_assignee))
-        assignee = User.query.get(filter_assignee)
-        filters['assignee_name'] = assignee.full_name if assignee else 'Desconocido'
-    # If no assignee filter, show ALL tasks (matching dashboard behavior)
-    
-    # Apply Creator Filter
-    if filter_creator:
-        query = query.filter(Task.creator_id == filter_creator)
-        creator = User.query.get(filter_creator)
-        filters['creator_name'] = creator.full_name if creator else 'Desconocido'
-        filters['creator'] = filter_creator
+    # Determine if this is from calendar (has period) or dashboard
+    if period:
+        # Calendar mode: show all tasks, filter by user (assignee) if selected
+        query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
+        
+        # The calendar's 'creator' param is actually filtering by assignee now
+        filter_user = request.args.get('creator')  # Calendar sends user filter as 'creator'
+        if filter_user:
+            query = query.filter(Task.assignees.any(id=filter_user))
+            user = User.query.get(filter_user)
+            filters['assignee_name'] = user.full_name if user else 'Desconocido'
+        # If no user filter in calendar, show all tasks (no assignee_name filter shown)
+    else:
+        # Dashboard mode: start without user filter
+        query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
+        
+        # Apply Assignee Filter (dashboard uses this)
+        if filter_assignee:
+            query = query.filter(Task.assignees.any(id=filter_assignee))
+            assignee = User.query.get(filter_assignee)
+            filters['assignee_name'] = assignee.full_name if assignee else 'Desconocido'
+        
+        # Apply Creator Filter (dashboard also has this)
+        if filter_creator:
+            query = query.filter(Task.creator_id == filter_creator)
+            creator = User.query.get(filter_creator)
+            filters['creator_name'] = creator.full_name if creator else 'Desconocido'
+            filters['creator'] = filter_creator
         
     # Apply Status Filter - exclude 'Anulado' by default like dashboard
     if filter_status:
@@ -442,24 +458,36 @@ def export_excel():
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
     
-    # Base query - start without user filter to match dashboard behavior
-    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
-    
     filters = {}
     
-    # Apply Assignee Filter
-    if filter_assignee:
-        query = query.filter(Task.assignees.any(id=filter_assignee))
-        assignee = User.query.get(filter_assignee)
-        filters['assignee_name'] = assignee.full_name if assignee else 'Desconocido'
-    # If no assignee filter, show ALL tasks (matching dashboard behavior)
-    
-    # Apply Creator Filter
-    if filter_creator:
-        query = query.filter(Task.creator_id == filter_creator)
-        creator = User.query.get(filter_creator)
-        filters['creator_name'] = creator.full_name if creator else 'Desconocido'
-        filters['creator'] = filter_creator
+    # Determine if this is from calendar (has period) or dashboard
+    if period:
+        # Calendar mode: show all tasks, filter by user (assignee) if selected
+        query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
+        
+        # The calendar's 'creator' param is actually filtering by assignee now
+        filter_user = request.args.get('creator')  # Calendar sends user filter as 'creator'
+        if filter_user:
+            query = query.filter(Task.assignees.any(id=filter_user))
+            user = User.query.get(filter_user)
+            filters['assignee_name'] = user.full_name if user else 'Desconocido'
+        # If no user filter in calendar, show all tasks (no assignee_name filter shown)
+    else:
+        # Dashboard mode: start without user filter
+        query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
+        
+        # Apply Assignee Filter (dashboard uses this)
+        if filter_assignee:
+            query = query.filter(Task.assignees.any(id=filter_assignee))
+            assignee = User.query.get(filter_assignee)
+            filters['assignee_name'] = assignee.full_name if assignee else 'Desconocido'
+        
+        # Apply Creator Filter (dashboard also has this)
+        if filter_creator:
+            query = query.filter(Task.creator_id == filter_creator)
+            creator = User.query.get(filter_creator)
+            filters['creator_name'] = creator.full_name if creator else 'Desconocido'
+            filters['creator'] = filter_creator
         
     # Apply Status Filter - exclude 'Anulado' by default like dashboard
     if filter_status:

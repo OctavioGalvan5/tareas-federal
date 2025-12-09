@@ -585,11 +585,7 @@ def api_toggle_notifications():
 @main_bp.route('/tags')
 @login_required
 def tags():
-    """Tags management page"""
-    if not current_user.is_admin:
-        flash('Solo los administradores pueden gestionar tags.', 'danger')
-        return redirect(url_for('main.dashboard'))
-    
+    """Tags management page - accessible to all users"""
     all_tags = Tag.query.order_by(Tag.name).all()
     return render_template('tags.html', tags=all_tags)
 
@@ -609,9 +605,7 @@ def api_get_tags():
 @main_bp.route('/api/tags', methods=['POST'])
 @login_required
 def api_create_tag():
-    """Create a new tag"""
-    if not current_user.is_admin:
-        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    """Create a new tag - accessible to all users"""
     
     data = request.get_json()
     name = data.get('name', '').strip()
@@ -646,9 +640,7 @@ def api_create_tag():
 @main_bp.route('/api/tags/<int:tag_id>', methods=['PUT'])
 @login_required
 def api_update_tag(tag_id):
-    """Update a tag"""
-    if not current_user.is_admin:
-        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    """Update a tag - accessible to all users"""
     
     tag = Tag.query.get_or_404(tag_id)
     data = request.get_json()
@@ -680,9 +672,7 @@ def api_update_tag(tag_id):
 @main_bp.route('/api/tags/<int:tag_id>', methods=['DELETE'])
 @login_required
 def api_delete_tag(tag_id):
-    """Delete a tag"""
-    if not current_user.is_admin:
-        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    """Delete a tag - accessible to all users"""
     
     tag = Tag.query.get_or_404(tag_id)
     

@@ -178,23 +178,25 @@ def edit_task(task_id):
         due_date_str = request.form.get('due_date')
         task.due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
         
-        # Update time_spent
-        time_spent_str = request.form.get('time_spent')
-        if time_spent_str and time_spent_str.strip():
-            try:
-                task.time_spent = int(time_spent_str)
-            except ValueError:
-                pass  # Keep existing value if invalid
-        else:
-            task.time_spent = None
+        # Update time_spent - ONLY if user is admin
+        if current_user.is_admin:
+            time_spent_str = request.form.get('time_spent')
+            if time_spent_str and time_spent_str.strip():
+                try:
+                    task.time_spent = int(time_spent_str)
+                except ValueError:
+                    pass  # Keep existing value if invalid
+            else:
+                task.time_spent = None
         
-        # Update assignees
-        assignee_ids = request.form.getlist('assignees')
-        task.assignees = [] # Clear current assignees
-        for user_id in assignee_ids:
-            user = User.query.get(int(user_id))
-            if user:
-                task.assignees.append(user)
+        # Update assignees - ONLY if user is admin
+        if current_user.is_admin:
+            assignee_ids = request.form.getlist('assignees')
+            task.assignees = [] # Clear current assignees
+            for user_id in assignee_ids:
+                user = User.query.get(int(user_id))
+                if user:
+                    task.assignees.append(user)
 
         # Update tags
         tag_ids = request.form.getlist('tags')

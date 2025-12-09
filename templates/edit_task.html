@@ -41,6 +41,7 @@
             </div>
         </div>
 
+        {% if current_user.is_admin %}
         <div class="form-group">
             <label for="time_spent"><i class="fas fa-clock"></i> Tiempo Utilizado (minutos) <span
                     title="1 día = 6 horas laborales" style="cursor: help; color: #0ea5e9;"><i
@@ -61,7 +62,21 @@
                 </div>
             </div>
         </div>
+        {% else %}
+        {% if task.time_spent %}
+        <div class="form-group">
+            <label><i class="fas fa-clock"></i> Tiempo Utilizado</label>
+            <p style="padding: 0.5rem; background: #f1f5f9; border-radius: 6px; color: #64748b;">
+                {% set hours = (task.time_spent // 60)|int %}
+                {% set mins = (task.time_spent % 60)|int %}
+                {% if hours > 0 %}{{ hours }}h {% endif %}{{ mins }}m
+                <span style="font-size: 0.8rem; color: #94a3b8;">(Solo administradores pueden editar)</span>
+            </p>
+        </div>
+        {% endif %}
+        {% endif %}
 
+        {% if current_user.is_admin %}
         <div class="form-group">
             <label for="assignees"><i class="fas fa-users"></i> Asignar a (Mantén presionado Ctrl para seleccionar
                 varios)</label>
@@ -72,6 +87,21 @@
                 {% endfor %}
             </select>
         </div>
+        {% else %}
+        <div class="form-group">
+            <label><i class="fas fa-users"></i> Asignado a</label>
+            <div style="padding: 0.5rem; background: #f1f5f9; border-radius: 6px; color: #64748b;">
+                {% for user in task.assignees %}
+                <span
+                    style="display: inline-block; padding: 0.25rem 0.5rem; background: #e0f2fe; color: #0369a1; border-radius: 4px; margin: 0.2rem;">
+                    <i class="fas fa-user"></i> {{ user.full_name }}
+                </span>
+                {% endfor %}
+                <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 0.5rem;">(Solo
+                    administradores pueden editar)</span>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="form-group">
             <label><i class="fas fa-tags"></i> Etiquetas (opcional)</label>

@@ -19,11 +19,19 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
             <div class="form-group">
                 <label for="priority"><i class="fas fa-exclamation-circle"></i> Prioridad</label>
+                {% if current_user.is_admin %}
                 <select id="priority" name="priority" required>
                     <option value="Normal" {% if task.priority=='Normal' %}selected{% endif %}>Normal</option>
                     <option value="Media" {% if task.priority=='Media' %}selected{% endif %}>Media</option>
                     <option value="Urgente" {% if task.priority=='Urgente' %}selected{% endif %}>Urgente</option>
                 </select>
+                {% else %}
+                <p style="padding: 0.5rem; background: #f1f5f9; border-radius: 6px; color: #64748b; margin: 0;">
+                    <span class="priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
+                    <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem;">(Solo
+                        administradores pueden editar)</span>
+                </p>
+                {% endif %}
             </div>
 
             <div class="form-group">
@@ -36,8 +44,16 @@
 
             <div class="form-group">
                 <label for="due_date"><i class="fas fa-calendar-day"></i> Fecha de Vencimiento</label>
+                {% if current_user.is_admin %}
                 <input type="date" id="due_date" name="due_date" required
                     value="{{ task.due_date.strftime('%Y-%m-%d') }}">
+                {% else %}
+                <p style="padding: 0.5rem; background: #f1f5f9; border-radius: 6px; color: #64748b; margin: 0;">
+                    {{ task.due_date.strftime('%d/%m/%Y') }}
+                    <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem;">(Solo
+                        administradores pueden editar)</span>
+                </p>
+                {% endif %}
             </div>
         </div>
 

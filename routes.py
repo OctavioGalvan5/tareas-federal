@@ -172,11 +172,14 @@ def edit_task(task_id):
     if request.method == 'POST':
         task.title = request.form.get('title')
         task.description = request.form.get('description')
-        task.priority = request.form.get('priority')
         task.status = request.form.get('status') # Update status
         
-        due_date_str = request.form.get('due_date')
-        task.due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+        # Update priority and due_date - ONLY if user is admin
+        if current_user.is_admin:
+            task.priority = request.form.get('priority')
+            due_date_str = request.form.get('due_date')
+            if due_date_str:
+                task.due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
         
         # Update time_spent - ONLY if user is admin
         if current_user.is_admin:

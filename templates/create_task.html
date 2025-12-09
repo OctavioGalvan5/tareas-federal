@@ -62,7 +62,9 @@
         </div>
 
         <div class="form-group">
-            <label for="time_spent"><i class="fas fa-clock"></i> Tiempo Utilizado (minutos)</label>
+            <label for="time_spent"><i class="fas fa-clock"></i> Tiempo Utilizado (minutos) <span
+                    title="1 día = 6 horas laborales" style="cursor: help; color: #0ea5e9;"><i
+                        class="fas fa-info-circle"></i></span></label>
             <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                 <input type="number" id="time_spent" name="time_spent" min="0" step="1" placeholder="Ej: 30"
                     style="flex: 1; min-width: 100px; max-width: 150px;">
@@ -72,6 +74,9 @@
                     <button type="button" onclick="setTimeSpent(60)" class="time-preset-btn">1 hora</button>
                     <button type="button" onclick="setTimeSpent(120)" class="time-preset-btn">2 horas</button>
                     <button type="button" onclick="setTimeSpent(180)" class="time-preset-btn">3 horas</button>
+                    <button type="button" onclick="setTimeSpent(360)" class="time-preset-btn">1 día</button>
+                    <button type="button" onclick="setTimeSpent(1080)" class="time-preset-btn">3 días</button>
+                    <button type="button" onclick="setTimeSpent(2520)" class="time-preset-btn">1 semana</button>
                 </div>
             </div>
         </div>

@@ -141,6 +141,45 @@
             </div>
         </div>
 
+        <!-- 🔗 Parent Task Selector -->
+        <div class="form-group">
+            <label><i class="fas fa-link"></i> Tarea Padre (opcional)</label>
+            <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.75rem;">
+                <i class="fas fa-info-circle"></i> Vincula esta tarea a una tarea padre para seguimiento jerárquico
+            </p>
+
+            <!-- Hidden field to store current task ID (for circular reference prevention) -->
+            <input type="hidden" id="current_task_id" value="{{ task.id }}">
+
+            <!-- Hidden input for parent_id -->
+            <input type="hidden" id="parent_id" name="parent_id"
+                value="{% if task.parent_id %}{{ task.parent_id }}{% endif %}">
+
+            <!-- Display selected parent -->
+            <div id="parentTaskDisplay" style="margin-bottom: 0.75rem;">
+                {% if task.parent %}
+                <div
+                    style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px;">
+                    <i class="fas fa-link" style="color: #0284c7;"></i>
+                    <span style="flex: 1; color: #0c4a6e; font-weight: 500;">#{{ task.parent.id }} - {{
+                        task.parent.title }}</span>
+                    <button type="button" onclick="clearParentTask()" class="btn-clear-parent"
+                        title="Quitar tarea padre"
+                        style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 0.25rem 0.5rem;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                {% else %}
+                <span style="color: #9ca3af;">Sin tarea padre</span>
+                {% endif %}
+            </div>
+
+            <!-- Button to open modal -->
+            <button type="button" onclick="openTaskSelector()" class="button-secondary" style="width: 100%;">
+                <i class="fas fa-search"></i> {% if task.parent %}Cambiar{% else %}Seleccionar{% endif %} Tarea Padre
+            </button>
+        </div>
+
         <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
             <a href="{{ url_for('main.dashboard') }}"
                 style="padding: 0.9rem 2rem; text-decoration: none; color: var(--text-light); font-weight: 600; border-radius: 10px; border: 2px solid var(--border-color); transition: var(--transition);">
@@ -178,4 +217,7 @@
         }
     }
 </script>
+
+{% include 'task_selector_modal.html' %}
+<script src="{{ url_for('static', filename='task_selector.js') }}"></script>
 {% endblock %}

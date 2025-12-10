@@ -67,6 +67,10 @@ class Task(db.Model):
     
     # Time tracking (in minutes)
     time_spent = db.Column(db.Integer, nullable=True)  # Time spent in minutes
+    
+    # Parent-Child Task Relationship
+    parent_id = db.Column(db.Integer, db.ForeignKey('task.id'), nullable=True)
+    parent = db.relationship('Task', remote_side=[id], backref='children', foreign_keys=[parent_id])
 
     def __repr__(self):
         return f'<Task {self.title}>'

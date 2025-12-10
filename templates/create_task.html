@@ -136,6 +136,27 @@
             </div>
         </div>
 
+        <!-- 🔗 Parent Task Selector -->
+        <div class="form-group">
+            <label><i class="fas fa-link"></i> Tarea Padre (opcional)</label>
+            <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.75rem;">
+                <i class="fas fa-info-circle"></i> Vincula esta tarea a una tarea padre para seguimiento jerárquico
+            </p>
+
+            <!-- Hidden input for parent_id -->
+            <input type="hidden" id="parent_id" name="parent_id" value="">
+
+            <!-- Display selected parent -->
+            <div id="parentTaskDisplay" style="margin-bottom: 0.75rem;">
+                <span style="color: #9ca3af;">Sin tarea padre</span>
+            </div>
+
+            <!-- Button to open modal -->
+            <button type="button" onclick="openTaskSelector()" class="button-secondary" style="width: 100%;">
+                <i class="fas fa-search"></i> Seleccionar Tarea Padre
+            </button>
+        </div>
+
         <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
             <a href="{{ url_for('main.dashboard') }}"
                 style="padding: 0.9rem 2rem; text-decoration: none; color: var(--text-light); font-weight: 600; border-radius: 10px; border: 2px solid var(--border-color); transition: var(--transition);">
@@ -230,4 +251,7 @@
             });
     }
 </script>
+
+{% include 'task_selector_modal.html' %}
+<script src="{{ url_for('static', filename='task_selector.js') }}"></script>
 {% endblock %}

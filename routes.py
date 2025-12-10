@@ -178,6 +178,17 @@ def create_task():
             tag = Tag.query.get(int(tag_id))
             if tag:
                 new_task.tags.append(tag)
+        
+        # Handle parent task selection
+        parent_id_str = request.form.get('parent_id')
+        if parent_id_str:
+            try:
+                parent_id = int(parent_id_str)
+                parent_task = Task.query.get(parent_id)
+                if parent_task:
+                    new_task.parent_id = parent_id
+            except (ValueError, TypeError):
+                pass  # Invalid parent_id, ignore it
                 
         db.session.add(new_task)
         db.session.commit()
@@ -240,6 +251,24 @@ def edit_task(task_id):
             tag = Tag.query.get(int(tag_id))
             if tag:
                 task.tags.append(tag)
+        
+        # Handle parent task selection (with circular reference prevention)
+        parent_id_str = request.form.get('parent_id')
+        if parent_id_str:
+            try:
+                parent_id = int(parent_id_str)
+                # Prevent circular reference: task cannot be its own parent
+                if parent_id != task.id:
+                    # Prevent circular reference: parent cannot be a descendant
+                    if not is_descendant(task.id, parent_id):
+                        parent_task = Task.query.get(parent_id)
+                        if parent_task:
+                            task.parent_id = parent_id
+            except (ValueError, TypeError):
+                pass  # Invalid parent_id, ignore it
+        else:
+            # Clear parent if field is empty
+            task.parent_id = None
         
         # Handle completion tracking if status changed to Completed
         if task.status == 'Completed' and not task.completed_at:
@@ -1498,3 +1527,76 @@ def get_template_data(template_id):
         'tag_ids': [tag.id for tag in template.tags],
         'time_spent': template.time_spent or 0
     })
+
+
+# --- Task Hierarchy Helper Functions ---
+def is_descendant(parent_id, potential_child_id):
+    """
+    Check if potential_child_id is a descendant of parent_id.
+    This prevents circular references in the task hierarchy.
+    """
+    if parent_id == potential_child_id:
+        return True
+    
+    task = Task.query.get(potential_child_id)
+    if not task or not task.parent_id:
+        return False
+    
+    # Recursively check if parent_id is an ancestor
+    return is_descendant(parent_id, task.parent_id)
+
+
+# --- Task Hierarchy API Routes ---
+@main_bp.route('/api/tasks/search')
+@login_required
+def api_search_tasks():
+    """Search tasks for parent selection modal"""
+    query = request.args.get('q', '').strip()
+    exclude_id = request.args.get('exclude_id')
+    
+    if not query:
+        return jsonify({'tasks': []})
+    
+    search_query = Task.query.filter(Task.status != 'Anulado')
+    
+    if query.isdigit():
+        search_query = search_query.filter(
+            (Task.id == int(query)) | (Task.title.ilike(f'%{query}%'))
+        )
+    else:
+        search_query = search_query.filter(Task.title.ilike(f'%{query}%'))
+    
+    if exclude_id:
+        try:
+            search_query = search_query.filter(Task.id != int(exclude_id))
+        except (ValueError, TypeError):
+            pass
+    
+    tasks = search_query.order_by(Task.due_date.desc()).limit(20).all()
+    
+    result = []
+    for task in tasks:
+        result.append({
+            'id': task.id,
+            'title': task.title,
+            'priority': task.priority,
+            'status': task.status,
+            'due_date': task.due_date.strftime('%d/%m/%Y'),
+            'assignees': ', '.join([u.full_name for u in task.assignees])
+        })
+    
+    return jsonify({'tasks': result})
+
+
+@main_bp.route('/api/tasks/<int:task_id>/validate_parent/<int:parent_id>')
+@login_required
+def api_validate_parent(task_id, parent_id):
+    """Validate that parent_id is not a descendant of task_id (prevent circular references)"""
+    if task_id == parent_id:
+        return jsonify({'valid': False, 'error': 'Una tarea no puede ser su propia tarea padre'})
+    
+    if is_descendant(task_id, parent_id):
+        return jsonify({'valid': False, 'error': 'Referencia circular detectada'})
+    
+    return jsonify({'valid': True})
+

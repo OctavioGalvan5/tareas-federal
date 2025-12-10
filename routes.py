@@ -983,8 +983,8 @@ def export_report():
     user_ids = json.loads(user_ids_str) if user_ids_str else []
     tag_ids = json.loads(tag_ids_str) if tag_ids_str else [] # New
     
-    # Fetch data
-    query = Task.query
+    # Fetch data - ALWAYS exclude 'Anulado' tasks from reports (same as reports_data)
+    query = Task.query.filter(Task.status != 'Anulado')
     if user_ids:
         query = query.filter(Task.assignees.any(User.id.in_(user_ids)))
         

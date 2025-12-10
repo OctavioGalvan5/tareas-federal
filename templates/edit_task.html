@@ -180,6 +180,44 @@
             </button>
         </div>
 
+        <!-- 🔗 Child Tasks Selector -->
+        <div class="form-group">
+            <label><i class="fas fa-sitemap"></i> Subtareas (opcional)</label>
+            <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.75rem;">
+                <i class="fas fa-info-circle"></i> Vincula tareas existentes como subtareas de esta tarea
+            </p>
+
+            <!-- Hidden input for child_ids (comma separated) -->
+            <input type="hidden" id="child_ids" name="child_ids"
+                value="{% for child in task.children %}{{ child.id }}{% if not loop.last %},{% endif %}{% endfor %}">
+
+            <!-- Display selected children -->
+            <div id="childTasksDisplay"
+                style="margin-bottom: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                {% if task.children %}
+                {% for child in task.children %}
+                <div class="child-task-item" data-child-id="{{ child.id }}"
+                    style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;">
+                    <i class="fas fa-level-down-alt" style="color: #16a34a;"></i>
+                    <span style="flex: 1; color: #166534; font-weight: 500;">#{{ child.id }} - {{ child.title }}</span>
+                    <button type="button" onclick="removeChildTask({{ child.id }})" class="btn-clear-parent"
+                        title="Quitar subtarea"
+                        style="background: none; border: none; color: #dc2626; cursor: pointer; padding: 0.25rem 0.5rem;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                {% endfor %}
+                {% else %}
+                <span style="color: #9ca3af;">Sin subtareas vinculadas</span>
+                {% endif %}
+            </div>
+
+            <!-- Button to open modal for children -->
+            <button type="button" onclick="openChildTaskSelector()" class="button-secondary" style="width: 100%;">
+                <i class="fas fa-plus"></i> Agregar Subtarea
+            </button>
+        </div>
+
         <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
             <a href="{{ url_for('main.dashboard') }}"
                 style="padding: 0.9rem 2rem; text-decoration: none; color: var(--text-light); font-weight: 600; border-radius: 10px; border: 2px solid var(--border-color); transition: var(--transition);">

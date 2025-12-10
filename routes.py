@@ -281,6 +281,34 @@ def edit_task(task_id):
         # Track edit history
         task.last_edited_by_id = current_user.id
         task.last_edited_at = datetime.now()
+        
+        # Handle child tasks assignment
+        child_ids_str = request.form.get('child_ids', '')
+        if child_ids_str:
+            try:
+                child_ids = [int(id.strip()) for id in child_ids_str.split(',') if id.strip()]
+                # Get current children IDs
+                current_child_ids = [c.id for c in task.children]
+                
+                # Update children - set parent_id for new children
+                for child_id in child_ids:
+                    if child_id != task.id and child_id not in current_child_ids:
+                        child_task = Task.query.get(child_id)
+                        if child_task and not is_descendant(child_id, task.id):
+                            child_task.parent_id = task.id
+                
+                # Remove parent_id from children that were removed
+                for current_child_id in current_child_ids:
+                    if current_child_id not in child_ids:
+                        child_task = Task.query.get(current_child_id)
+                        if child_task:
+                            child_task.parent_id = None
+            except (ValueError, TypeError):
+                pass  # Invalid child_ids, ignore
+        else:
+            # Clear all children if no child_ids provided
+            for child in task.children:
+                child.parent_id = None
 
         db.session.commit()
         flash('Tarea actualizada exitosamente.', 'success')

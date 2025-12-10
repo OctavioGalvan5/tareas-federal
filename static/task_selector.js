@@ -135,7 +135,115 @@ document.addEventListener('DOMContentLoaded', function () {
         modal.addEventListener('click', function (e) {
             if (e.target === modal) {
                 closeTaskSelector();
+                closeChildTaskSelector();
             }
         });
     }
 });
+
+// ===== CHILD TASK SELECTOR =====
+let isSelectingChild = false;
+
+function openChildTaskSelector() {
+    isSelectingChild = true;
+    const modal = document.getElementById('taskSelectorModal');
+    if (modal) {
+        // Update modal title for child selection
+        const modalTitle = modal.querySelector('.modal-header h3');
+        if (modalTitle) {
+            modalTitle.innerHTML = '<i class="fas fa-sitemap"></i> Agregar Subtarea';
+        }
+        modal.style.display = 'flex';
+        document.getElementById('taskSearchInput').focus();
+        document.getElementById('taskSearchInput').value = '';
+        document.getElementById('taskSearchResults').innerHTML = '';
+    }
+}
+
+function closeChildTaskSelector() {
+    isSelectingChild = false;
+    const modal = document.getElementById('taskSelectorModal');
+    if (modal) {
+        // Restore original title
+        const modalTitle = modal.querySelector('.modal-header h3');
+        if (modalTitle) {
+            modalTitle.innerHTML = '<i class="fas fa-search"></i> Seleccionar Tarea Padre';
+        }
+        modal.style.display = 'none';
+    }
+}
+
+function addChildTask(taskId, taskTitle) {
+    const childIdsInput = document.getElementById('child_ids');
+    if (!childIdsInput) return;
+
+    // Get current child IDs
+    let currentIds = childIdsInput.value ? childIdsInput.value.split(',').filter(id => id) : [];
+
+    // Check if already added
+    if (currentIds.includes(String(taskId))) {
+        alert('Esta tarea ya está vinculada como subtarea');
+        return;
+    }
+
+    // Add new ID
+    currentIds.push(String(taskId));
+    childIdsInput.value = currentIds.join(',');
+
+    // Update display
+    const display = document.getElementById('childTasksDisplay');
+
+    // Remove "Sin subtareas" message if present
+    const noChildrenMsg = display.querySelector('span[style*="color: #9ca3af"]');
+    if (noChildrenMsg) {
+        noChildrenMsg.remove();
+    }
+
+    // Add new child item
+    const newChild = document.createElement('div');
+    newChild.className = 'child-task-item';
+    newChild.setAttribute('data-child-id', taskId);
+    newChild.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;';
+    newChild.innerHTML = `
+        <i class="fas fa-level-down-alt" style="color: #16a34a;"></i>
+        <span style="flex: 1; color: #166534; font-weight: 500;">#${taskId} - ${taskTitle}</span>
+        <button type="button" onclick="removeChildTask(${taskId})" class="btn-clear-parent" title="Quitar subtarea" style="background: none; border: none; color: #dc2626; cursor: pointer; padding: 0.25rem 0.5rem;">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    display.appendChild(newChild);
+
+    closeChildTaskSelector();
+}
+
+function removeChildTask(taskId) {
+    const childIdsInput = document.getElementById('child_ids');
+    if (!childIdsInput) return;
+
+    // Remove ID from list
+    let currentIds = childIdsInput.value ? childIdsInput.value.split(',').filter(id => id) : [];
+    currentIds = currentIds.filter(id => id !== String(taskId));
+    childIdsInput.value = currentIds.join(',');
+
+    // Remove from display
+    const display = document.getElementById('childTasksDisplay');
+    const childItem = display.querySelector(`[data-child-id="${taskId}"]`);
+    if (childItem) {
+        childItem.remove();
+    }
+
+    // Show "Sin subtareas" message if no children left
+    if (currentIds.length === 0) {
+        display.innerHTML = '<span style="color: #9ca3af;">Sin subtareas vinculadas</span>';
+    }
+}
+
+// Override selectParentTask to handle both modes
+const originalSelectParentTask = selectParentTask;
+selectParentTask = function (taskId, taskTitle) {
+    if (isSelectingChild) {
+        addChildTask(taskId, taskTitle);
+    } else {
+        originalSelectParentTask(taskId, taskTitle);
+    }
+};

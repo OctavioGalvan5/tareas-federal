@@ -4,16 +4,27 @@
 <div class="card" style="max-width: 900px; margin: 0 auto;">
     <h2><i class="fas fa-plus-square"></i> Nueva Tarea</h2>
 
-    <!-- Template Selector -->
+    <!-- Template Selector - REQUIRED for non-admins -->
     {% if templates %}
     <div
         style="margin-bottom: 1.5rem; padding: 1rem; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 10px; border: 1px solid #bae6fd;">
         <label style="display: block; font-size: 0.9rem; color: #0369a1; margin-bottom: 0.5rem; font-weight: 600;">
-            <i class="fas fa-magic"></i> Usar Plantilla (opcional)
+            <i class="fas fa-magic"></i>
+            {% if current_user.is_admin %}
+            Usar Plantilla (opcional)
+            {% else %}
+            Seleccionar Plantilla <span style="color: #dc2626;">*</span>
+            {% endif %}
         </label>
+        {% if not current_user.is_admin %}
+        <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">
+            <i class="fas fa-info-circle"></i> Debes seleccionar una plantilla para crear la tarea.
+        </p>
+        {% endif %}
         <div style="display: flex; gap: 0.5rem; align-items: center;">
             <select id="templateSelector" onchange="applyTemplate()"
-                style="flex: 1; padding: 0.6rem; border: 1px solid #7dd3fc; border-radius: 6px; background: white;">
+                style="flex: 1; padding: 0.6rem; border: 1px solid #7dd3fc; border-radius: 6px; background: white;" {%
+                if not current_user.is_admin %}required{% endif %}>
                 <option value="">-- Seleccionar plantilla --</option>
                 {% for template in templates %}
                 <option value="{{ template.id }}">{{ template.name }}</option>
@@ -26,38 +37,55 @@
         </div>
     </div>
     {% else %}
+    {% if not current_user.is_admin %}
+    <div
+        style="margin-bottom: 1.5rem; padding: 1.5rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; text-align: center;">
+        <i class="fas fa-exclamation-triangle" style="font-size: 2rem; color: #dc2626; margin-bottom: 0.5rem;"></i>
+        <p style="color: #991b1b; font-weight: 600; margin-bottom: 0.5rem;">No hay plantillas disponibles</p>
+        <p style="color: #7f1d1d; font-size: 0.9rem;">Contacta a un administrador para crear plantillas de tareas.</p>
+    </div>
+    {% else %}
     <div style="margin-bottom: 1.5rem; text-align: center;">
         <a href="{{ url_for('main.manage_templates') }}" class="button-secondary" style="text-decoration: none;">
             <i class="fas fa-copy"></i> Crear Plantillas de Tareas
         </a>
     </div>
     {% endif %}
+    {% endif %}
 
-    <form method="POST">
+    <form method="POST" id="taskForm">
+        <!-- Hidden field to track if template was used -->
+        <input type="hidden" id="template_used" name="template_used" value="">
+
         <div class="form-group">
             <label for="title"><i class="fas fa-heading"></i> Título</label>
-            <input type="text" id="title" name="title" required placeholder="Título de la tarea">
+            <input type="text" id="title" name="title" required placeholder="Título de la tarea" {% if not
+                current_user.is_admin %}readonly{% endif %}>
         </div>
 
         <div class="form-group">
             <label for="description"><i class="fas fa-align-left"></i> Descripción</label>
-            <textarea id="description" name="description" rows="4"
-                placeholder="Descripción detallada de la tarea"></textarea>
+            <textarea id="description" name="description" rows="4" placeholder="Descripción detallada de la tarea" {% if
+                not current_user.is_admin %}readonly{% endif %}></textarea>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div class="form-group">
                 <label for="priority"><i class="fas fa-exclamation-circle"></i> Prioridad</label>
-                <select id="priority" name="priority" required>
+                <select id="priority" name="priority" required {% if not current_user.is_admin %}disabled{% endif %}>
                     <option value="Normal">Normal</option>
                     <option value="Media">Media</option>
                     <option value="Urgente">Urgente</option>
                 </select>
+                {% if not current_user.is_admin %}
+                <input type="hidden" name="priority" id="priority_hidden" value="Normal">
+                {% endif %}
             </div>
 
             <div class="form-group">
                 <label for="due_date"><i class="fas fa-calendar-day"></i> Fecha de Vencimiento</label>
-                <input type="date" id="due_date" name="due_date" required>
+                <input type="date" id="due_date" name="due_date" required {% if not current_user.is_admin %}readonly{%
+                    endif %}>
             </div>
         </div>
 
@@ -113,7 +141,8 @@
                 style="padding: 0.9rem 2rem; text-decoration: none; color: var(--text-light); font-weight: 600; border-radius: 10px; border: 2px solid var(--border-color); transition: var(--transition);">
                 <i class="fas fa-times"></i> Cancelar
             </a>
-            <button type="submit">
+            <button type="submit" id="submitBtn" {% if not current_user.is_admin and templates %}disabled
+                style="opacity: 0.5; cursor: not-allowed;" {% endif %}>
                 <i class="fas fa-check"></i> Crear Tarea
             </button>
         </div>
@@ -160,6 +189,15 @@
                 document.getElementById('priority').value = data.priority;
                 document.getElementById('due_date').value = data.due_date;
 
+                // Update hidden priority field for non-admins
+                const priorityHidden = document.getElementById('priority_hidden');
+                if (priorityHidden) {
+                    priorityHidden.value = data.priority;
+                }
+
+                // Mark template as used
+                document.getElementById('template_used').value = templateId;
+
                 // Fill time_spent
                 if (data.time_spent && data.time_spent > 0) {
                     document.getElementById('time_spent').value = data.time_spent;
@@ -173,6 +211,14 @@
                 });
 
                 updateSelectedTags();
+
+                // Enable submit button for non-admin users
+                const submitBtn = document.getElementById('submitBtn');
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.style.opacity = '1';
+                    submitBtn.style.cursor = 'pointer';
+                }
 
                 // Visual feedback
                 selector.style.borderColor = '#10b981';

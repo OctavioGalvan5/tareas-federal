@@ -108,22 +108,54 @@ def create_task():
     templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
 
     if request.method == 'POST':
-        title = request.form.get('title')
-        description = request.form.get('description')
-        priority = request.form.get('priority')
-        due_date_str = request.form.get('due_date')
-        assignee_ids = request.form.getlist('assignees')
-        time_spent_str = request.form.get('time_spent')
-        
-        due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
-        
-        # Parse time_spent (in minutes)
-        time_spent = None
-        if time_spent_str and time_spent_str.strip():
+        # --- NON-ADMIN USERS: ENFORCE TEMPLATE USAGE ---
+        if not current_user.is_admin:
+            template_id_str = request.form.get('template_used')
+            
+            if not template_id_str:
+                flash('Debes seleccionar una plantilla para crear una tarea.', 'danger')
+                return redirect(url_for('main.create_task'))
+            
             try:
-                time_spent = int(time_spent_str)
-            except ValueError:
-                time_spent = None
+                template_id = int(template_id_str)
+                template = TaskTemplate.query.get(template_id)
+                
+                if not template:
+                    flash('Plantilla no encontrada.', 'danger')
+                    return redirect(url_for('main.create_task'))
+                
+                # Use template values for core fields (ignore form input)
+                title = template.title
+                description = template.description or ''
+                priority = template.priority
+                time_spent = template.time_spent
+                
+                # Calculate due_date from template (ignore form input)
+                due_date = date.today() + timedelta(days=template.default_days)
+                
+            except (ValueError, TypeError):
+                flash('ID de plantilla inválido.', 'danger')
+                return redirect(url_for('main.create_task'))
+        else:
+            # --- ADMIN USERS: USE FORM INPUT ---
+            title = request.form.get('title')
+            description = request.form.get('description')
+            priority = request.form.get('priority')
+            due_date_str = request.form.get('due_date')
+            time_spent_str = request.form.get('time_spent')
+            
+            due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+            
+            # Parse time_spent (in minutes)
+            time_spent = None
+            if time_spent_str and time_spent_str.strip():
+                try:
+                    time_spent = int(time_spent_str)
+                except ValueError:
+                    time_spent = None
+        
+        # Common processing for both admin and non-admin
+        assignee_ids = request.form.getlist('assignees')
         
         new_task = Task(
             title=title,

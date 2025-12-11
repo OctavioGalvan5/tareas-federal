@@ -324,6 +324,87 @@ def task_details(task_id):
     task = Task.query.get_or_404(task_id)
     return render_template('task_details.html', task=task)
 
+@main_bp.route('/task-tree')
+@login_required
+def task_tree():
+    """Display all tasks in a hierarchical tree view"""
+    # Get filter parameters (same as dashboard)
+    filter_assignee = request.args.get('assignee')
+    filter_creator = request.args.get('creator')
+    filter_status = request.args.get('status', '')
+    filter_tag = request.args.get('tag_filter')
+    sort_order = request.args.get('sort', 'asc')
+    search_query = request.args.get('q', '')
+    
+    # Base query: get all root tasks (tasks without parent)
+    query = Task.query.options(
+        joinedload(Task.children),
+        joinedload(Task.assignees),
+        joinedload(Task.tags)
+    ).filter(Task.parent_id == None)
+    
+    # Apply assignee filter
+    if filter_assignee:
+        query = query.filter(Task.assignees.any(id=filter_assignee))
+    
+    # Apply creator filter
+    if filter_creator:
+        query = query.filter(Task.creator_id == filter_creator)
+    
+    # Apply status filter - exclude 'Anulado' by default
+    if filter_status:
+        if filter_status in ['Pending', 'Completed', 'Anulado']:
+            query = query.filter(Task.status == filter_status)
+    else:
+        query = query.filter(Task.status != 'Anulado')
+    
+    # Apply tag filter
+    if filter_tag:
+        query = query.filter(Task.tags.any(id=int(filter_tag)))
+    
+    # Apply search filter
+    if search_query:
+        search_term = f"%{search_query}%"
+        query = query.filter(
+            (Task.title.ilike(search_term)) | 
+            (Task.description.ilike(search_term))
+        )
+    
+    # Apply sort order
+    if sort_order == 'desc':
+        root_tasks = query.order_by(Task.due_date.desc()).all()
+    else:
+        root_tasks = query.order_by(Task.due_date.asc()).all()
+    
+    # Get counts for stats
+    total_tasks = Task.query.filter(Task.status != 'Anulado').count()
+    tasks_with_children = Task.query.filter(
+        Task.status != 'Anulado',
+        Task.children.any()
+    ).count()
+    tasks_with_parent = Task.query.filter(
+        Task.status != 'Anulado',
+        Task.parent_id != None
+    ).count()
+    
+    # Get users and tags for filter dropdowns
+    users = User.query.all()
+    all_tags = Tag.query.order_by(Tag.name).all()
+    
+    return render_template('task_tree.html', 
+                           root_tasks=root_tasks,
+                           filter_status=filter_status,
+                           filter_assignee=filter_assignee,
+                           filter_creator=filter_creator,
+                           filter_tag=filter_tag,
+                           sort_order=sort_order,
+                           search_query=search_query,
+                           total_tasks=total_tasks,
+                           tasks_with_children=tasks_with_children,
+                           tasks_with_parent=tasks_with_parent,
+                           users=users,
+                           all_tags=all_tags)
+
 @main_bp.route('/calendar')
 @login_required
 def calendar():

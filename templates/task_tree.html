@@ -1,0 +1,597 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div
+        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <h2 style="margin: 0;"><i class="fas fa-sitemap"></i> Árbol de Tareas</h2>
+            <p style="color: var(--text-light); margin: 0.5rem 0 0 0;">Visualización jerárquica de tareas padre e hijas
+            </p>
+        </div>
+        <a href="{{ url_for('main.dashboard') }}" class="button-secondary">
+            <i class="fas fa-arrow-left"></i> Volver al Tablero
+        </a>
+    </div>
+
+    <!-- Stats Cards -->
+    <div
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div class="stat-card">
+            <i class="fas fa-tasks"></i>
+            <div class="stat-number">{{ total_tasks }}</div>
+            <div class="stat-label">Total Tareas</div>
+        </div>
+        <div class="stat-card" style="border-left-color: #8b5cf6;">
+            <i class="fas fa-project-diagram" style="color: #8b5cf6;"></i>
+            <div class="stat-number">{{ tasks_with_children }}</div>
+            <div class="stat-label">Tareas Padre</div>
+        </div>
+        <div class="stat-card" style="border-left-color: #06b6d4;">
+            <i class="fas fa-level-down-alt" style="color: #06b6d4;"></i>
+            <div class="stat-number">{{ tasks_with_parent }}</div>
+            <div class="stat-label">Subtareas</div>
+        </div>
+    </div>
+
+    <!-- Filters Section (same as Dashboard) -->
+    <form method="GET" action="{{ url_for('main.task_tree') }}">
+        <div class="filters-section"
+            style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem;">
+            <div class="filters-form" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 180px;">
+                    <label
+                        style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Asignado
+                        a</label>
+                    <select name="assignee" onchange="this.form.submit()"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                        <option value="">Todos</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}" {% if filter_assignee|string==user.id|string %}selected{% endif
+                            %}>{{ user.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div style="flex: 1; min-width: 180px;">
+                    <label
+                        style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Creado
+                        por</label>
+                    <select name="creator" onchange="this.form.submit()"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                        <option value="">Todos</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}" {% if filter_creator|string==user.id|string %}selected{% endif %}>
+                            {{ user.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div style="flex: 1; min-width: 140px;">
+                    <label
+                        style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Estado</label>
+                    <select name="status" onchange="this.form.submit()"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                        <option value="" {% if not filter_status %}selected{% endif %}>Todos (sin anulados)</option>
+                        <option value="Pending" {% if filter_status=='Pending' %}selected{% endif %}>Pendiente</option>
+                        <option value="Completed" {% if filter_status=='Completed' %}selected{% endif %}>Completado
+                        </option>
+                        <option value="Anulado" {% if filter_status=='Anulado' %}selected{% endif %}>Anulado</option>
+                    </select>
+                </div>
+
+                <div style="flex: 1; min-width: 130px;">
+                    <label
+                        style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Etiqueta</label>
+                    <select name="tag_filter" onchange="this.form.submit()"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                        <option value="">Todas</option>
+                        {% for tag in all_tags %}
+                        <option value="{{ tag.id }}" {% if filter_tag|string==tag.id|string %}selected{% endif %}>{{
+                            tag.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div style="flex: 0 0 auto; min-width: 140px;">
+                    <label
+                        style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Ordenar</label>
+                    <select name="sort" onchange="this.form.submit()"
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                        <option value="asc" {% if sort_order=='asc' %}selected{% endif %}>↑ Más próximas</option>
+                        <option value="desc" {% if sort_order=='desc' %}selected{% endif %}>↓ Más lejanas</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem;">
+                    <button type="submit" class="button"
+                        style="padding: 0.5rem 1rem; height: 38px; display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="fas fa-filter"></i> Filtrar
+                    </button>
+                    <button type="button" onclick="expandAll()" title="Expandir todo"
+                        style="height: 38px; padding: 0 1rem; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 500;">
+                        <i class="fas fa-expand-arrows-alt"></i> Expandir
+                    </button>
+                    <button type="button" onclick="collapseAll()" title="Colapsar todo"
+                        style="height: 38px; padding: 0 1rem; background: #64748b; color: white; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 500;">
+                        <i class="fas fa-compress-arrows-alt"></i> Colapsar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-section"
+            style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 2rem;">
+            <div style="position: relative;">
+                <i class="fas fa-search"
+                    style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-light);"></i>
+                <input type="text" name="q" placeholder="Buscar tarea por nombre o descripción..."
+                    value="{{ search_query or '' }}"
+                    style="width: 100%; padding: 0.8rem 1rem 0.8rem 2.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 1rem;">
+            </div>
+        </div>
+    </form>
+
+    <!-- Tree View -->
+    <div class="tree-container">
+        {% if root_tasks %}
+        {% for task in root_tasks %}
+        {# Level 0 - Root tasks #}
+        <div class="tree-node" data-level="0" data-task-id="{{ task.id }}">
+            <div class="tree-node-content">
+                {% if task.children|length > 0 %}
+                <button class="expand-toggle expanded" onclick="toggleNode(this)" title="Expandir/Colapsar">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                {% else %}
+                <span class="expand-placeholder"></span>
+                {% endif %}
+
+                <div class="tree-node-main">
+                    <div class="tree-node-header">
+                        <span class="task-id-badge">#{{ task.id }}</span>
+                        <a href="{{ url_for('main.task_details', task_id=task.id) }}" class="task-link">{{ task.title
+                            }}</a>
+                        <span class="priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
+                        {% if task.status == 'Completed' %}
+                        <span class="status-chip completed"><i class="fas fa-check-circle"></i> Completada</span>
+                        {% elif task.status == 'Anulado' %}
+                        <span class="status-chip anulado"><i class="fas fa-ban"></i> Anulada</span>
+                        {% else %}
+                        <span class="status-chip pending"><i class="fas fa-clock"></i> Pendiente</span>
+                        {% endif %}
+                        {% if task.children|length > 0 %}
+                        <span class="children-count" title="Subtareas"><i class="fas fa-sitemap"></i> {{
+                            task.children|length }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="tree-node-meta">
+                        <span><i class="fas fa-calendar"></i> {{ task.due_date.strftime('%d/%m/%Y') }}</span>
+                        <span><i class="fas fa-user"></i> {{ task.creator.full_name }}</span>
+                    </div>
+                </div>
+
+                <div class="tree-node-actions">
+                    <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="action-btn" title="Editar"><i
+                            class="fas fa-edit"></i></a>
+                    <a href="{{ url_for('main.task_details', task_id=task.id) }}" class="action-btn"
+                        title="Ver detalles"><i class="fas fa-eye"></i></a>
+                </div>
+            </div>
+
+            {% if task.children|length > 0 %}
+            <div class="tree-children">
+                {% for child1 in task.children|sort(attribute='due_date') %}
+                {% if child1.status != 'Anulado' or filter_status == 'Anulado' %}
+                {# Level 1 #}
+                <div class="tree-node" data-level="1" data-task-id="{{ child1.id }}">
+                    <div class="tree-node-content" style="margin-left: 2rem;">
+                        {% if child1.children|length > 0 %}
+                        <button class="expand-toggle expanded" onclick="toggleNode(this)" title="Expandir/Colapsar">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        {% else %}
+                        <span class="expand-placeholder"></span>
+                        {% endif %}
+
+                        <div class="tree-node-main">
+                            <div class="tree-node-header">
+                                <span class="task-id-badge">#{{ child1.id }}</span>
+                                <a href="{{ url_for('main.task_details', task_id=child1.id) }}" class="task-link">{{
+                                    child1.title }}</a>
+                                <span class="priority-badge priority-{{ child1.priority|lower }}">{{ child1.priority
+                                    }}</span>
+                                {% if child1.status == 'Completed' %}
+                                <span class="status-chip completed"><i class="fas fa-check-circle"></i>
+                                    Completada</span>
+                                {% elif child1.status == 'Anulado' %}
+                                <span class="status-chip anulado"><i class="fas fa-ban"></i> Anulada</span>
+                                {% else %}
+                                <span class="status-chip pending"><i class="fas fa-clock"></i> Pendiente</span>
+                                {% endif %}
+                                {% if child1.children|length > 0 %}
+                                <span class="children-count"><i class="fas fa-sitemap"></i> {{ child1.children|length
+                                    }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="tree-node-meta">
+                                <span><i class="fas fa-calendar"></i> {{ child1.due_date.strftime('%d/%m/%Y') }}</span>
+                                <span><i class="fas fa-user"></i> {{ child1.creator.full_name }}</span>
+                            </div>
+                        </div>
+
+                        <div class="tree-node-actions">
+                            <a href="{{ url_for('main.edit_task', task_id=child1.id) }}" class="action-btn"
+                                title="Editar"><i class="fas fa-edit"></i></a>
+                            <a href="{{ url_for('main.task_details', task_id=child1.id) }}" class="action-btn"
+                                title="Ver detalles"><i class="fas fa-eye"></i></a>
+                        </div>
+                    </div>
+
+                    {% if child1.children|length > 0 %}
+                    <div class="tree-children">
+                        {% for child2 in child1.children|sort(attribute='due_date') %}
+                        {% if child2.status != 'Anulado' or filter_status == 'Anulado' %}
+                        {# Level 2 #}
+                        <div class="tree-node" data-level="2" data-task-id="{{ child2.id }}">
+                            <div class="tree-node-content" style="margin-left: 4rem;">
+                                {% if child2.children|length > 0 %}
+                                <button class="expand-toggle expanded" onclick="toggleNode(this)"
+                                    title="Expandir/Colapsar">
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                                {% else %}
+                                <span class="expand-placeholder"></span>
+                                {% endif %}
+
+                                <div class="tree-node-main">
+                                    <div class="tree-node-header">
+                                        <span class="task-id-badge">#{{ child2.id }}</span>
+                                        <a href="{{ url_for('main.task_details', task_id=child2.id) }}"
+                                            class="task-link">{{ child2.title }}</a>
+                                        <span class="priority-badge priority-{{ child2.priority|lower }}">{{
+                                            child2.priority }}</span>
+                                        {% if child2.status == 'Completed' %}
+                                        <span class="status-chip completed"><i class="fas fa-check-circle"></i></span>
+                                        {% elif child2.status == 'Anulado' %}
+                                        <span class="status-chip anulado"><i class="fas fa-ban"></i></span>
+                                        {% else %}
+                                        <span class="status-chip pending"><i class="fas fa-clock"></i></span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="tree-node-meta">
+                                        <span><i class="fas fa-calendar"></i> {{ child2.due_date.strftime('%d/%m/%Y')
+                                            }}</span>
+                                    </div>
+                                </div>
+
+                                <div class="tree-node-actions">
+                                    <a href="{{ url_for('main.edit_task', task_id=child2.id) }}" class="action-btn"
+                                        title="Editar"><i class="fas fa-edit"></i></a>
+                                    <a href="{{ url_for('main.task_details', task_id=child2.id) }}" class="action-btn"
+                                        title="Ver detalles"><i class="fas fa-eye"></i></a>
+                                </div>
+                            </div>
+
+                            {% if child2.children|length > 0 %}
+                            <div class="tree-children">
+                                {% for child3 in child2.children|sort(attribute='due_date') %}
+                                {% if child3.status != 'Anulado' or filter_status == 'Anulado' %}
+                                {# Level 3 #}
+                                <div class="tree-node" data-level="3" data-task-id="{{ child3.id }}">
+                                    <div class="tree-node-content" style="margin-left: 6rem;">
+                                        <span class="expand-placeholder"></span>
+                                        <div class="tree-node-main">
+                                            <div class="tree-node-header">
+                                                <span class="task-id-badge">#{{ child3.id }}</span>
+                                                <a href="{{ url_for('main.task_details', task_id=child3.id) }}"
+                                                    class="task-link">{{ child3.title }}</a>
+                                                <span class="priority-badge priority-{{ child3.priority|lower }}">{{
+                                                    child3.priority }}</span>
+                                                {% if child3.status == 'Completed' %}
+                                                <span class="status-chip completed"><i
+                                                        class="fas fa-check-circle"></i></span>
+                                                {% else %}
+                                                <span class="status-chip pending"><i class="fas fa-clock"></i></span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="tree-node-actions">
+                                            <a href="{{ url_for('main.task_details', task_id=child3.id) }}"
+                                                class="action-btn" title="Ver detalles"><i class="fas fa-eye"></i></a>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div style="text-align: center; padding: 3rem; color: var(--text-light);">
+            <i class="fas fa-inbox" style="font-size: 4rem; opacity: 0.3; margin-bottom: 1rem;"></i>
+            <p style="font-size: 1.2rem;">No hay tareas que mostrar.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+    .stat-card {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        border-left: 4px solid var(--primary-color);
+        text-align: center;
+    }
+
+    .stat-card i {
+        font-size: 2rem;
+        color: var(--primary-color);
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-number {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-color);
+    }
+
+    .stat-label {
+        font-size: 0.9rem;
+        color: var(--text-light);
+        font-weight: 500;
+    }
+
+    .tree-btn {
+        padding: 0.5rem 1rem;
+        background: white;
+        border: 2px solid var(--border-color);
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .tree-btn:hover {
+        background: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+    }
+
+    .tree-container {
+        border: 2px solid var(--border-color);
+        border-radius: 12px;
+        padding: 1rem;
+        background: white;
+    }
+
+    .tree-node {
+        position: relative;
+    }
+
+    .tree-node-content {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+        border-radius: 10px;
+        margin-bottom: 0.5rem;
+        transition: all 0.2s;
+        border-left: 4px solid transparent;
+    }
+
+    .tree-node-content:hover {
+        background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+        border-left-color: var(--primary-color);
+        transform: translateX(5px);
+    }
+
+    .expand-toggle {
+        width: 28px;
+        height: 28px;
+        border: none;
+        background: var(--primary-color);
+        color: white;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        flex-shrink: 0;
+    }
+
+    .expand-toggle:hover {
+        background: #4f46e5;
+        transform: scale(1.1);
+    }
+
+    .expand-toggle i {
+        transition: transform 0.3s;
+    }
+
+    .expand-toggle.collapsed i {
+        transform: rotate(-90deg);
+    }
+
+    .expand-placeholder {
+        width: 28px;
+        height: 28px;
+        flex-shrink: 0;
+    }
+
+    .tree-node-main {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .tree-node-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .task-id-badge {
+        background: var(--primary-color);
+        color: white;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 700;
+    }
+
+    .task-link {
+        font-weight: 600;
+        color: var(--text-color);
+        text-decoration: none;
+        transition: color 0.2s;
+    }
+
+    .task-link:hover {
+        color: var(--primary-color);
+    }
+
+    .status-chip {
+        padding: 0.2rem 0.6rem;
+        border-radius: 15px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .status-chip.completed {
+        background: #d1fae5;
+        color: #059669;
+    }
+
+    .status-chip.pending {
+        background: #fef3c7;
+        color: #d97706;
+    }
+
+    .status-chip.anulado {
+        background: #f3f4f6;
+        color: #6b7280;
+    }
+
+    .children-count {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        padding: 0.2rem 0.6rem;
+        border-radius: 15px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .tree-node-meta {
+        display: flex;
+        gap: 1rem;
+        margin-top: 0.4rem;
+        font-size: 0.85rem;
+        color: var(--text-light);
+        flex-wrap: wrap;
+    }
+
+    .tree-node-meta i {
+        margin-right: 0.25rem;
+    }
+
+    .tree-node-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+
+    .action-btn {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        color: var(--text-light);
+        text-decoration: none;
+        transition: all 0.2s;
+        background: white;
+        border: 1px solid var(--border-color);
+    }
+
+    .action-btn:hover {
+        background: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+    }
+
+    .tree-children {
+        padding-left: 0.5rem;
+        border-left: 2px dashed #cbd5e1;
+        margin-left: 1rem;
+        transition: all 0.3s;
+    }
+
+    .tree-children.collapsed {
+        display: none;
+    }
+
+    /* Visual connector lines by level */
+    .tree-node[data-level="1"] .tree-node-content {
+        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    }
+
+    .tree-node[data-level="2"] .tree-node-content {
+        background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%);
+    }
+
+    .tree-node[data-level="3"] .tree-node-content {
+        background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+    }
+</style>
+
+<script>
+
+    function toggleNode(btn) {
+        const node = btn.closest('.tree-node');
+        const children = node.querySelector(':scope > .tree-children');
+        if (children) {
+            children.classList.toggle('collapsed');
+            btn.classList.toggle('collapsed');
+            btn.classList.toggle('expanded');
+        }
+    }
+
+    function expandAll() {
+        document.querySelectorAll('.tree-children').forEach(el => el.classList.remove('collapsed'));
+        document.querySelectorAll('.expand-toggle').forEach(btn => {
+            btn.classList.remove('collapsed');
+            btn.classList.add('expanded');
+        });
+    }
+
+    function collapseAll() {
+        document.querySelectorAll('.tree-children').forEach(el => el.classList.add('collapsed'));
+        document.querySelectorAll('.expand-toggle').forEach(btn => {
+            btn.classList.add('collapsed');
+            btn.classList.remove('expanded');
+        });
+    }
+</script>
+{% endblock %}

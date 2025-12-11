@@ -86,11 +86,18 @@ def dashboard():
             (Task.description.ilike(search_term))
         )
         
-    # Sort by due_date - ascending or descending
+    # Sort by status first (Pending before Completed), then by due_date
+    # Using db.case to assign sort priority: Pending=0, Completed=1, Anulado=2
+    status_order = db.case(
+        (Task.status == 'Pending', 0),
+        (Task.status == 'Completed', 1),
+        else_=2
+    )
+    
     if sort_order == 'desc':
-        tasks = tasks_query.order_by(Task.due_date.desc()).all()
+        tasks = tasks_query.order_by(status_order, Task.due_date.desc()).all()
     else:
-        tasks = tasks_query.order_by(Task.due_date.asc()).all()
+        tasks = tasks_query.order_by(status_order, Task.due_date.asc()).all()
     
     # Check for tasks due today for highlighting
     today = date.today()
@@ -370,11 +377,17 @@ def task_tree():
             (Task.description.ilike(search_term))
         )
     
-    # Apply sort order
+    # Sort by status first (Pending before Completed), then by due_date
+    status_order = db.case(
+        (Task.status == 'Pending', 0),
+        (Task.status == 'Completed', 1),
+        else_=2
+    )
+    
     if sort_order == 'desc':
-        root_tasks = query.order_by(Task.due_date.desc()).all()
+        root_tasks = query.order_by(status_order, Task.due_date.desc()).all()
     else:
-        root_tasks = query.order_by(Task.due_date.asc()).all()
+        root_tasks = query.order_by(status_order, Task.due_date.asc()).all()
     
     # Get counts for stats
     total_tasks = Task.query.filter(Task.status != 'Anulado').count()

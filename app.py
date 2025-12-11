@@ -1,14 +1,28 @@
 import os
+from datetime import datetime
 from flask import Flask, render_template, redirect, url_for, flash, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
+import pytz
 
 # Load environment variables
 load_dotenv()
 
 from extensions import db, login_manager
+
+# Buenos Aires timezone
+BUENOS_AIRES_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
+
+def to_buenos_aires(dt):
+    """Convert a datetime to Buenos Aires timezone."""
+    if dt is None:
+        return None
+    # If the datetime is naive (no timezone), assume it's UTC
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    return dt.astimezone(BUENOS_AIRES_TZ)
 
 # Initialize extensions
 # db = SQLAlchemy() -> Moved to extensions.py
@@ -49,6 +63,9 @@ def create_app(test_config=None):
 
         # Create database tables for development (if they don't exist)
         # db.create_all() -> Removed for production performance. Run migrations manually.
+    
+    # Register custom Jinja2 filters
+    app.jinja_env.filters['to_buenos_aires'] = to_buenos_aires
 
     return app
 

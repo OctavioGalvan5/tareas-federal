@@ -166,7 +166,7 @@
                     <i class="fas fa-calendar-check"></i>
                     <div>
                         <strong>Fecha de vencimiento:</strong>
-                        <p>{{ task.due_date.strftime('%d/%m/%Y %H:%M') }}</p>
+                        <p>{{ (task.due_date|to_buenos_aires).strftime('%d/%m/%Y %H:%M') }}</p>
                     </div>
                 </div>
 
@@ -174,7 +174,7 @@
                     <i class="fas fa-info-circle"></i>
                     <div>
                         <strong>Creado el:</strong>
-                        <p>{{ task.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                        <p>{{ (task.created_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M') }}</p>
                     </div>
                 </div>
 
@@ -184,7 +184,7 @@
                     <div>
                         <strong>Completado por:</strong>
                         <p style="color: var(--success-color); font-weight: 600;">{{ task.completed_by.full_name }} - {{
-                            task.completed_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                            (task.completed_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M') }}</p>
                     </div>
                 </div>
                 {% endif %}

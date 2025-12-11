@@ -211,11 +211,13 @@
                     assignee.full_name }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
                 {% if task.status == 'Completed' and task.completed_by %}
                 <span style="color: var(--success-color); font-weight: 600;"><i class="fas fa-check-circle"></i>
-                    Completado por: {{ task.completed_by.full_name }} ({{ task.completed_at.strftime('%d/%m/%Y %H:%M')
+                    Completado por: {{ task.completed_by.full_name }} ({{
+                    (task.completed_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M')
                     }})</span>
                 {% elif task.status == 'Anulado' and task.completed_by %}
                 <span style="color: #9ca3af; font-weight: 600;"><i class="fas fa-ban"></i>
-                    Anulado por: {{ task.completed_by.full_name }} ({{ task.completed_at.strftime('%d/%m/%Y %H:%M')
+                    Anulado por: {{ task.completed_by.full_name }} ({{
+                    (task.completed_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M')
                     }})</span>
                 {% endif %}
             </div>

@@ -111,3 +111,31 @@ class TaskTemplate(db.Model):
     
     def __repr__(self):
         return f'<TaskTemplate {self.name}>'
+
+# Association table for Many-to-Many relationship between Expirations and Tags
+expiration_tags = db.Table('expiration_tags',
+    db.Column('expiration_id', db.Integer, db.ForeignKey('expiration.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('tag_id', db.Integer, db.ForeignKey('tag.id', ondelete='CASCADE'), primary_key=True)
+)
+
+class Expiration(db.Model):
+    """
+    Vencimientos: entradas de calendario visibles para todos los usuarios.
+    A diferencia de las tareas, cualquier usuario puede crear vencimientos.
+    No se incluyen en reportes.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    due_date = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    completed = db.Column(db.Boolean, default=False)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    
+    # Relationships
+    creator = db.relationship('User', backref='expirations')
+    tags = db.relationship('Tag', secondary=expiration_tags, backref=db.backref('expirations', lazy='dynamic'))
+    
+    def __repr__(self):
+        return f'<Expiration {self.title}>'

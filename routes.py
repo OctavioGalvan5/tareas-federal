@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, make_response
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
-from models import User, Task, Tag, TaskTemplate
+from models import User, Task, Tag, TaskTemplate, Expiration
 from datetime import datetime, date, timedelta
 from pdf_utils import generate_task_pdf
 from excel_utils import generate_task_excel
@@ -110,58 +110,33 @@ def dashboard():
 @main_bp.route('/task/new', methods=['GET', 'POST'])
 @login_required
 def create_task():
+    # --- SOLO ADMINISTRADORES PUEDEN CREAR TAREAS ---
+    if not current_user.is_admin:
+        flash('Solo los administradores pueden crear tareas. Usa el calendario de vencimientos para crear recordatorios.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
     users = User.query.all()
     available_tags = Tag.query.order_by(Tag.name).all()
     templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
 
     if request.method == 'POST':
-        # --- NON-ADMIN USERS: ENFORCE TEMPLATE USAGE ---
-        if not current_user.is_admin:
-            template_id_str = request.form.get('template_used')
-            
-            if not template_id_str:
-                flash('Debes seleccionar una plantilla para crear una tarea.', 'danger')
-                return redirect(url_for('main.create_task'))
-            
-            try:
-                template_id = int(template_id_str)
-                template = TaskTemplate.query.get(template_id)
-                
-                if not template:
-                    flash('Plantilla no encontrada.', 'danger')
-                    return redirect(url_for('main.create_task'))
-                
-                # Use template values for core fields (ignore form input)
-                title = template.title
-                description = template.description or ''
-                priority = template.priority
-                time_spent = template.time_spent
-                
-                # Calculate due_date from template (ignore form input)
-                due_date = date.today() + timedelta(days=template.default_days)
-                
-            except (ValueError, TypeError):
-                flash('ID de plantilla inválido.', 'danger')
-                return redirect(url_for('main.create_task'))
-        else:
-            # --- ADMIN USERS: USE FORM INPUT ---
-            title = request.form.get('title')
-            description = request.form.get('description')
-            priority = request.form.get('priority')
-            due_date_str = request.form.get('due_date')
-            time_spent_str = request.form.get('time_spent')
-            
-            due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
-            
-            # Parse time_spent (in minutes)
-            time_spent = None
-            if time_spent_str and time_spent_str.strip():
-                try:
-                    time_spent = int(time_spent_str)
-                except ValueError:
-                    time_spent = None
+        title = request.form.get('title')
+        description = request.form.get('description')
+        priority = request.form.get('priority')
+        due_date_str = request.form.get('due_date')
+        time_spent_str = request.form.get('time_spent')
         
-        # Common processing for both admin and non-admin
+        due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+        
+        # Parse time_spent (in minutes)
+        time_spent = None
+        if time_spent_str and time_spent_str.strip():
+            try:
+                time_spent = int(time_spent_str)
+            except ValueError:
+                time_spent = None
+        
+        # Process task creation
         assignee_ids = request.form.getlist('assignees')
         
         new_task = Task(
@@ -775,11 +750,11 @@ def manage_users():
 @login_required
 def api_tasks_due_soon():
     """
-    Return tasks that are due in 2 business days.
+    Return tasks and expirations that are due in 2 business days.
     Used for popup notifications.
     """
     if not current_user.notifications_enabled:
-        return jsonify({'tasks': []})
+        return jsonify({'tasks': [], 'expirations': []})
     
     # Get all pending tasks assigned to current user
     pending_tasks = Task.query.filter(
@@ -798,10 +773,34 @@ def api_tasks_due_soon():
                 'due_date': task.due_date.strftime('%d/%m/%Y'),
                 'priority': task.priority,
                 'description': task.description[:100] if task.description else '',
-                'days_remaining': business_days
+                'days_remaining': business_days,
+                'type': 'task'
             })
     
-    return jsonify({'tasks': due_soon_tasks})
+    # Get all pending expirations (visible for everyone)
+    pending_expirations = Expiration.query.filter(
+        Expiration.completed == False
+    ).all()
+    
+    # Filter expirations that are due in 2 or fewer business days
+    due_soon_expirations = []
+    for exp in pending_expirations:
+        business_days = calculate_business_days_until(exp.due_date)
+        if business_days <= 2:
+            due_soon_expirations.append({
+                'id': exp.id,
+                'title': exp.title,
+                'due_date': exp.due_date.strftime('%d/%m/%Y'),
+                'description': exp.description[:100] if exp.description else '',
+                'days_remaining': business_days,
+                'type': 'expiration',
+                'creator': exp.creator.full_name
+            })
+    
+    return jsonify({
+        'tasks': due_soon_tasks,
+        'expirations': due_soon_expirations
+    })
 
 @main_bp.route('/api/user/toggle_notifications', methods=['POST'])
 @login_required
@@ -1398,7 +1397,11 @@ def calculate_kpis(tasks, global_completed):
 @main_bp.route('/import/template')
 @login_required
 def download_import_template():
-    """Download the Excel template for importing tasks"""
+    """Download the Excel template for importing tasks - SOLO ADMIN"""
+    if not current_user.is_admin:
+        flash('Solo los administradores pueden importar tareas.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
     import os
     template_path = os.path.join(os.path.dirname(__file__), 'static', 'plantilla_tareas.xlsx')
     
@@ -1417,7 +1420,11 @@ def download_import_template():
 @main_bp.route('/import/tasks', methods=['POST'])
 @login_required
 def import_tasks():
-    """Import tasks from an uploaded Excel file"""
+    """Import tasks from an uploaded Excel file - SOLO ADMIN"""
+    if not current_user.is_admin:
+        flash('Solo los administradores pueden importar tareas.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
     from openpyxl import load_workbook
     
     if 'file' not in request.files:
@@ -1722,3 +1729,193 @@ def api_validate_parent(task_id, parent_id):
     
     return jsonify({'valid': True})
 
+
+# --- Expiration Calendar Routes ---
+
+@main_bp.route('/expirations')
+@login_required
+def expiration_calendar():
+    """Calendario de vencimientos - visible para todos los usuarios"""
+    period = request.args.get('period', 'all')
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    filter_tag = request.args.get('tag_filter')
+    
+    # Query all expirations (visible for everyone)
+    query = Expiration.query.options(joinedload(Expiration.tags), joinedload(Expiration.creator))
+    
+    # Apply date filters
+    today = date.today()
+    
+    if period == 'today':
+        query = query.filter(db.func.date(Expiration.due_date) == today)
+    elif period == 'week':
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+        query = query.filter(db.func.date(Expiration.due_date) >= week_start,
+                           db.func.date(Expiration.due_date) <= week_end)
+    elif period == 'month':
+        month_start = today.replace(day=1)
+        if today.month == 12:
+            month_end = today.replace(day=31)
+        else:
+            month_end = (today.replace(month=today.month + 1, day=1) - timedelta(days=1))
+        query = query.filter(db.func.date(Expiration.due_date) >= month_start,
+                           db.func.date(Expiration.due_date) <= month_end)
+    elif start_date_str and end_date_str:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            query = query.filter(db.func.date(Expiration.due_date) >= start_date,
+                               db.func.date(Expiration.due_date) <= end_date)
+        except ValueError:
+            pass
+    
+    # Apply tag filter
+    if filter_tag:
+        query = query.filter(Expiration.tags.any(id=int(filter_tag)))
+    
+    expirations = query.order_by(Expiration.due_date.asc()).all()
+    available_tags = Tag.query.order_by(Tag.name).all()
+    
+    return render_template('expiration_calendar.html', 
+                          expirations=expirations, 
+                          current_period=period, 
+                          today=today,
+                          available_tags=available_tags)
+
+
+@main_bp.route('/expirations/create', methods=['POST'])
+@login_required
+def create_expiration():
+    """Crear un nuevo vencimiento - disponible para todos los usuarios"""
+    title = request.form.get('title')
+    description = request.form.get('description', '')
+    due_date_str = request.form.get('due_date')
+    
+    if not title or not due_date_str:
+        flash('Título y fecha de vencimiento son requeridos.', 'danger')
+        return redirect(url_for('main.expiration_calendar'))
+    
+    try:
+        due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+    except ValueError:
+        flash('Formato de fecha inválido.', 'danger')
+        return redirect(url_for('main.expiration_calendar'))
+    
+    new_expiration = Expiration(
+        title=title,
+        description=description,
+        due_date=due_date,
+        creator_id=current_user.id
+    )
+    
+    # Add tags
+    tag_ids = request.form.getlist('tags')
+    for tag_id in tag_ids:
+        tag = Tag.query.get(int(tag_id))
+        if tag:
+            new_expiration.tags.append(tag)
+    
+    db.session.add(new_expiration)
+    db.session.commit()
+    
+    flash('Vencimiento creado exitosamente.', 'success')
+    return redirect(url_for('main.expiration_calendar'))
+
+
+@main_bp.route('/expirations/<int:expiration_id>/edit', methods=['POST'])
+@login_required
+def edit_expiration(expiration_id):
+    """Editar un vencimiento existente"""
+    expiration = Expiration.query.get_or_404(expiration_id)
+    
+    # Only creator or admin can edit
+    if expiration.creator_id != current_user.id and not current_user.is_admin:
+        flash('No tienes permiso para editar este vencimiento.', 'danger')
+        return redirect(url_for('main.expiration_calendar'))
+    
+    title = request.form.get('title')
+    description = request.form.get('description', '')
+    due_date_str = request.form.get('due_date')
+    
+    if not title or not due_date_str:
+        flash('Título y fecha de vencimiento son requeridos.', 'danger')
+        return redirect(url_for('main.expiration_calendar'))
+    
+    try:
+        due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+    except ValueError:
+        flash('Formato de fecha inválido.', 'danger')
+        return redirect(url_for('main.expiration_calendar'))
+    
+    expiration.title = title
+    expiration.description = description
+    expiration.due_date = due_date
+    
+    # Update tags
+    tag_ids = request.form.getlist('tags')
+    expiration.tags = []
+    for tag_id in tag_ids:
+        tag = Tag.query.get(int(tag_id))
+        if tag:
+            expiration.tags.append(tag)
+    
+    db.session.commit()
+    
+    flash('Vencimiento actualizado exitosamente.', 'success')
+    return redirect(url_for('main.expiration_calendar'))
+
+
+@main_bp.route('/expirations/<int:expiration_id>/toggle', methods=['POST'])
+@login_required
+def toggle_expiration(expiration_id):
+    """Marcar vencimiento como completado/pendiente"""
+    expiration = Expiration.query.get_or_404(expiration_id)
+    
+    if expiration.completed:
+        expiration.completed = False
+        expiration.completed_at = None
+    else:
+        expiration.completed = True
+        expiration.completed_at = datetime.now()
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'expiration_id': expiration.id,
+        'completed': expiration.completed
+    })
+
+
+@main_bp.route('/expirations/<int:expiration_id>/delete', methods=['POST'])
+@login_required
+def delete_expiration(expiration_id):
+    """Eliminar un vencimiento"""
+    expiration = Expiration.query.get_or_404(expiration_id)
+    
+    # Only creator or admin can delete
+    if expiration.creator_id != current_user.id and not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'No tienes permiso para eliminar este vencimiento.'}), 403
+    
+    db.session.delete(expiration)
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
+
+@main_bp.route('/api/expirations/<int:expiration_id>')
+@login_required
+def api_get_expiration(expiration_id):
+    """API para obtener datos de un vencimiento para edición"""
+    expiration = Expiration.query.get_or_404(expiration_id)
+    
+    return jsonify({
+        'id': expiration.id,
+        'title': expiration.title,
+        'description': expiration.description or '',
+        'due_date': expiration.due_date.strftime('%Y-%m-%d'),
+        'tag_ids': [tag.id for tag in expiration.tags],
+        'completed': expiration.completed
+    })

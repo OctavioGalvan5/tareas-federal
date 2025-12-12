@@ -12,8 +12,19 @@
             </p>
             {% endif %}
         </div>
-        <div style="display: flex; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
             {% if task.status != 'Anulado' %}
+            {% if task.status == 'Completed' %}
+            <span class="button"
+                style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); cursor: default;">
+                <i class="fas fa-check-circle"></i> Completada
+            </span>
+            {% else %}
+            <button onclick="toggleTask({{ task.id }})" class="button"
+                style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                <i class="fas fa-check"></i> Marcar Completada
+            </button>
+            {% endif %}
             <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="button">
                 <i class="fas fa-edit"></i> Editar Tarea
             </a>
@@ -205,6 +216,27 @@
 </div>
 
 <script>
+    function toggleTask(taskId) {
+        fetch(`/task/${taskId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert('Error al actualizar la tarea: ' + (data.error || 'Desconocido'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error de conexión');
+            });
+    }
+
     function anularTask(taskId) {
         if (!confirm('¿Estás seguro de que deseas anular esta tarea? Las tareas anuladas no aparecerán en los informes.')) {
             return;

@@ -3,6 +3,7 @@
 {% block content %}
 <div class="dashboard-header">
     <h1><i class="fas fa-clipboard-list"></i> Mis Tareas</h1>
+    {% if current_user.is_admin %}
     <div style="display: flex; gap: 0.5rem;">
         <button onclick="document.getElementById('importModal').style.display='flex'" class="button-secondary">
             <i class="fas fa-file-import"></i> Importar Excel
@@ -11,8 +12,10 @@
             <i class="fas fa-plus"></i> Nueva Tarea
         </a>
     </div>
+    {% endif %}
 </div>
 
+{% if current_user.is_admin %}
 <!-- Import Modal -->
 <div id="importModal"
     style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
@@ -55,6 +58,7 @@
         </form>
     </div>
 </div>
+{% endif %}
 
 <form method="GET" action="{{ url_for('main.dashboard') }}">
     <div class="filters-section"
@@ -168,11 +172,15 @@
         <div class="task-info">
             <h3>
                 {% if task.status != 'Anulado' %}
-                <button class="toggle-btn {% if task.status == 'Completed' %}completed{% endif %}"
-                    onclick="toggleTask({{ task.id }}, this)"
-                    title="Marcar como {% if task.status == 'Pending' %}completada{% else %}pendiente{% endif %}">
-                    <i class="fas {% if task.status == 'Completed' %}fa-check-circle{% else %}fa-circle{% endif %}"></i>
+                {% if task.status == 'Completed' %}
+                <span class="toggle-btn completed" title="Tarea completada" style="cursor: default;">
+                    <i class="fas fa-check-circle"></i>
+                </span>
+                {% else %}
+                <button class="toggle-btn" onclick="toggleTask({{ task.id }}, this)" title="Marcar como completada">
+                    <i class="fas fa-circle"></i>
                 </button>
+                {% endif %}
                 <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="toggle-btn" title="Editar tarea"
                     style="text-decoration: none;">
                     <i class="fas fa-edit"></i>

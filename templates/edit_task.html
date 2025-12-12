@@ -36,10 +36,23 @@
 
             <div class="form-group">
                 <label for="status"><i class="fas fa-tasks"></i> Estado</label>
+                {% if current_user.is_admin %}
                 <select id="status" name="status" required>
                     <option value="Pending" {% if task.status=='Pending' %}selected{% endif %}>Pendiente</option>
                     <option value="Completed" {% if task.status=='Completed' %}selected{% endif %}>Completado</option>
                 </select>
+                {% else %}
+                <p style="padding: 0.5rem; background: #f1f5f9; border-radius: 6px; color: #64748b; margin: 0;">
+                    {% if task.status == 'Completed' %}
+                    <span style="color: #10b981; font-weight: 600;"><i class="fas fa-check-circle"></i>
+                        Completado</span>
+                    {% else %}
+                    <span style="color: #f59e0b; font-weight: 600;"><i class="fas fa-clock"></i> Pendiente</span>
+                    {% endif %}
+                    <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem;">(Solo
+                        administradores pueden editar)</span>
+                </p>
+                {% endif %}
             </div>
 
             <div class="form-group">

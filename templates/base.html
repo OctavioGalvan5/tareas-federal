@@ -25,8 +25,13 @@
             <a href="{{ url_for('main.dashboard') }}">
                 <i class="fas fa-tasks"></i> Mis Tareas
             </a>
+            {% if current_user.is_admin %}
             <a href="{{ url_for('main.create_task') }}">
                 <i class="fas fa-plus-circle"></i> Nueva Tarea
+            </a>
+            {% endif %}
+            <a href="{{ url_for('main.expiration_calendar') }}">
+                <i class="fas fa-clock"></i> Vencimientos
             </a>
             <a href="{{ url_for('main.calendar') }}">
                 <i class="fas fa-calendar-alt"></i> Calendario
@@ -83,6 +88,8 @@
 
         {% block content %}{% endblock %}
     </div>
+
+    {% block modals %}{% endblock %}
 
     {% if current_user.is_authenticated %}
     <!-- Notification Modal -->

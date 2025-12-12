@@ -124,6 +124,30 @@
     background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
 }
 
+/* Overdue items - Red urgent style */
+.notification-task-item.overdue-item {
+    border-left-color: #dc2626;
+    border-left-width: 6px;
+    background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+    animation: pulse-red 2s ease-in-out infinite;
+}
+
+@keyframes pulse-red {
+
+    0%,
+    100% {
+        box-shadow: 0 2px 8px rgba(220, 38, 38, 0.2);
+    }
+
+    50% {
+        box-shadow: 0 4px 16px rgba(220, 38, 38, 0.4);
+    }
+}
+
+.notification-task-item.overdue-item:hover {
+    background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
+}
+
 .task-icon {
     font-size: 1.5rem;
     color: #fbbf24;

@@ -750,11 +750,11 @@ def manage_users():
 @login_required
 def api_tasks_due_soon():
     """
-    Return tasks and expirations that are due in 2 business days.
+    Return tasks and expirations that are due soon or already overdue.
     Used for popup notifications.
     """
     if not current_user.notifications_enabled:
-        return jsonify({'tasks': [], 'expirations': []})
+        return jsonify({'tasks': [], 'expirations': [], 'overdue_tasks': [], 'overdue_expirations': []})
     
     # Get all pending tasks assigned to current user
     pending_tasks = Task.query.filter(
@@ -762,44 +762,56 @@ def api_tasks_due_soon():
         Task.status == 'Pending'
     ).all()
     
-    # Filter tasks that are due in 2 or fewer business days
+    # Separate tasks into due soon and overdue
     due_soon_tasks = []
+    overdue_tasks = []
     for task in pending_tasks:
         business_days = calculate_business_days_until(task.due_date)
-        if business_days <= 2:  # 0, 1, or 2 business days
-            due_soon_tasks.append({
-                'id': task.id,
-                'title': task.title,
-                'due_date': task.due_date.strftime('%d/%m/%Y'),
-                'priority': task.priority,
-                'description': task.description[:100] if task.description else '',
-                'days_remaining': business_days,
-                'type': 'task'
-            })
+        task_data = {
+            'id': task.id,
+            'title': task.title,
+            'due_date': task.due_date.strftime('%d/%m/%Y'),
+            'priority': task.priority,
+            'description': task.description[:100] if task.description else '',
+            'days_remaining': business_days,
+            'type': 'task'
+        }
+        if business_days < 0:  # Overdue
+            task_data['days_overdue'] = abs(business_days)
+            overdue_tasks.append(task_data)
+        elif business_days <= 2:  # Due in 0, 1, or 2 business days
+            due_soon_tasks.append(task_data)
     
     # Get all pending expirations (visible for everyone)
     pending_expirations = Expiration.query.filter(
         Expiration.completed == False
     ).all()
     
-    # Filter expirations that are due in 2 or fewer business days
+    # Separate expirations into due soon and overdue
     due_soon_expirations = []
+    overdue_expirations = []
     for exp in pending_expirations:
         business_days = calculate_business_days_until(exp.due_date)
-        if business_days <= 2:
-            due_soon_expirations.append({
-                'id': exp.id,
-                'title': exp.title,
-                'due_date': exp.due_date.strftime('%d/%m/%Y'),
-                'description': exp.description[:100] if exp.description else '',
-                'days_remaining': business_days,
-                'type': 'expiration',
-                'creator': exp.creator.full_name
-            })
+        exp_data = {
+            'id': exp.id,
+            'title': exp.title,
+            'due_date': exp.due_date.strftime('%d/%m/%Y'),
+            'description': exp.description[:100] if exp.description else '',
+            'days_remaining': business_days,
+            'type': 'expiration',
+            'creator': exp.creator.full_name
+        }
+        if business_days < 0:  # Overdue
+            exp_data['days_overdue'] = abs(business_days)
+            overdue_expirations.append(exp_data)
+        elif business_days <= 2:  # Due in 0, 1, or 2 business days
+            due_soon_expirations.append(exp_data)
     
     return jsonify({
         'tasks': due_soon_tasks,
-        'expirations': due_soon_expirations
+        'expirations': due_soon_expirations,
+        'overdue_tasks': overdue_tasks,
+        'overdue_expirations': overdue_expirations
     })
 
 @main_bp.route('/api/user/toggle_notifications', methods=['POST'])

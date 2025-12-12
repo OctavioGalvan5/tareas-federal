@@ -11,7 +11,8 @@ def calculate_business_days_until(target_date):
         target_date: datetime.date or datetime.datetime object
         
     Returns:
-        int: Number of business days until target_date (0 if target is today or in the past)
+        int: Number of business days until target_date.
+              Positive = days remaining, 0 = today, Negative = days overdue
     """
     # Convert datetime to date if necessary
     if hasattr(target_date, 'date'):
@@ -19,21 +20,28 @@ def calculate_business_days_until(target_date):
     
     today = date.today()
     
-    # If target is today or in the past, return 0
-    if target_date <= today:
+    # If target is today, return 0
+    if target_date == today:
         return 0
     
-    business_days = 0
-    current_date = today
+    # If target is in the future, count business days until target
+    if target_date > today:
+        business_days = 0
+        current_date = today
+        while current_date < target_date:
+            current_date += timedelta(days=1)
+            if current_date.weekday() < 5:  # Monday to Friday
+                business_days += 1
+        return business_days
     
-    # Count business days until target
-    while current_date < target_date:
+    # If target is in the past, count business days since target (negative)
+    business_days = 0
+    current_date = target_date
+    while current_date < today:
         current_date += timedelta(days=1)
-        # 0 = Monday, 6 = Sunday
         if current_date.weekday() < 5:  # Monday to Friday
             business_days += 1
-    
-    return business_days
+    return -business_days  # Return negative to indicate overdue
 
 def is_business_day(check_date):
     """

@@ -108,6 +108,7 @@ function showNotificationModal(tasks, expirations, overdueTasks, overdueExpirati
                         <h4>${escapeHtml(task.title)} <i class="fas fa-external-link-alt" style="font-size: 0.7rem; color: #94a3b8;"></i></h4>
                         <p style="color: ${urgencyColor}; font-weight: 700;"><i class="fas fa-exclamation-circle"></i> ${urgencyText}</p>
                         <p><i class="fas fa-calendar"></i> Fecha de vencimiento: ${task.due_date}</p>
+                        ${task.enabled_at ? `<p style="color: #8b5cf6;"><i class="fas fa-unlock"></i> Habilitada el: ${task.enabled_at}</p>` : ''}
                         ${task.description ? `<p class="task-desc">${escapeHtml(task.description)}</p>` : ''}
                         <span class="task-priority">${task.priority}</span>
                     </div>

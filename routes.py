@@ -8,6 +8,15 @@ from excel_utils import generate_task_excel
 from io import BytesIO
 from utils import calculate_business_days_until
 from sqlalchemy.orm import joinedload
+import pytz
+
+# Buenos Aires timezone (for reference, conversion is done in templates)
+BUENOS_AIRES_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
+
+def now_utc():
+    """Get current datetime in UTC (consistent with other datetimes in the app)."""
+    return datetime.utcnow()
+
 
 main_bp = Blueprint('main', __name__)
 auth_bp = Blueprint('auth', __name__)
@@ -58,7 +67,8 @@ def dashboard():
 
     # Base query: Show ALL tasks to ALL users by default
     # Optimize: Eager load assignees and tags to prevent N+1 queries
-    tasks_query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
+    # Only show ENABLED tasks (not blocked by parent dependency)
+    tasks_query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(Task.enabled == True)
     
     if filter_assignee:
         tasks_query = tasks_query.filter(Task.assignees.any(id=filter_assignee))
@@ -161,7 +171,7 @@ def create_task():
             if tag:
                 new_task.tags.append(tag)
         
-        # Handle parent task selection
+        # Handle parent task selection and dependency blocking
         parent_id_str = request.form.get('parent_id')
         if parent_id_str:
             try:
@@ -169,6 +179,15 @@ def create_task():
                 parent_task = Task.query.get(parent_id)
                 if parent_task:
                     new_task.parent_id = parent_id
+                    # If parent is NOT completed, the child starts as blocked
+                    if parent_task.status != 'Completed':
+                        new_task.enabled = False
+                        new_task.enabled_at = None
+                    else:
+                        # Parent is already completed, child starts enabled
+                        new_task.enabled = True
+                        new_task.enabled_at = datetime.now()
+                        new_task.enabled_by_task_id = parent_id
             except (ValueError, TypeError):
                 pass  # Invalid parent_id, ignore it
                 
@@ -197,7 +216,11 @@ def edit_task(task_id):
     if request.method == 'POST':
         task.title = request.form.get('title')
         task.description = request.form.get('description')
-        task.status = request.form.get('status') # Update status
+        
+        # Update status - ONLY if user is admin or if status is actually provided in form
+        new_status = request.form.get('status')
+        if new_status:  # Only update if a value was provided (prevents None)
+            task.status = new_status
         
         # Update priority and due_date - ONLY if user is admin
         if current_user.is_admin:
@@ -403,7 +426,8 @@ def calendar():
     filter_user = request.args.get('creator')  # Keep 'creator' param name for backward compatibility
     
     # Base query: show ALL tasks by default (matching dashboard behavior)
-    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
+    # Only show ENABLED tasks (not blocked by parent dependency)
+    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(Task.enabled == True)
     
     # Exclude 'Anulado' tasks by default
     query = query.filter(Task.status != 'Anulado')
@@ -458,7 +482,30 @@ def toggle_task_status(task_id):
         task.status = 'Completed'
         task.completed_by_id = current_user.id
         task.completed_at = datetime.now()
+        
+        # Enable child tasks when parent is completed
+        enabled_children_count = 0
+        adjusted_dates_count = 0
+        for child in task.children:
+            if not child.enabled:
+                child.enabled = True
+                child.enabled_at = now_utc()
+                child.enabled_by_task_id = task.id
+                enabled_children_count += 1
+                
+                # If the child's due_date has already passed, adjust it to today
+                if child.due_date.date() < date.today():
+                    child.original_due_date = child.due_date  # Save original date before adjustment
+                    child.due_date = now_utc()
+                    adjusted_dates_count += 1
+        
+        if enabled_children_count > 0:
+            msg = f'Se habilitaron {enabled_children_count} tarea(s) dependiente(s).'
+            if adjusted_dates_count > 0:
+                msg += f' Se ajustó la fecha de vencimiento de {adjusted_dates_count} tarea(s) que ya habían vencido.'
+            flash(msg, 'info')
     else:
+        # Note: We don't disable children when uncompleting - they stay enabled
         task.status = 'Pending'
         task.completed_by_id = None
         task.completed_at = None
@@ -756,10 +803,11 @@ def api_tasks_due_soon():
     if not current_user.notifications_enabled:
         return jsonify({'tasks': [], 'expirations': [], 'overdue_tasks': [], 'overdue_expirations': []})
     
-    # Get all pending tasks assigned to current user
+    # Get all pending AND enabled tasks assigned to current user (exclude blocked tasks)
     pending_tasks = Task.query.filter(
         Task.assignees.any(id=current_user.id),
-        Task.status == 'Pending'
+        Task.status == 'Pending',
+        Task.enabled == True  # Only show enabled tasks (not blocked by parent)
     ).all()
     
     # Separate tasks into due soon and overdue
@@ -774,7 +822,8 @@ def api_tasks_due_soon():
             'priority': task.priority,
             'description': task.description[:100] if task.description else '',
             'days_remaining': business_days,
-            'type': 'task'
+            'type': 'task',
+            'enabled_at': task.enabled_at.strftime('%d/%m/%Y') if task.enabled_at else None
         }
         if business_days < 0:  # Overdue
             task_data['days_overdue'] = abs(business_days)
@@ -947,8 +996,11 @@ def reports_data():
     start_date_str = data.get('start_date')
     end_date_str = data.get('end_date')
     
-    # Base query - ALWAYS exclude 'Anulado' tasks from reports
-    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(Task.status != 'Anulado')
+    # Base query - ALWAYS exclude 'Anulado' and blocked tasks from reports
+    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(
+        Task.status != 'Anulado',
+        Task.enabled == True  # Only include enabled tasks in reports
+    )
     
     # Filter by users if provided
     if user_ids:
@@ -1177,8 +1229,8 @@ def export_report():
     user_ids = json.loads(user_ids_str) if user_ids_str else []
     tag_ids = json.loads(tag_ids_str) if tag_ids_str else [] # New
     
-    # Fetch data - ALWAYS exclude 'Anulado' tasks from reports (same as reports_data)
-    query = Task.query.filter(Task.status != 'Anulado')
+    # Fetch data - ALWAYS exclude 'Anulado' and blocked tasks from reports
+    query = Task.query.filter(Task.status != 'Anulado', Task.enabled == True)
     if user_ids:
         query = query.filter(Task.assignees.any(User.id.in_(user_ids)))
         

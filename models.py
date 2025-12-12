@@ -71,6 +71,13 @@ class Task(db.Model):
     # Parent-Child Task Relationship
     parent_id = db.Column(db.Integer, db.ForeignKey('task.id'), nullable=True)
     parent = db.relationship('Task', remote_side=[id], backref='children', foreign_keys=[parent_id])
+    
+    # Task Dependency/Blocking - tasks with a parent start as disabled
+    enabled = db.Column(db.Boolean, default=True)  # Is task enabled/unblocked?
+    enabled_at = db.Column(db.DateTime, nullable=True)  # When was it enabled?
+    enabled_by_task_id = db.Column(db.Integer, db.ForeignKey('task.id'), nullable=True)  # Which task enabled it?
+    enabled_by_task = db.relationship('Task', foreign_keys=[enabled_by_task_id], remote_side=[id])
+    original_due_date = db.Column(db.DateTime, nullable=True)  # Original due_date before auto-adjustment
 
     def __repr__(self):
         return f'<Task {self.title}>'

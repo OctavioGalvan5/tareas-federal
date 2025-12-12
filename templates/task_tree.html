@@ -137,7 +137,7 @@
         {% if root_tasks %}
         {% for task in root_tasks %}
         {# Level 0 - Root tasks #}
-        <div class="tree-node" data-level="0" data-task-id="{{ task.id }}">
+        <div class="tree-node {% if not task.enabled %}blocked{% endif %}" data-level="0" data-task-id="{{ task.id }}">
             <div class="tree-node-content">
                 {% if task.children|length > 0 %}
                 <button class="expand-toggle expanded" onclick="toggleNode(this)" title="Expandir/Colapsar">
@@ -153,7 +153,10 @@
                         <a href="{{ url_for('main.task_details', task_id=task.id) }}" class="task-link">{{ task.title
                             }}</a>
                         <span class="priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
-                        {% if task.status == 'Completed' %}
+                        {% if not task.enabled %}
+                        <span class="blocked-badge" title="Bloqueada hasta que la tarea padre se complete"><i
+                                class="fas fa-lock"></i> Bloqueada</span>
+                        {% elif task.status == 'Completed' %}
                         <span class="status-chip completed"><i class="fas fa-check-circle"></i> Completada</span>
                         {% elif task.status == 'Anulado' %}
                         <span class="status-chip anulado"><i class="fas fa-ban"></i> Anulada</span>
@@ -184,7 +187,8 @@
                 {% for child1 in task.children|sort(attribute='due_date') %}
                 {% if child1.status != 'Anulado' or filter_status == 'Anulado' %}
                 {# Level 1 #}
-                <div class="tree-node" data-level="1" data-task-id="{{ child1.id }}">
+                <div class="tree-node {% if not child1.enabled %}blocked{% endif %}" data-level="1"
+                    data-task-id="{{ child1.id }}">
                     <div class="tree-node-content" style="margin-left: 2rem;">
                         {% if child1.children|length > 0 %}
                         <button class="expand-toggle expanded" onclick="toggleNode(this)" title="Expandir/Colapsar">
@@ -201,7 +205,10 @@
                                     child1.title }}</a>
                                 <span class="priority-badge priority-{{ child1.priority|lower }}">{{ child1.priority
                                     }}</span>
-                                {% if child1.status == 'Completed' %}
+                                {% if not child1.enabled %}
+                                <span class="blocked-badge" title="Bloqueada hasta que la tarea padre se complete"><i
+                                        class="fas fa-lock"></i> Bloqueada</span>
+                                {% elif child1.status == 'Completed' %}
                                 <span class="status-chip completed"><i class="fas fa-check-circle"></i>
                                     Completada</span>
                                 {% elif child1.status == 'Anulado' %}
@@ -233,7 +240,8 @@
                         {% for child2 in child1.children|sort(attribute='due_date') %}
                         {% if child2.status != 'Anulado' or filter_status == 'Anulado' %}
                         {# Level 2 #}
-                        <div class="tree-node" data-level="2" data-task-id="{{ child2.id }}">
+                        <div class="tree-node {% if not child2.enabled %}blocked{% endif %}" data-level="2"
+                            data-task-id="{{ child2.id }}">
                             <div class="tree-node-content" style="margin-left: 4rem;">
                                 {% if child2.children|length > 0 %}
                                 <button class="expand-toggle expanded" onclick="toggleNode(this)"
@@ -251,7 +259,9 @@
                                             class="task-link">{{ child2.title }}</a>
                                         <span class="priority-badge priority-{{ child2.priority|lower }}">{{
                                             child2.priority }}</span>
-                                        {% if child2.status == 'Completed' %}
+                                        {% if not child2.enabled %}
+                                        <span class="blocked-badge" title="Bloqueada"><i class="fas fa-lock"></i></span>
+                                        {% elif child2.status == 'Completed' %}
                                         <span class="status-chip completed"><i class="fas fa-check-circle"></i></span>
                                         {% elif child2.status == 'Anulado' %}
                                         <span class="status-chip anulado"><i class="fas fa-ban"></i></span>
@@ -563,6 +573,49 @@
 
     .tree-node[data-level="3"] .tree-node-content {
         background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+    }
+
+    /* Blocked task styles */
+    .tree-node.blocked .tree-node-content {
+        opacity: 0.6;
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%) !important;
+        border-left: 4px solid #94a3b8 !important;
+    }
+
+    .tree-node.blocked .task-link {
+        color: #64748b;
+    }
+
+    .status-chip.blocked {
+        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+        color: #dc2626;
+        border: 1px solid #fecaca;
+    }
+
+    .blocked-badge {
+        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+        color: #dc2626;
+        padding: 0.2rem 0.6rem;
+        border-radius: 15px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        border: 1px solid #fecaca;
+        animation: pulse-blocked 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-blocked {
+
+        0%,
+        100% {
+            opacity: 0.8;
+        }
+
+        50% {
+            opacity: 1;
+        }
     }
 </style>
 

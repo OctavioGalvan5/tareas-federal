@@ -6,6 +6,19 @@ import matplotlib.pyplot as plt
 import io
 import tempfile
 import os
+import pytz
+
+# Buenos Aires timezone for displaying dates
+BUENOS_AIRES_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
+
+def to_buenos_aires(dt):
+    """Convert a datetime to Buenos Aires timezone for display."""
+    if dt is None:
+        return None
+    # If the datetime is naive (no timezone), assume it's UTC
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    return dt.astimezone(BUENOS_AIRES_TZ)
 
 class PDFReport(FPDF):
     def __init__(self):
@@ -32,7 +45,7 @@ class PDFReport(FPDF):
         self.set_y(-15)
         self.set_font('Arial', 'I', 8)
         self.set_text_color(128, 128, 128)
-        self.cell(0, 10, f'Página {self.page_no()}/{{nb}} - Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 0, 'C')
+        self.cell(0, 10, f'Página {self.page_no()}/{{nb}} - Generado el {to_buenos_aires(datetime.utcnow()).strftime("%d/%m/%Y %H:%M")}', 0, 0, 'C')
 
 def generate_charts_for_pdf(data):
     paths = {}
@@ -441,7 +454,7 @@ def generate_report_pdf(data):
         
         # Completed by
         if task.completed_by:
-            completed_info = f"{task.completed_by.full_name}\n{task.completed_at.strftime('%d/%m/%Y')}"
+            completed_info = f"{task.completed_by.full_name}\n{to_buenos_aires(task.completed_at).strftime('%d/%m/%Y')}"
         else:
             completed_info = "-"
         
@@ -483,7 +496,7 @@ def generate_report_pdf(data):
             time_str = "-"
         pdf.cell(w_time, 10, time_str, 0, 0, 'C', fill)
         
-        pdf.cell(w_date, 10, task.due_date.strftime('%d/%m/%Y'), 0, 0, 'C', fill)
+        pdf.cell(w_date, 10, to_buenos_aires(task.due_date).strftime('%d/%m/%Y'), 0, 0, 'C', fill)
         
         # Completed by (Multi-cell)
         x_current = pdf.get_x()
@@ -630,7 +643,7 @@ def generate_task_pdf(tasks, filters):
         
         # Completed by info
         if task.completed_by:
-            completed_info = f"{task.completed_by.full_name}\n{task.completed_at.strftime('%d/%m/%Y')}"
+            completed_info = f"{task.completed_by.full_name}\n{to_buenos_aires(task.completed_at).strftime('%d/%m/%Y')}"
         else:
             completed_info = "-"
         
@@ -655,7 +668,7 @@ def generate_task_pdf(tasks, filters):
         pdf.set_text_color(0, 0, 0)
         
         pdf.cell(w_priority, 10, task.priority, 0, 0, 'C', fill)
-        pdf.cell(w_date, 10, task.due_date.strftime('%d/%m/%Y'), 0, 0, 'C', fill)
+        pdf.cell(w_date, 10, to_buenos_aires(task.due_date).strftime('%d/%m/%Y'), 0, 0, 'C', fill)
         
         # Completed by (Multi-cell needs special handling to not break flow)
         # We use x,y positioning

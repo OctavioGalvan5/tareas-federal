@@ -204,6 +204,23 @@
                 (task.completed_at|to_buenos_aires).strftime('%d/%m/%Y a las %H:%M') }}
             </p>
             {% endif %}
+            {% if task.enabled_at and task.enabled_by_task %}
+            <p style="margin: 0.2rem 0; color: #8b5cf6;"><i class="fas fa-unlock"></i> Habilitada el {{
+                (task.enabled_at|to_buenos_aires).strftime('%d/%m/%Y a las %H:%M') }} al completarse la tarea
+                <a href="{{ url_for('main.task_details', task_id=task.enabled_by_task.id) }}"
+                    style="color: #6366f1; font-weight: 600;">#{{ task.enabled_by_task.id }} - {{
+                    task.enabled_by_task.title }}</a>
+            </p>
+            {% endif %}
+            {% if task.original_due_date %}
+            <p style="margin: 0.2rem 0; color: #f59e0b;"><i class="fas fa-calendar-alt"></i>
+                <strong>Fecha ajustada:</strong> La fecha de vencimiento original era
+                <span style="text-decoration: line-through;">{{
+                    (task.original_due_date|to_buenos_aires).strftime('%d/%m/%Y') }}</span>
+                → cambió a <strong>{{ (task.due_date|to_buenos_aires).strftime('%d/%m/%Y') }}</strong>
+                porque la tarea padre se completó después de la fecha original.
+            </p>
+            {% endif %}
         </div>
     </div>
 

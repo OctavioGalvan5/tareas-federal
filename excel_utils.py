@@ -2,6 +2,18 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from datetime import datetime
+import pytz
+
+# Buenos Aires timezone for displaying dates
+BUENOS_AIRES_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
+
+def to_buenos_aires(dt):
+    """Convert a datetime to Buenos Aires timezone for display."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    return dt.astimezone(BUENOS_AIRES_TZ)
 
 def generate_task_excel(tasks, filters):
     """
@@ -34,7 +46,7 @@ def generate_task_excel(tasks, filters):
     # --- Date and Time ---
     ws.merge_cells('A2:H2')
     date_cell = ws['A2']
-    date_cell.value = f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    date_cell.value = f"Generado el {to_buenos_aires(datetime.utcnow()).strftime('%d/%m/%Y %H:%M')}"
     date_cell.font = Font(name='Arial', size=10, italic=True)
     date_cell.alignment = Alignment(horizontal='center')
     
@@ -127,7 +139,7 @@ def generate_task_excel(tasks, filters):
         completed_by_name = task.completed_by.full_name if task.completed_by else '-'
         
         # Completed at
-        completed_at_str = task.completed_at.strftime('%d/%m/%Y %H:%M') if task.completed_at else '-'
+        completed_at_str = to_buenos_aires(task.completed_at).strftime('%d/%m/%Y %H:%M') if task.completed_at else '-'
         
         # Status translation
         status_text = "Completada" if task.status == 'Completed' else "Pendiente"
@@ -146,7 +158,7 @@ def generate_task_excel(tasks, filters):
             task.description or '-',
             status_text,
             task.priority,
-            task.due_date.strftime('%d/%m/%Y'),
+            to_buenos_aires(task.due_date).strftime('%d/%m/%Y'),
             time_str,
             task.creator.full_name,
             assignees_list,

@@ -215,9 +215,8 @@
             {% if task.original_due_date %}
             <p style="margin: 0.2rem 0; color: #f59e0b;"><i class="fas fa-calendar-alt"></i>
                 <strong>Fecha ajustada:</strong> La fecha de vencimiento original era
-                <span style="text-decoration: line-through;">{{
-                    (task.original_due_date|to_buenos_aires).strftime('%d/%m/%Y') }}</span>
-                → cambió a <strong>{{ (task.due_date|to_buenos_aires).strftime('%d/%m/%Y') }}</strong>
+                <span style="text-decoration: line-through;">{{ task.original_due_date.strftime('%d/%m/%Y') }}</span>
+                → cambió a <strong>{{ task.due_date.strftime('%d/%m/%Y') }}</strong>
                 porque la tarea padre se completó después de la fecha original.
             </p>
             {% endif %}

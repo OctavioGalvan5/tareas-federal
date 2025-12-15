@@ -2,205 +2,217 @@
 
 {% block content %}
 <div class="card">
-    <h2 style="margin-bottom: 2rem;"><i class="fas fa-calendar-alt"></i> Calendario de Vencimientos</h2>
+    <div style="display: flex; gap: 2rem; flex-wrap: wrap; align-items: flex-start; margin-bottom: 2rem;">
+        <!-- Calendar Widget -->
+        <div id="calendarWidget" class="calendar-widget"></div>
 
-    <!-- Time Period Filters -->
-    <div style="margin-bottom: 2rem;">
-        <!-- Quick Filters (Tabs) -->
-        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-            <a href="{{ url_for('main.calendar', period='today', creator=request.args.get('creator')) }}"
-                class="filter-btn {% if current_period == 'today' %}active{% endif %}">
-                <i class="fas fa-calendar-day"></i> Hoy
-            </a>
-            <a href="{{ url_for('main.calendar', period='week', creator=request.args.get('creator')) }}"
-                class="filter-btn {% if current_period == 'week' %}active{% endif %}">
-                <i class="fas fa-calendar-week"></i> Esta Semana
-            </a>
-            <a href="{{ url_for('main.calendar', period='month', creator=request.args.get('creator')) }}"
-                class="filter-btn {% if current_period == 'month' %}active{% endif %}">
-                <i class="fas fa-calendar"></i> Este Mes
-            </a>
-            <a href="{{ url_for('main.calendar', period='all', creator=request.args.get('creator')) }}"
-                class="filter-btn {% if current_period == 'all' %}active{% endif %}">
-                <i class="fas fa-calendar-alt"></i> Todas
-            </a>
-        </div>
+        <div style="flex: 1;">
+            <h2 style="margin-bottom: 1rem;"><i class="fas fa-calendar-alt"></i> Calendario de Tareas</h2>
 
-        <!-- Advanced Filters (User & Date Range) -->
-        <div style="background: #f8fafc; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
-            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
-
-                <!-- User Filter -->
-                <div style="flex: 1; min-width: 200px;">
-                    <label
-                        style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-color);">Usuario</label>
-                    <select id="creator_filter" class="date-input" style="width: 100%;">
-                        <option value="">Todos los Usuarios</option>
-                        {% for user in users %}
-                        <option value="{{ user.id }}" {% if request.args.get('creator')==user.id|string %}selected{%
-                            endif %}>
-                            {{ user.full_name }}
-                        </option>
-                        {% endfor %}
-                    </select>
+            <!-- Time Period Filters -->
+            <div style="margin-bottom: 2rem;">
+                <!-- Quick Filters (Tabs) -->
+                <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                    <a href="{{ url_for('main.calendar', period='today', creator=request.args.get('creator')) }}"
+                        class="filter-btn {% if current_period == 'today' %}active{% endif %}">
+                        <i class="fas fa-calendar-day"></i> Hoy
+                    </a>
+                    <a href="{{ url_for('main.calendar', period='week', creator=request.args.get('creator')) }}"
+                        class="filter-btn {% if current_period == 'week' %}active{% endif %}">
+                        <i class="fas fa-calendar-week"></i> Esta Semana
+                    </a>
+                    <a href="{{ url_for('main.calendar', period='month', creator=request.args.get('creator')) }}"
+                        class="filter-btn {% if current_period == 'month' %}active{% endif %}">
+                        <i class="fas fa-calendar"></i> Este Mes
+                    </a>
+                    <a href="{{ url_for('main.calendar', period='all', creator=request.args.get('creator')) }}"
+                        class="filter-btn {% if current_period == 'all' %}active{% endif %}">
+                        <i class="fas fa-calendar-alt"></i> Todas
+                    </a>
                 </div>
 
-                <!-- Date Range -->
-                <div style="flex: 2; min-width: 300px; display: flex; gap: 0.5rem;">
-                    <div style="flex: 1;">
-                        <label
-                            style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-color);">Desde</label>
-                        <input type="date" id="start_date" class="date-input" style="width: 100%;"
-                            value="{{ request.args.get('start_date', '') }}">
-                    </div>
-                    <div style="flex: 1;">
-                        <label
-                            style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-color);">Hasta</label>
-                        <input type="date" id="end_date" class="date-input" style="width: 100%;"
-                            value="{{ request.args.get('end_date', '') }}">
-                    </div>
-                </div>
+                <!-- Advanced Filters (User & Date Range) -->
+                <div
+                    style="background: #f8fafc; padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
 
-                <!-- Actions -->
-                <div style="display: flex; gap: 0.5rem;">
-                    <button onclick="applyFilters()" class="filter-btn"
-                        style="background: var(--primary-gradient); color: white; border: none;">
-                        <i class="fas fa-filter"></i> Filtrar
-                    </button>
-                    <button onclick="exportPDF()" class="filter-btn"
-                        style="background: var(--secondary-gradient, linear-gradient(135deg, #64748b 0%, #475569 100%)); color: white; border: none;">
-                        <i class="fas fa-file-pdf"></i> PDF
-                    </button>
-                    <button onclick="exportExcel()" class="filter-btn"
-                        style="background: linear-gradient(135deg, #10793f 0%, #0d5c2f 100%); color: white; border: none;">
-                        <i class="fas fa-file-excel"></i> Excel
-                    </button>
+                        <!-- User Filter -->
+                        <div style="flex: 1; min-width: 200px;">
+                            <label
+                                style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-color);">Usuario</label>
+                            <select id="creator_filter" class="date-input" style="width: 100%;">
+                                <option value="">Todos los Usuarios</option>
+                                {% for user in users %}
+                                <option value="{{ user.id }}" {% if request.args.get('creator')==user.id|string
+                                    %}selected{% endif %}>
+                                    {{ user.full_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Date Range -->
+                        <div style="flex: 2; min-width: 300px; display: flex; gap: 0.5rem;">
+                            <div style="flex: 1;">
+                                <label
+                                    style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-color);">Desde</label>
+                                <input type="date" id="start_date" class="date-input" style="width: 100%;"
+                                    value="{{ request.args.get('start_date', '') }}">
+                            </div>
+                            <div style="flex: 1;">
+                                <label
+                                    style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-color);">Hasta</label>
+                                <input type="date" id="end_date" class="date-input" style="width: 100%;"
+                                    value="{{ request.args.get('end_date', '') }}">
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button onclick="applyFilters()" class="filter-btn"
+                                style="background: var(--primary-gradient); color: white; border: none;">
+                                <i class="fas fa-filter"></i> Filtrar
+                            </button>
+                            <button onclick="exportPDF()" class="filter-btn"
+                                style="background: var(--secondary-gradient, linear-gradient(135deg, #64748b 0%, #475569 100%)); color: white; border: none;">
+                                <i class="fas fa-file-pdf"></i> PDF
+                            </button>
+                            <button onclick="exportExcel()" class="filter-btn"
+                                style="background: linear-gradient(135deg, #10793f 0%, #0d5c2f 100%); color: white; border: none;">
+                                <i class="fas fa-file-excel"></i> Excel
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Tasks List Grouped by Date -->
-    <div>
-        <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-list-alt"></i> Tareas por Fecha</h3>
-        {% if tasks %}
-        {% set current_date = namespace(value=None) %}
-        {% set days_map = {'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles', 'Thursday': 'Jueves',
-        'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'} %}
-        {% for task in tasks|sort(attribute='due_date') %}
-        {% if current_date.value != task.due_date.date() %}
-        {% if not loop.first %}
-    </div>
-    {% endif %}
-    {% set current_date.value = task.due_date.date() %}
-    <div class="date-group">
-        <h4>
-            <i class="fas fa-calendar-day"></i>
-            {{ task.due_date.strftime('%d/%m/%Y') }} - {{ days_map[task.due_date.strftime('%A')] }}
-            {% if task.due_date.date() == today %}
-            <span class="today-badge">HOY</span>
+            <!-- Tasks List Grouped by Date -->
+            <div>
+                <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-list-alt"></i> Tareas por Fecha</h3>
+                {% if tasks %}
+                {% set current_date = namespace(value=None) %}
+                {% set days_map = {'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles', 'Thursday':
+                'Jueves',
+                'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'} %}
+                {% for task in tasks|sort(attribute='due_date') %}
+                {% set task_due_date = task.due_date %}
+                {% if current_date.value != task_due_date.date() %}
+                {% if not loop.first %}
+            </div>
             {% endif %}
-        </h4>
-        {% endif %}
-
-        <!-- Enhanced Task Card -->
-        <div class="task-card {% if task.status == 'Completed' %}completed{% endif %}" id="task-{{ task.id }}">
-            <div class="task-header">
-                <div class="task-checkbox">
-                    <input type="checkbox" id="check-{{ task.id }}" {% if task.status=='Completed' %}checked{% endif %}
-                        onchange="toggleTaskStatus({{ task.id }})">
-                    <label for="check-{{ task.id }}"></label>
-                </div>
-                <div class="task-title-section">
-                    <strong class="task-title">{{ task.title }}</strong>
-                    <div class="task-badges">
-                        <span class="priority-badge priority-{{ task.priority|lower }}">
-                            <i class="fas fa-flag"></i> {{ task.priority }}
-                        </span>
-                        <span class="status-badge status-{{ task.status|lower }}">
-                            <i
-                                class="fas fa-{% if task.status == 'Completed' %}check-circle{% else %}clock{% endif %}"></i>
-                            {% if task.status == 'Completed' %}Completada{% else %}Pendiente{% endif %}
-                        </span>
-                    </div>
-                </div>
-                <button class="expand-btn" onclick="toggleTaskDetails({{ task.id }})">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-            </div>
-
-            <!-- Task Details (Collapsible) -->
-            <div class="task-details" id="details-{{ task.id }}" style="display: none;">
-                {% if task.description %}
-                <div class="task-detail-item">
-                    <i class="fas fa-align-left"></i>
-                    <div>
-                        <strong>Descripción:</strong>
-                        <p>{{ task.description }}</p>
-                    </div>
-                </div>
+            {% set current_date.value = task_due_date.date() %}
+            <div class="date-group">
+                <h4>
+                    <i class="fas fa-calendar-day"></i>
+                    {{ task_due_date.strftime('%d/%m/%Y') }} - {{ days_map[task_due_date.strftime('%A')] }}
+                    {% if task_due_date.date() == today %}
+                    <span class="today-badge">HOY</span>
+                    {% endif %}
+                </h4>
                 {% endif %}
 
-                <div class="task-detail-item">
-                    <i class="fas fa-user"></i>
-                    <div>
-                        <strong>Creado por:</strong>
-                        <p>{{ task.creator.full_name }}</p>
+                <!-- Enhanced Task Card -->
+                <div class="task-card {% if task.status == 'Completed' %}completed{% endif %}" id="task-{{ task.id }}">
+                    <div class="task-header">
+                        <div class="task-checkbox">
+                            <input type="checkbox" id="check-{{ task.id }}" {% if task.status=='Completed' %}checked{%
+                                endif %} onchange="toggleTaskStatus({{ task.id }})">
+                            <label for="check-{{ task.id }}"></label>
+                        </div>
+                        <div class="task-title-section">
+                            <strong class="task-title">{{ task.title }}</strong>
+                            <div class="task-badges">
+                                <span class="priority-badge priority-{{ task.priority|lower }}">
+                                    <i class="fas fa-flag"></i> {{ task.priority }}
+                                </span>
+                                <span class="status-badge status-{{ task.status|lower }}">
+                                    <i
+                                        class="fas fa-{% if task.status == 'Completed' %}check-circle{% else %}clock{% endif %}"></i>
+                                    {% if task.status == 'Completed' %}Completada{% else %}Pendiente{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        <button class="expand-btn" onclick="toggleTaskDetails({{ task.id }})">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
                     </div>
-                </div>
 
-                <div class="task-detail-item">
-                    <i class="fas fa-users"></i>
-                    <div>
-                        <strong>Asignado a:</strong>
-                        <p>
-                            {% for assignee in task.assignees %}
-                            <span class="assignee-tag">{{ assignee.full_name }}</span>{% if not loop.last %}, {% endif
-                            %}
-                            {% endfor %}
-                        </p>
-                    </div>
-                </div>
+                    <!-- Task Details (Collapsible) -->
+                    <div class="task-details" id="details-{{ task.id }}" style="display: none;">
+                        {% if task.description %}
+                        <div class="task-detail-item">
+                            <i class="fas fa-align-left"></i>
+                            <div>
+                                <strong>Descripción:</strong>
+                                <p>{{ task.description }}</p>
+                            </div>
+                        </div>
+                        {% endif %}
 
-                <div class="task-detail-item">
-                    <i class="fas fa-calendar-check"></i>
-                    <div>
-                        <strong>Fecha de vencimiento:</strong>
-                        <p>{{ (task.due_date|to_buenos_aires).strftime('%d/%m/%Y %H:%M') }}</p>
-                    </div>
-                </div>
+                        <div class="task-detail-item">
+                            <i class="fas fa-user"></i>
+                            <div>
+                                <strong>Creado por:</strong>
+                                <p>{{ task.creator.full_name }}</p>
+                            </div>
+                        </div>
 
-                <div class="task-detail-item">
-                    <i class="fas fa-info-circle"></i>
-                    <div>
-                        <strong>Creado el:</strong>
-                        <p>{{ (task.created_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M') }}</p>
-                    </div>
-                </div>
+                        <div class="task-detail-item">
+                            <i class="fas fa-users"></i>
+                            <div>
+                                <strong>Asignado a:</strong>
+                                <p>
+                                    {% for assignee in task.assignees %}
+                                    <span class="assignee-tag">{{ assignee.full_name }}</span>{% if not loop.last %}, {%
+                                    endif
+                                    %}
+                                    {% endfor %}
+                                </p>
+                            </div>
+                        </div>
 
-                {% if task.completed_by %}
-                <div class="task-detail-item">
-                    <i class="fas fa-user-check"></i>
-                    <div>
-                        <strong>Completado por:</strong>
-                        <p style="color: var(--success-color); font-weight: 600;">{{ task.completed_by.full_name }} - {{
-                            (task.completed_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M') }}</p>
+                        <div class="task-detail-item">
+                            <i class="fas fa-calendar-check"></i>
+                            <div>
+                                <strong>Fecha de vencimiento:</strong>
+                                <p>{{ task.due_date.strftime('%d/%m/%Y') }}</p>
+                            </div>
+                        </div>
+
+                        <div class="task-detail-item">
+                            <i class="fas fa-info-circle"></i>
+                            <div>
+                                <strong>Creado el:</strong>
+                                <p>{{ (task.created_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M') }}</p>
+                            </div>
+                        </div>
+
+                        {% if task.completed_by %}
+                        <div class="task-detail-item">
+                            <i class="fas fa-user-check"></i>
+                            <div>
+                                <strong>Completado por:</strong>
+                                <p style="color: var(--success-color); font-weight: 600;">{{ task.completed_by.full_name
+                                    }} - {{
+                                    (task.completed_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M') }}</p>
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
-                {% endif %}
+                {% if loop.last %}
             </div>
+            {% endif %}
+            {% endfor %}
+            {% else %}
+            <div style="text-align: center; padding: 3rem; color: var(--text-light);">
+                <i class="fas fa-calendar-times" style="font-size: 4rem; opacity: 0.3; margin-bottom: 1rem;"></i>
+                <p style="font-size: 1.2rem;">No hay tareas en el período seleccionado.</p>
+            </div>
+            {% endif %}
         </div>
-        {% if loop.last %}
-    </div>
-    {% endif %}
-    {% endfor %}
-    {% else %}
-    <div style="text-align: center; padding: 3rem; color: var(--text-light);">
-        <i class="fas fa-calendar-times" style="font-size: 4rem; opacity: 0.3; margin-bottom: 1rem;"></i>
-        <p style="font-size: 1.2rem;">No hay tareas en el período seleccionado.</p>
-    </div>
-    {% endif %}
-</div>
+    </div><!-- end flex container -->
+</div><!-- end container div with flex -->
 
 <style>
     .filter-btn {
@@ -558,5 +570,15 @@
                 checkbox.checked = !checkbox.checked;
             });
     }
+</script>
+
+<!-- Calendar Widget -->
+<script src="{{ url_for('static', filename='calendar_widget.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const eventDates = {{ event_dates | tojson
+    }};
+    initCalendarWidget('calendarWidget', eventDates);
+            });
 </script>
 {% endblock %}

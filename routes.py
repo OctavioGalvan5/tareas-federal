@@ -186,7 +186,7 @@ def create_task():
                     else:
                         # Parent is already completed, child starts enabled
                         new_task.enabled = True
-                        new_task.enabled_at = datetime.now()
+                        new_task.enabled_at = now_utc()
                         new_task.enabled_by_task_id = parent_id
             except (ValueError, TypeError):
                 pass  # Invalid parent_id, ignore it
@@ -278,14 +278,14 @@ def edit_task(task_id):
         # Handle completion tracking if status changed to Completed
         if task.status == 'Completed' and not task.completed_at:
              task.completed_by_id = current_user.id
-             task.completed_at = datetime.now()
+             task.completed_at = now_utc()
         elif task.status == 'Pending':
              task.completed_by_id = None
              task.completed_at = None
 
         # Track edit history
         task.last_edited_by_id = current_user.id
-        task.last_edited_at = datetime.now()
+        task.last_edited_at = now_utc()
         
         # Handle child tasks assignment
         child_ids_str = request.form.get('child_ids', '')
@@ -466,7 +466,22 @@ def calendar():
     tasks = query.order_by(Task.due_date.asc()).all()
     users = User.query.all()
     
-    return render_template('calendar.html', tasks=tasks, current_period=period, today=today, users=users)
+    # Get event dates for calendar widget (all dates with tasks in current month)
+    month_start = today.replace(day=1)
+    if today.month == 12:
+        month_end = today.replace(day=31)
+    else:
+        month_end = (today.replace(month=today.month + 1, day=1) - timedelta(days=1))
+    
+    event_dates_query = db.session.query(db.func.date(Task.due_date)).filter(
+        Task.enabled == True,
+        Task.status != 'Anulado',
+        db.func.date(Task.due_date) >= month_start,
+        db.func.date(Task.due_date) <= month_end
+    ).distinct().all()
+    event_dates = [d[0].strftime('%Y-%m-%d') for d in event_dates_query if d[0]]
+    
+    return render_template('calendar.html', tasks=tasks, current_period=period, today=today, users=users, event_dates=event_dates)
 
 @main_bp.route('/task/<int:task_id>/toggle', methods=['POST'])
 @login_required
@@ -481,7 +496,7 @@ def toggle_task_status(task_id):
     if task.status == 'Pending':
         task.status = 'Completed'
         task.completed_by_id = current_user.id
-        task.completed_at = datetime.now()
+        task.completed_at = now_utc()
         
         # Enable child tasks when parent is completed
         enabled_children_count = 0
@@ -530,7 +545,7 @@ def anular_task(task_id):
     
     task.status = 'Anulado'
     task.completed_by_id = current_user.id  # Track who anulled it
-    task.completed_at = datetime.now()  # Track when
+    task.completed_at = now_utc()  # Track when
     
     db.session.commit()
     
@@ -1606,7 +1621,7 @@ def import_tasks():
             # Set completed info if status is Completed
             if status == 'Completed':
                 new_task.completed_by_id = current_user.id
-                new_task.completed_at = datetime.now()
+                new_task.completed_at = now_utc()
             
             for user in assignees:
                 new_task.assignees.append(user)
@@ -1842,11 +1857,25 @@ def expiration_calendar():
     expirations = query.order_by(Expiration.due_date.asc()).all()
     available_tags = Tag.query.order_by(Tag.name).all()
     
+    # Get event dates for calendar widget (all dates with expirations in current month)
+    month_start = today.replace(day=1)
+    if today.month == 12:
+        month_end = today.replace(day=31)
+    else:
+        month_end = (today.replace(month=today.month + 1, day=1) - timedelta(days=1))
+    
+    event_dates_query = db.session.query(db.func.date(Expiration.due_date)).filter(
+        db.func.date(Expiration.due_date) >= month_start,
+        db.func.date(Expiration.due_date) <= month_end
+    ).distinct().all()
+    event_dates = [d[0].strftime('%Y-%m-%d') for d in event_dates_query if d[0]]
+    
     return render_template('expiration_calendar.html', 
                           expirations=expirations, 
                           current_period=period, 
                           today=today,
-                          available_tags=available_tags)
+                          available_tags=available_tags,
+                          event_dates=event_dates)
 
 
 @main_bp.route('/expirations/create', methods=['POST'])
@@ -1942,7 +1971,7 @@ def toggle_expiration(expiration_id):
         expiration.completed_at = None
     else:
         expiration.completed = True
-        expiration.completed_at = datetime.now()
+        expiration.completed_at = now_utc()
     
     db.session.commit()
     

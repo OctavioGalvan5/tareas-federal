@@ -1,0 +1,168 @@
+/* Calendar Widget - Dark Mode Style */
+.calendar-widget {
+    background: linear-gradient(180deg, #1a2234 0%, #151c2c 100%);
+    border-radius: 16px;
+    padding: 1.25rem;
+    color: #e2e8f0;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    max-width: 350px;
+}
+
+/* Header with date and navigation */
+.calendar-widget-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.calendar-widget-date {
+    font-size: 0.9rem;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.calendar-widget-month-nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.calendar-widget-month {
+    font-weight: 700;
+    font-size: 1rem;
+    color: #f1f5f9;
+    min-width: 140px;
+    text-align: center;
+}
+
+.calendar-nav-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    color: #94a3b8;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    font-size: 0.8rem;
+}
+
+.calendar-nav-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #f1f5f9;
+    transform: scale(1.05);
+}
+
+/* Days grid */
+.calendar-widget-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.calendar-widget-day-header {
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+    padding: 0.4rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.calendar-widget-day {
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    color: #cbd5e1;
+    font-weight: 500;
+    gap: 2px;
+}
+
+.calendar-widget-day:hover:not(.other-month):not(.today) {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f1f5f9;
+}
+
+/* Other month days (grayed out) */
+.calendar-widget-day.other-month {
+    color: #475569;
+    cursor: default;
+}
+
+/* Today highlight */
+.calendar-widget-day.today {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    color: white;
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
+}
+
+.calendar-widget-day.today:hover {
+    background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
+}
+
+/* Selected day */
+.calendar-widget-day.selected:not(.today) {
+    background: rgba(14, 165, 233, 0.2);
+    color: #38bdf8;
+    border: 1px solid rgba(14, 165, 233, 0.4);
+}
+
+/* Event indicator dot */
+.calendar-widget-day .event-dot {
+    width: 4px;
+    height: 4px;
+    background: #0ea5e9;
+    border-radius: 50%;
+    position: absolute;
+    bottom: 4px;
+}
+
+.calendar-widget-day.today .event-dot {
+    background: white;
+}
+
+/* Weekend styling */
+.calendar-widget-day.weekend:not(.today):not(.selected) {
+    color: #94a3b8;
+}
+
+/* Calendar widget expand on mobile */
+@media (max-width: 768px) {
+    .calendar-widget {
+        max-width: 100%;
+    }
+}
+
+/* Animation for month transitions */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.calendar-widget-grid {
+    animation: fadeIn 0.2s ease-out;
+}

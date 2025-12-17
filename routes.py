@@ -1542,6 +1542,7 @@ def import_tasks():
             etiquetas_str = row[5] if len(row) > 5 else ''
             tiempo_str = row[6] if len(row) > 6 else ''
             estado_str = row[7] if len(row) > 7 else 'Pendiente'
+            completado_por_str = row[8] if len(row) > 8 else ''
             
             # Validate required fields
             if not titulo:
@@ -1584,6 +1585,15 @@ def import_tasks():
                 elif estado_lower in ['pendiente', 'pending', 'p']:
                     status = 'Pending'
             
+            # Parse completed_by user (optional)
+            completed_by_user = None
+            if completado_por_str:
+                completed_by_username = str(completado_por_str).strip()
+                if completed_by_username:
+                    completed_by_user = User.query.filter_by(username=completed_by_username).first()
+                    if not completed_by_user:
+                        errors.append(f'Fila {row_num}: Usuario "{completed_by_username}" (Completado Por) no encontrado')
+            
             # Parse assignees
             assignee_usernames = [u.strip() for u in str(asignados_str).split(',') if u.strip()]
             assignees = []
@@ -1620,7 +1630,8 @@ def import_tasks():
             
             # Set completed info if status is Completed
             if status == 'Completed':
-                new_task.completed_by_id = current_user.id
+                # Use specified user, or fallback to current user
+                new_task.completed_by_id = completed_by_user.id if completed_by_user else current_user.id
                 new_task.completed_at = now_utc()
             
             for user in assignees:

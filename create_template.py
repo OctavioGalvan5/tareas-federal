@@ -17,8 +17,8 @@ thin_border = Border(
     bottom=Side(style='thin')
 )
 
-# Headers - Added Etiquetas column
-headers = ['Titulo', 'Descripcion', 'Prioridad', 'Fecha Vencimiento', 'Asignados', 'Etiquetas']
+# Headers - Complete columns including optional fields
+headers = ['Titulo', 'Descripcion', 'Prioridad', 'Fecha Vencimiento', 'Asignados', 'Etiquetas', 'Tiempo (min)', 'Estado', 'Completado Por']
 for col, header in enumerate(headers, 1):
     cell = ws.cell(row=1, column=col, value=header)
     cell.fill = header_fill
@@ -26,12 +26,13 @@ for col, header in enumerate(headers, 1):
     cell.alignment = Alignment(horizontal='center')
     cell.border = thin_border
 
-# Example rows with tags
+# Example rows with all fields
 examples = [
-    ['Revisar expediente 1234', 'Verificar documentacion completa del caso', 'Normal', '2024-12-20', 'admin', 'Urgente, Legal'],
-    ['Preparar informe mensual', 'Elaborar informe de actividades del mes', 'Media', '2024-12-15', 'admin', 'Administrativo'],
-    ['Audiencia caso Smith', 'Preparar alegatos para audiencia', 'Urgente', '2024-12-10', 'admin', 'Legal, Importante, Tribunal'],
+    ['Revisar expediente 1234', 'Verificar documentacion completa del caso', 'Normal', '2024-12-20', 'admin', 'Urgente, Legal', '', 'Pendiente', ''],
+    ['Preparar informe mensual', 'Elaborar informe de actividades del mes', 'Media', '2024-12-15', 'admin', 'Administrativo', 120, 'Completada', 'giuliana'],
+    ['Audiencia caso Smith', 'Preparar alegatos para audiencia', 'Urgente', '2024-12-10', 'admin, giuliana', 'Legal, Tribunal', 60, 'Completada', ''],
 ]
+
 
 for row_idx, row_data in enumerate(examples, 2):
     for col_idx, value in enumerate(row_data, 1):
@@ -45,6 +46,9 @@ ws.column_dimensions['C'].width = 12
 ws.column_dimensions['D'].width = 18
 ws.column_dimensions['E'].width = 25
 ws.column_dimensions['F'].width = 30
+ws.column_dimensions['G'].width = 14
+ws.column_dimensions['H'].width = 12
+ws.column_dimensions['I'].width = 18
 
 # Instructions sheet
 ws2 = wb.create_sheet('Instrucciones')
@@ -53,20 +57,26 @@ instructions = [
     '',
     '1. Complete la hoja "Tareas" con los datos de las tareas a importar.',
     '',
-    '2. Columnas requeridas:',
-    '   - Titulo: Nombre de la tarea (obligatorio)',
-    '   - Descripcion: Detalle de la tarea (opcional)',
-    '   - Prioridad: Normal, Media o Urgente (obligatorio)',
-    '   - Fecha Vencimiento: Formato AAAA-MM-DD, ej: 2024-12-20 (obligatorio)',
-    '   - Asignados: Username(s) separados por coma, ej: admin, usuario1 (obligatorio)',
-    '   - Etiquetas: Nombre(s) de etiquetas separadas por coma (opcional)',
+    '2. Columnas obligatorias:',
+    '   - Titulo: Nombre de la tarea',
+    '   - Prioridad: Normal, Media o Urgente',
+    '   - Fecha Vencimiento: Formato AAAA-MM-DD, ej: 2024-12-20',
+    '   - Asignados: Username(s) separados por coma, ej: admin, usuario1',
     '',
-    '3. Importante:',
+    '3. Columnas opcionales:',
+    '   - Descripcion: Detalle de la tarea',
+    '   - Etiquetas: Nombre(s) de etiquetas separadas por coma',
+    '   - Tiempo (min): Tiempo dedicado en minutos, ej: 60, 120',
+    '   - Estado: Pendiente o Completada (por defecto: Pendiente)',
+    '   - Completado Por: Username del usuario que completo la tarea',
+    '     * Si el estado es Completada y no se indica usuario, se usa quien sube el archivo',
+    '     * Si el estado es Pendiente, este campo se ignora',
+    '',
+    '4. Importante:',
     '   - No modifique los encabezados de las columnas',
     '   - Los usernames deben existir en el sistema',
     '   - Las etiquetas deben existir en el sistema (se ignoran las que no existan)',
     '   - La fecha debe estar en formato AAAA-MM-DD',
-    '   - Las prioridades validas son: Normal, Media, Urgente',
 ]
 
 for row_idx, text in enumerate(instructions, 1):

@@ -74,9 +74,9 @@
                         </div>
 
                         <!-- Actions -->
-                        <div style="display: flex; gap: 0.5rem;">
+                        <div style="display: flex; gap: 0.5rem; margin-left: 0.5rem; flex-shrink: 0;">
                             <button onclick="applyFilters()" class="filter-btn"
-                                style="background: var(--primary-gradient); color: white; border: none;">
+                                style="background: var(--primary-gradient); color: white; border: none; white-space: nowrap;">
                                 <i class="fas fa-filter"></i> Filtrar
                             </button>
                         </div>
@@ -187,630 +187,631 @@
             </div>
             {% endif %}
         </div>
-        {% endblock %}
+    </div>
+</div>
+{% endblock %}
 
-        {% block modals %}
-        <!-- Create/Edit Modal -->
-        <div id="expirationModal" class="modal-overlay" style="display: none;">
-            <div class="modal-content" style="max-width: 500px;">
-                <div class="modal-header">
-                    <h2 id="modalTitle"><i class="fas fa-plus"></i> Nuevo Vencimiento</h2>
-                    <button onclick="closeModal()" class="close-btn">&times;</button>
-                </div>
-                <form id="expirationForm" method="POST">
-                    <div class="modal-body">
-                        <div class="form-group">
-                            <label for="exp_title"><i class="fas fa-heading"></i> Título *</label>
-                            <input type="text" id="exp_title" name="title" required
-                                placeholder="Título del vencimiento">
-                        </div>
-
-                        <div class="form-group">
-                            <label for="exp_description"><i class="fas fa-align-left"></i> Descripción</label>
-                            <textarea id="exp_description" name="description" rows="3"
-                                placeholder="Descripción opcional"></textarea>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="exp_due_date"><i class="fas fa-calendar-day"></i> Fecha de Vencimiento *</label>
-                            <input type="date" id="exp_due_date" name="due_date" required>
-                        </div>
-
-                        <div class="form-group">
-                            <label><i class="fas fa-tags"></i> Etiquetas</label>
-                            <div class="tags-container">
-                                {% for tag in available_tags %}
-                                <label class="tag-option">
-                                    <input type="checkbox" name="tags" value="{{ tag.id }}">
-                                    <span class="tag-chip" style="background: {{ tag.color }};">{{ tag.name }}</span>
-                                </label>
-                                {% endfor %}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" onclick="closeModal()" class="btn-secondary">Cancelar</button>
-                        <button type="submit" class="btn-primary" id="submitBtn">
-                            <i class="fas fa-check"></i> Guardar
-                        </button>
-                    </div>
-                </form>
-            </div>
+{% block modals %}
+<!-- Create/Edit Modal -->
+<div id="expirationModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2 id="modalTitle"><i class="fas fa-plus"></i> Nuevo Vencimiento</h2>
+            <button onclick="closeModal()" class="close-btn">&times;</button>
         </div>
+        <form id="expirationForm" method="POST">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="exp_title"><i class="fas fa-heading"></i> Título *</label>
+                    <input type="text" id="exp_title" name="title" required placeholder="Título del vencimiento">
+                </div>
 
-        <style>
-            .filter-btn {
-                padding: 0.75rem 1.5rem;
-                background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-                border: 2px solid var(--border-color);
-                border-radius: 10px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: var(--transition);
-                text-decoration: none;
-                color: var(--text-color);
-                display: inline-flex;
-                align-items: center;
-                gap: 0.5rem;
-            }
+                <div class="form-group">
+                    <label for="exp_description"><i class="fas fa-align-left"></i> Descripción</label>
+                    <textarea id="exp_description" name="description" rows="3"
+                        placeholder="Descripción opcional"></textarea>
+                </div>
 
-            .filter-btn:hover {
-                transform: translateY(-2px);
-                box-shadow: var(--shadow-md);
-                background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
-            }
+                <div class="form-group">
+                    <label for="exp_due_date"><i class="fas fa-calendar-day"></i> Fecha de Vencimiento *</label>
+                    <input type="date" id="exp_due_date" name="due_date" required>
+                </div>
 
-            .filter-btn.active {
-                background: var(--primary-gradient);
-                color: white;
-                border-color: transparent;
-            }
+                <div class="form-group">
+                    <label><i class="fas fa-tags"></i> Etiquetas</label>
+                    <div class="tags-container">
+                        {% for tag in available_tags %}
+                        <label class="tag-option">
+                            <input type="checkbox" name="tags" value="{{ tag.id }}">
+                            <span class="tag-chip" style="background: {{ tag.color }};">{{ tag.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal()" class="btn-secondary">Cancelar</button>
+                <button type="submit" class="btn-primary" id="submitBtn">
+                    <i class="fas fa-check"></i> Guardar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 
-            .date-input {
-                padding: 0.75rem 1rem;
-                border: 2px solid var(--border-color);
-                border-radius: 10px;
-                font-family: 'Inter', sans-serif;
-                font-size: 0.95rem;
-                transition: var(--transition);
-            }
+<style>
+    .filter-btn {
+        padding: 0.75rem 1.5rem;
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        border: 2px solid var(--border-color);
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+        text-decoration: none;
+        color: var(--text-color);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
 
-            .date-input:focus {
-                outline: none;
-                border-color: var(--primary-color);
-                box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-            }
+    .filter-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+        background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+    }
 
-            .date-group {
-                background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-                padding: 1.5rem;
-                border-radius: 12px;
-                margin-bottom: 1.5rem;
-                border-left: 4px solid #f59e0b;
-                transition: var(--transition);
-            }
+    .filter-btn.active {
+        background: var(--primary-gradient);
+        color: white;
+        border-color: transparent;
+    }
 
-            .date-group:hover {
-                transform: translateX(5px);
-                box-shadow: var(--shadow-md);
-            }
+    .date-input {
+        padding: 0.75rem 1rem;
+        border: 2px solid var(--border-color);
+        border-radius: 10px;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.95rem;
+        transition: var(--transition);
+    }
 
-            .date-group h4 {
-                color: #f59e0b;
-                margin: 0 0 1rem 0;
-                font-size: 1.2rem;
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-            }
+    .date-input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
 
-            .today-badge {
-                background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-                color: white;
-                padding: 0.25rem 0.75rem;
-                border-radius: 20px;
-                font-size: 0.75rem;
-                font-weight: 700;
-                margin-left: 0.5rem;
-            }
+    .date-group {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        border-left: 4px solid #f59e0b;
+        transition: var(--transition);
+    }
 
-            .expiration-card {
-                background: white;
-                padding: 1.25rem;
-                border-radius: 12px;
-                margin-bottom: 1rem;
-                box-shadow: var(--shadow-sm);
-                transition: var(--transition);
-                border-left: 4px solid #f59e0b;
-            }
+    .date-group:hover {
+        transform: translateX(5px);
+        box-shadow: var(--shadow-md);
+    }
 
-            .expiration-card:hover {
-                transform: translateY(-2px);
-                box-shadow: var(--shadow-md);
-            }
+    .date-group h4 {
+        color: #f59e0b;
+        margin: 0 0 1rem 0;
+        font-size: 1.2rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
 
-            .expiration-card.completed {
-                opacity: 0.7;
-                border-left-color: var(--success-color);
-            }
+    .today-badge {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        margin-left: 0.5rem;
+    }
 
-            .expiration-card.completed .expiration-title {
-                text-decoration: line-through;
-                color: var(--text-light);
-            }
+    .expiration-card {
+        background: white;
+        padding: 1.25rem;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        box-shadow: var(--shadow-sm);
+        transition: var(--transition);
+        border-left: 4px solid #f59e0b;
+    }
 
-            .expiration-header {
-                display: flex;
-                align-items: center;
-                gap: 1rem;
-            }
+    .expiration-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
 
-            .expiration-checkbox {
-                position: relative;
-            }
+    .expiration-card.completed {
+        opacity: 0.7;
+        border-left-color: var(--success-color);
+    }
 
-            .expiration-checkbox input[type="checkbox"] {
-                appearance: none;
-                width: 24px;
-                height: 24px;
-                border: 2px solid var(--border-color);
-                border-radius: 6px;
-                cursor: pointer;
-                transition: var(--transition);
-            }
+    .expiration-card.completed .expiration-title {
+        text-decoration: line-through;
+        color: var(--text-light);
+    }
 
-            .expiration-checkbox input[type="checkbox"]:checked {
-                background: var(--success-gradient);
-                border-color: transparent;
-            }
+    .expiration-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
 
-            .expiration-checkbox input[type="checkbox"]:checked::after {
-                content: '✓';
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                color: white;
-                font-weight: bold;
-                font-size: 14px;
-            }
+    .expiration-checkbox {
+        position: relative;
+    }
 
-            .expiration-title-section {
-                flex: 1;
-            }
+    .expiration-checkbox input[type="checkbox"] {
+        appearance: none;
+        width: 24px;
+        height: 24px;
+        border: 2px solid var(--border-color);
+        border-radius: 6px;
+        cursor: pointer;
+        transition: var(--transition);
+    }
 
-            .expiration-title {
-                font-size: 1.1rem;
-                color: var(--text-color);
-                display: block;
-                margin-bottom: 0.5rem;
-            }
+    .expiration-checkbox input[type="checkbox"]:checked {
+        background: var(--success-gradient);
+        border-color: transparent;
+    }
 
-            .expiration-badges {
-                display: flex;
-                gap: 0.5rem;
-                flex-wrap: wrap;
-                align-items: center;
-            }
+    .expiration-checkbox input[type="checkbox"]:checked::after {
+        content: '✓';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-weight: bold;
+        font-size: 14px;
+    }
 
-            .creator-badge {
-                background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
-                color: #4f46e5;
-                padding: 0.25rem 0.75rem;
-                border-radius: 15px;
-                font-size: 0.8rem;
-                font-weight: 500;
-            }
+    .expiration-title-section {
+        flex: 1;
+    }
 
-            .expiration-actions {
-                display: flex;
-                gap: 0.5rem;
-                align-items: center;
-            }
+    .expiration-title {
+        font-size: 1.1rem;
+        color: var(--text-color);
+        display: block;
+        margin-bottom: 0.5rem;
+    }
 
-            .action-btn {
-                background: none;
-                border: none;
-                color: var(--text-light);
-                cursor: pointer;
-                font-size: 1rem;
-                padding: 0.5rem;
-                transition: var(--transition);
-                border-radius: 6px;
-            }
+    .expiration-badges {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
 
-            .action-btn:hover {
-                color: var(--primary-color);
-                background: rgba(99, 102, 241, 0.1);
-            }
+    .creator-badge {
+        background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+        color: #4f46e5;
+        padding: 0.25rem 0.75rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
 
-            .action-btn.delete-btn:hover {
-                color: #dc2626;
-                background: rgba(220, 38, 38, 0.1);
-            }
+    .expiration-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
 
-            .expand-btn {
-                background: none;
-                border: none;
-                color: var(--text-light);
-                cursor: pointer;
-                font-size: 1.2rem;
-                transition: var(--transition);
-                padding: 0.5rem;
-            }
+    .action-btn {
+        background: none;
+        border: none;
+        color: var(--text-light);
+        cursor: pointer;
+        font-size: 1rem;
+        padding: 0.5rem;
+        transition: var(--transition);
+        border-radius: 6px;
+    }
 
-            .expand-btn:hover {
-                color: var(--primary-color);
-                transform: scale(1.2);
-            }
+    .action-btn:hover {
+        color: var(--primary-color);
+        background: rgba(99, 102, 241, 0.1);
+    }
 
-            .expand-btn.expanded i {
-                transform: rotate(180deg);
-            }
+    .action-btn.delete-btn:hover {
+        color: #dc2626;
+        background: rgba(220, 38, 38, 0.1);
+    }
 
-            .expiration-details {
-                margin-top: 1rem;
-                padding-top: 1rem;
-                border-top: 2px solid var(--border-color);
-            }
+    .expand-btn {
+        background: none;
+        border: none;
+        color: var(--text-light);
+        cursor: pointer;
+        font-size: 1.2rem;
+        transition: var(--transition);
+        padding: 0.5rem;
+    }
 
-            .detail-item {
-                display: flex;
-                gap: 1rem;
-                margin-bottom: 1rem;
-                align-items: flex-start;
-            }
+    .expand-btn:hover {
+        color: var(--primary-color);
+        transform: scale(1.2);
+    }
 
-            .detail-item i {
-                color: #f59e0b;
-                width: 20px;
-                margin-top: 0.25rem;
-            }
+    .expand-btn.expanded i {
+        transform: rotate(180deg);
+    }
 
-            .detail-item strong {
-                display: block;
-                margin-bottom: 0.25rem;
-                color: var(--text-color);
-            }
+    .expiration-details {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 2px solid var(--border-color);
+    }
 
-            .detail-item p {
-                margin: 0;
-                color: var(--text-light);
-            }
+    .detail-item {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        align-items: flex-start;
+    }
 
-            /* Modal Styles */
-            .modal-overlay {
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0, 0, 0, 0.5);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                z-index: 1000;
-                backdrop-filter: blur(4px);
-            }
+    .detail-item i {
+        color: #f59e0b;
+        width: 20px;
+        margin-top: 0.25rem;
+    }
 
-            .modal-content {
-                background: white;
-                border-radius: 16px;
-                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-                width: 90%;
-                max-height: 90vh;
-                overflow-y: auto;
-                animation: modalSlideIn 0.3s ease-out;
-            }
+    .detail-item strong {
+        display: block;
+        margin-bottom: 0.25rem;
+        color: var(--text-color);
+    }
 
-            @keyframes modalSlideIn {
-                from {
-                    opacity: 0;
-                    transform: translateY(-20px);
-                }
+    .detail-item p {
+        margin: 0;
+        color: var(--text-light);
+    }
 
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
-            }
+    /* Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        backdrop-filter: blur(4px);
+    }
 
-            .modal-header {
-                padding: 1.25rem 1.5rem;
-                background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-                border-radius: 16px 16px 0 0;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
+    .modal-content {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        animation: modalSlideIn 0.3s ease-out;
+    }
 
-            .modal-header h2 {
-                margin: 0;
-                color: white;
-                font-size: 1.25rem;
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-            }
+    @keyframes modalSlideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
 
-            .close-btn {
-                background: rgba(255, 255, 255, 0.2);
-                border: none;
-                font-size: 1.5rem;
-                cursor: pointer;
-                color: white;
-                width: 36px;
-                height: 36px;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                transition: all 0.2s;
-            }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
 
-            .close-btn:hover {
-                background: rgba(255, 255, 255, 0.3);
-                transform: scale(1.1);
-            }
+    .modal-header {
+        padding: 1.25rem 1.5rem;
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        border-radius: 16px 16px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
 
-            .modal-body {
-                padding: 1.5rem;
-            }
+    .modal-header h2 {
+        margin: 0;
+        color: white;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
 
-            .modal-body .form-group {
-                margin-bottom: 1.25rem;
-            }
+    .close-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: white;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
 
-            .modal-body .form-group label {
-                display: block;
-                margin-bottom: 0.5rem;
-                font-weight: 600;
-                color: var(--text-color);
-                font-size: 0.95rem;
-            }
+    .close-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: scale(1.1);
+    }
 
-            .modal-body .form-group label i {
-                color: #f59e0b;
-                margin-right: 0.5rem;
-            }
+    .modal-body {
+        padding: 1.5rem;
+    }
 
-            .modal-body .form-group input[type="text"],
-            .modal-body .form-group input[type="date"],
-            .modal-body .form-group textarea {
-                width: 100%;
-                padding: 0.75rem 1rem;
-                border: 2px solid #e2e8f0;
-                border-radius: 10px;
-                font-family: 'Inter', sans-serif;
-                font-size: 0.95rem;
-                transition: all 0.2s;
-                background: #f8fafc;
-                box-sizing: border-box;
-            }
+    .modal-body .form-group {
+        margin-bottom: 1.25rem;
+    }
 
-            .modal-body .form-group input:focus,
-            .modal-body .form-group textarea:focus {
-                outline: none;
-                border-color: #f59e0b;
-                background: white;
-                box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
-            }
+    .modal-body .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: var(--text-color);
+        font-size: 0.95rem;
+    }
 
-            .modal-body .form-group input::placeholder,
-            .modal-body .form-group textarea::placeholder {
-                color: #9ca3af;
-            }
+    .modal-body .form-group label i {
+        color: #f59e0b;
+        margin-right: 0.5rem;
+    }
 
-            .modal-footer {
-                padding: 1.25rem 1.5rem;
-                border-top: 1px solid #e2e8f0;
-                display: flex;
-                justify-content: flex-end;
-                gap: 0.75rem;
-                background: #f8fafc;
-                border-radius: 0 0 16px 16px;
-            }
+    .modal-body .form-group input[type="text"],
+    .modal-body .form-group input[type="date"],
+    .modal-body .form-group textarea {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.95rem;
+        transition: all 0.2s;
+        background: #f8fafc;
+        box-sizing: border-box;
+    }
 
-            .tags-container {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.5rem;
-                margin-top: 0.5rem;
-                padding: 0.75rem;
-                background: #f8fafc;
-                border-radius: 10px;
-                border: 2px solid #e2e8f0;
-            }
+    .modal-body .form-group input:focus,
+    .modal-body .form-group textarea:focus {
+        outline: none;
+        border-color: #f59e0b;
+        background: white;
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+    }
 
-            .tag-option {
-                display: inline-flex;
-                align-items: center;
-                cursor: pointer;
-            }
+    .modal-body .form-group input::placeholder,
+    .modal-body .form-group textarea::placeholder {
+        color: #9ca3af;
+    }
 
-            .tag-option input[type="checkbox"] {
-                display: none;
-            }
+    .modal-footer {
+        padding: 1.25rem 1.5rem;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        background: #f8fafc;
+        border-radius: 0 0 16px 16px;
+    }
 
-            .tag-option .tag-chip {
-                transition: all 0.2s;
-                padding: 0.35rem 0.75rem;
-            }
+    .tags-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+        padding: 0.75rem;
+        background: #f8fafc;
+        border-radius: 10px;
+        border: 2px solid #e2e8f0;
+    }
 
-            .tag-option input[type="checkbox"]:checked+.tag-chip {
-                box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.25);
-                transform: scale(1.05);
-            }
+    .tag-option {
+        display: inline-flex;
+        align-items: center;
+        cursor: pointer;
+    }
 
-            .btn-primary {
-                padding: 0.75rem 1.5rem;
-                background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-                border: none;
-                border-radius: 10px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.2s;
-                color: white;
-                display: inline-flex;
-                align-items: center;
-                gap: 0.5rem;
-                font-size: 0.95rem;
-            }
+    .tag-option input[type="checkbox"] {
+        display: none;
+    }
 
-            .btn-primary:hover {
-                background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
-            }
+    .tag-option .tag-chip {
+        transition: all 0.2s;
+        padding: 0.35rem 0.75rem;
+    }
 
-            .btn-secondary {
-                padding: 0.75rem 1.5rem;
-                background: white;
-                border: 2px solid #e2e8f0;
-                border-radius: 10px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.2s;
-                color: var(--text-color);
-                font-size: 0.95rem;
-            }
+    .tag-option input[type="checkbox"]:checked+.tag-chip {
+        box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.25);
+        transform: scale(1.05);
+    }
 
-            .btn-secondary:hover {
-                background: #f1f5f9;
-                border-color: #cbd5e1;
-            }
-        </style>
+    .btn-primary {
+        padding: 0.75rem 1.5rem;
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        border: none;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.95rem;
+    }
 
-        <script>
-            let editingId = null;
+    .btn-primary:hover {
+        background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+    }
 
-            function openCreateModal() {
-                editingId = null;
-                document.getElementById('modalTitle').innerHTML = '<i class="fas fa-plus"></i> Nuevo Vencimiento';
-                document.getElementById('expirationForm').action = '{{ url_for("main.create_expiration") }}';
-                document.getElementById('exp_title').value = '';
-                document.getElementById('exp_description').value = '';
-                document.getElementById('exp_due_date').value = new Date().toISOString().split('T')[0];
-                document.querySelectorAll('.tag-option input').forEach(cb => cb.checked = false);
+    .btn-secondary {
+        padding: 0.75rem 1.5rem;
+        background: white;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        color: var(--text-color);
+        font-size: 0.95rem;
+    }
+
+    .btn-secondary:hover {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+    }
+</style>
+
+<script>
+    let editingId = null;
+
+    function openCreateModal() {
+        editingId = null;
+        document.getElementById('modalTitle').innerHTML = '<i class="fas fa-plus"></i> Nuevo Vencimiento';
+        document.getElementById('expirationForm').action = '{{ url_for("main.create_expiration") }}';
+        document.getElementById('exp_title').value = '';
+        document.getElementById('exp_description').value = '';
+        document.getElementById('exp_due_date').value = new Date().toISOString().split('T')[0];
+        document.querySelectorAll('.tag-option input').forEach(cb => cb.checked = false);
+        document.getElementById('expirationModal').style.display = 'flex';
+    }
+
+    function openEditModal(id) {
+        editingId = id;
+        document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Editar Vencimiento';
+        document.getElementById('expirationForm').action = `/expirations/${id}/edit`;
+
+        fetch(`/api/expirations/${id}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('exp_title').value = data.title;
+                document.getElementById('exp_description').value = data.description;
+                document.getElementById('exp_due_date').value = data.due_date;
+
+                document.querySelectorAll('.tag-option input').forEach(cb => {
+                    cb.checked = data.tag_ids.includes(parseInt(cb.value));
+                });
+
                 document.getElementById('expirationModal').style.display = 'flex';
-            }
-
-            function openEditModal(id) {
-                editingId = id;
-                document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Editar Vencimiento';
-                document.getElementById('expirationForm').action = `/expirations/${id}/edit`;
-
-                fetch(`/api/expirations/${id}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        document.getElementById('exp_title').value = data.title;
-                        document.getElementById('exp_description').value = data.description;
-                        document.getElementById('exp_due_date').value = data.due_date;
-
-                        document.querySelectorAll('.tag-option input').forEach(cb => {
-                            cb.checked = data.tag_ids.includes(parseInt(cb.value));
-                        });
-
-                        document.getElementById('expirationModal').style.display = 'flex';
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('Error al cargar los datos del vencimiento');
-                    });
-            }
-
-            function closeModal() {
-                document.getElementById('expirationModal').style.display = 'none';
-            }
-
-            function toggleDetails(id) {
-                const details = document.getElementById(`details-${id}`);
-                const btn = event.currentTarget;
-
-                if (details.style.display === 'none') {
-                    details.style.display = 'block';
-                    btn.classList.add('expanded');
-                } else {
-                    details.style.display = 'none';
-                    btn.classList.remove('expanded');
-                }
-            }
-
-            function toggleExpiration(id) {
-                fetch(`/expirations/${id}/toggle`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            const card = document.getElementById(`expiration-${id}`);
-                            if (data.completed) {
-                                card.classList.add('completed');
-                            } else {
-                                card.classList.remove('completed');
-                            }
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        const checkbox = document.getElementById(`check-${id}`);
-                        checkbox.checked = !checkbox.checked;
-                    });
-            }
-
-            function deleteExpiration(id) {
-                if (!confirm('¿Estás seguro de que deseas eliminar este vencimiento?')) return;
-
-                fetch(`/expirations/${id}/delete`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            document.getElementById(`expiration-${id}`).remove();
-                        } else {
-                            alert(data.error || 'Error al eliminar');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('Error al eliminar el vencimiento');
-                    });
-            }
-
-            function applyFilters() {
-                const startDate = document.getElementById('start_date').value;
-                const endDate = document.getElementById('end_date').value;
-                const tagFilter = document.getElementById('tag_filter').value;
-                const period = '{{ current_period }}';
-
-                let url = `{{ url_for('main.expiration_calendar') }}?period=${period}`;
-
-                if (startDate && endDate) {
-                    url += `&start_date=${startDate}&end_date=${endDate}`;
-                }
-                if (tagFilter) {
-                    url += `&tag_filter=${tagFilter}`;
-                }
-
-                window.location.href = url;
-            }
-
-            // Close modal when clicking outside
-            document.getElementById('expirationModal').addEventListener('click', function (e) {
-                if (e.target === this) closeModal();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al cargar los datos del vencimiento');
             });
-        </script>
+    }
 
-        <!-- Calendar Widget -->
-        <script src="{{ url_for('static', filename='calendar_widget.js') }}"></script>
-        <script>
-            document.addEventListener('DOMContentLoaded', function () {
-                const eventDates = {{ event_dates | tojson
-            }};
-            initCalendarWidget('calendarWidget', eventDates);
+    function closeModal() {
+        document.getElementById('expirationModal').style.display = 'none';
+    }
+
+    function toggleDetails(id) {
+        const details = document.getElementById(`details-${id}`);
+        const btn = event.currentTarget;
+
+        if (details.style.display === 'none') {
+            details.style.display = 'block';
+            btn.classList.add('expanded');
+        } else {
+            details.style.display = 'none';
+            btn.classList.remove('expanded');
+        }
+    }
+
+    function toggleExpiration(id) {
+        fetch(`/expirations/${id}/toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const card = document.getElementById(`expiration-${id}`);
+                    if (data.completed) {
+                        card.classList.add('completed');
+                    } else {
+                        card.classList.remove('completed');
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                const checkbox = document.getElementById(`check-${id}`);
+                checkbox.checked = !checkbox.checked;
+            });
+    }
+
+    function deleteExpiration(id) {
+        if (!confirm('¿Estás seguro de que deseas eliminar este vencimiento?')) return;
+
+        fetch(`/expirations/${id}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById(`expiration-${id}`).remove();
+                } else {
+                    alert(data.error || 'Error al eliminar');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al eliminar el vencimiento');
+            });
+    }
+
+    function applyFilters() {
+        const startDate = document.getElementById('start_date').value;
+        const endDate = document.getElementById('end_date').value;
+        const tagFilter = document.getElementById('tag_filter').value;
+        const period = '{{ current_period }}';
+
+        let url = `{{ url_for('main.expiration_calendar') }}?period=${period}`;
+
+        if (startDate && endDate) {
+            url += `&start_date=${startDate}&end_date=${endDate}`;
+        }
+        if (tagFilter) {
+            url += `&tag_filter=${tagFilter}`;
+        }
+
+        window.location.href = url;
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('expirationModal').addEventListener('click', function (e) {
+        if (e.target === this) closeModal();
     });
-        </script>
-        {% endblock %}
+</script>
+
+<!-- Calendar Widget -->
+<script src="{{ url_for('static', filename='calendar_widget.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const eventDates = {{ event_dates | tojson
+    }};
+    initCalendarWidget('calendarWidget', eventDates);
+    });
+</script>
+{% endblock %}

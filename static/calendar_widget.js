@@ -18,6 +18,10 @@ class CalendarWidget {
         this.baseUrl = options.baseUrl || '';
         this.urlParams = options.urlParams || {};
 
+        // Filter date range
+        this.filterStartDate = options.filterStartDate || null; // 'YYYY-MM-DD'
+        this.filterEndDate = options.filterEndDate || null; // 'YYYY-MM-DD'
+
         // Spanish month names
         this.monthNames = [
             'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -91,9 +95,17 @@ class CalendarWidget {
             const hasEvent = this.eventDates.includes(dateStr);
             const isSelected = this.selectedDate === dateStr;
 
+            // Check filter range
+            const isFilterStart = this.filterStartDate === dateStr;
+            const isFilterEnd = this.filterEndDate === dateStr;
+            const isInFilterRange = this.isInFilterRange(dateStr);
+
             let classes = ['calendar-widget-day'];
             if (isToday) classes.push('today');
             if (isWeekend) classes.push('weekend');
+            if (isFilterStart) classes.push('filter-start');
+            if (isFilterEnd) classes.push('filter-end');
+            if (isInFilterRange && !isFilterStart && !isFilterEnd) classes.push('in-filter-range');
             if (isSelected && !isToday) classes.push('selected');
 
             const eventDot = hasEvent ? '<span class="event-dot"></span>' : '';
@@ -115,6 +127,9 @@ class CalendarWidget {
         }
 
         html += '</div>';
+
+        // Add legend
+        html += this.renderLegend();
 
         this.container.innerHTML = html;
     }
@@ -184,6 +199,44 @@ class CalendarWidget {
     }
 
     /**
+     * Check if date is within filter range
+     */
+    isInFilterRange(dateStr) {
+        if (!this.filterStartDate || !this.filterEndDate) return false;
+        return dateStr >= this.filterStartDate && dateStr <= this.filterEndDate;
+    }
+
+    /**
+     * Render the legend
+     */
+    renderLegend() {
+        let legendItems = `
+            <div class="legend-item">
+                <span class="legend-dot today"></span>
+                <span>Hoy</span>
+            </div>
+        `;
+
+        if (this.filterStartDate || this.filterEndDate) {
+            legendItems += `
+                <div class="legend-item">
+                    <span class="legend-dot filter-range"></span>
+                    <span>Filtro</span>
+                </div>
+            `;
+        }
+
+        legendItems += `
+            <div class="legend-item">
+                <span class="legend-dot has-event"></span>
+                <span>Con tareas</span>
+            </div>
+        `;
+
+        return `<div class="calendar-widget-legend">${legendItems}</div>`;
+    }
+
+    /**
      * Get Spanish day name
      */
     getDayName(date) {
@@ -206,13 +259,18 @@ let calendarWidget = null;
 /**
  * Initialize the calendar widget
  * @param {string} containerId - ID of the container element
- * @param {Array} eventDates - Array of date strings 'YYYY-MM-DD' that have events
- * @param {Function} onDateSelect - Optional callback when a date is selected
+ * @param {Object} options - Configuration options
+ * @param {Array} options.eventDates - Array of date strings 'YYYY-MM-DD' that have events
+ * @param {string} options.filterStartDate - Start date of current filter 'YYYY-MM-DD'
+ * @param {string} options.filterEndDate - End date of current filter 'YYYY-MM-DD'
+ * @param {Function} options.onDateSelect - Optional callback when a date is selected
  */
-function initCalendarWidget(containerId, eventDates = [], onDateSelect = null) {
+function initCalendarWidget(containerId, options = {}) {
     calendarWidget = new CalendarWidget(containerId, {
-        eventDates: eventDates,
-        onDateSelect: onDateSelect
+        eventDates: options.eventDates || [],
+        filterStartDate: options.filterStartDate || null,
+        filterEndDate: options.filterEndDate || null,
+        onDateSelect: options.onDateSelect || null
     });
     return calendarWidget;
 }

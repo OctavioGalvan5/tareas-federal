@@ -578,7 +578,14 @@
     document.addEventListener('DOMContentLoaded', function () {
         const eventDates = {{ event_dates | tojson
     }};
-    initCalendarWidget('calendarWidget', eventDates);
-            });
+    const filterStartDate = '{{ request.args.get("start_date", "") }}';
+    const filterEndDate = '{{ request.args.get("end_date", "") }}';
+
+    initCalendarWidget('calendarWidget', {
+        eventDates: eventDates,
+        filterStartDate: filterStartDate || null,
+        filterEndDate: filterEndDate || null
+    });
+    });
 </script>
 {% endblock %}

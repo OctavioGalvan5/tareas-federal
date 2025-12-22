@@ -1,0 +1,598 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 1200px; margin: 0 auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h2><i class="fas fa-sync-alt"></i> Tareas Recurrentes</h2>
+        <button onclick="openCreateModal()" class="button-primary">
+            <i class="fas fa-plus"></i> Nueva Tarea Recurrente
+        </button>
+    </div>
+
+    <p style="color: #64748b; margin-bottom: 1.5rem;">
+        <i class="fas fa-info-circle"></i> Las tareas recurrentes se generan automáticamente a las 00:05 cada día.
+        Solo se crean en días hábiles (excluyendo fines de semana y feriados argentinos).
+    </p>
+
+    {% if recurring_tasks %}
+    <div class="recurring-tasks-list">
+        {% for rt in recurring_tasks %}
+        <div class="recurring-task-card {% if not rt.is_active %}paused{% endif %}" id="rt-{{ rt.id }}">
+            <div class="rt-header">
+                <div class="rt-title-section">
+                    <h3>{{ rt.title }}</h3>
+                    {% if not rt.is_active %}
+                    <span class="status-badge paused"><i class="fas fa-pause"></i> Pausada</span>
+                    {% else %}
+                    <span class="status-badge active"><i class="fas fa-check"></i> Activa</span>
+                    {% endif %}
+                </div>
+                <div class="rt-actions">
+                    <button class="action-btn" onclick="toggleRecurring({{ rt.id }})" 
+                            title="{{ 'Reanudar' if not rt.is_active else 'Pausar' }}">
+                        <i class="fas {{ 'fa-play' if not rt.is_active else 'fa-pause' }}"></i>
+                    </button>
+                    <a href="{{ url_for('main.edit_recurring_task', rt_id=rt.id) }}" class="action-btn" title="Editar">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                    <button class="action-btn delete-btn" onclick="deleteRecurring({{ rt.id }}, '{{ rt.title }}')" title="Eliminar">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="rt-body">
+                {% if rt.description %}
+                <p class="rt-description">{{ rt.description }}</p>
+                {% endif %}
+
+                <div class="rt-details">
+                    <div class="rt-detail">
+                        <i class="fas fa-clock"></i>
+                        <span>
+                            {% if rt.recurrence_type == 'weekdays' %}
+                                Días hábiles (Lun-Vie)
+                            {% elif rt.recurrence_type == 'weekly' %}
+                                Semanal: 
+                                {% set day_names = {1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom'} %}
+                                {% for d in rt.days_of_week.split(',') %}{{ day_names[d|int] }}{% if not loop.last %}, {% endif %}{% endfor %}
+                            {% elif rt.recurrence_type == 'monthly' %}
+                                Mensual: Día {{ rt.day_of_month }}
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="rt-detail">
+                        <i class="fas fa-bell"></i>
+                        <span>Vence a las {{ rt.due_time.strftime('%H:%M') }}</span>
+                    </div>
+                    <div class="rt-detail">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span class="priority-{{ rt.priority.lower() }}">{{ rt.priority }}</span>
+                    </div>
+                </div>
+
+                <div class="rt-meta">
+                    <div class="rt-detail">
+                        <i class="fas fa-users"></i>
+                        <span>{{ rt.assignees|map(attribute='full_name')|join(', ') }}</span>
+                    </div>
+                    {% if rt.tags %}
+                    <div class="rt-tags">
+                        {% for tag in rt.tags %}
+                        <span class="tag-chip" style="background: {{ tag.color }};">{{ tag.name }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="rt-dates">
+                    <span><i class="fas fa-calendar-plus"></i> Desde: {{ rt.start_date.strftime('%d/%m/%Y') }}</span>
+                    {% if rt.end_date %}
+                    <span><i class="fas fa-calendar-minus"></i> Hasta: {{ rt.end_date.strftime('%d/%m/%Y') }}</span>
+                    {% else %}
+                    <span><i class="fas fa-infinity"></i> Sin fecha de fin</span>
+                    {% endif %}
+                    {% if rt.last_generated_date %}
+                    <span><i class="fas fa-history"></i> Última generación: {{ rt.last_generated_date.strftime('%d/%m/%Y') }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: #9ca3af;">
+        <i class="fas fa-sync-alt" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+        <p>No hay tareas recurrentes configuradas.</p>
+        <button onclick="openCreateModal()" class="button-secondary" style="margin-top: 1rem;">
+            <i class="fas fa-plus"></i> Crear la primera
+        </button>
+    </div>
+    {% endif %}
+
+    <!-- Generate Now Button (Admin) -->
+    <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
+        <button onclick="generateNow()" class="button-secondary">
+            <i class="fas fa-bolt"></i> Generar Tareas Ahora (Forzar)
+        </button>
+        <span style="color: #9ca3af; font-size: 0.85rem; margin-left: 1rem;">
+            Útil para testing. Genera tareas para hoy si corresponde.
+        </span>
+    </div>
+</div>
+
+<!-- Create Modal -->
+<div id="createModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-header">
+            <h2><i class="fas fa-plus"></i> Nueva Tarea Recurrente</h2>
+            <button onclick="closeModal()" class="close-btn">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('main.create_recurring_task') }}">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="title"><i class="fas fa-heading"></i> Título</label>
+                    <input type="text" id="title" name="title" required placeholder="Ej: Revisión expedientes">
+                </div>
+
+                <div class="form-group">
+                    <label for="description"><i class="fas fa-align-left"></i> Descripción</label>
+                    <textarea id="description" name="description" rows="2" placeholder="Descripción opcional"></textarea>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label for="priority"><i class="fas fa-exclamation-circle"></i> Prioridad</label>
+                        <select id="priority" name="priority" required>
+                            <option value="Normal">Normal</option>
+                            <option value="Media">Media</option>
+                            <option value="Urgente">Urgente</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="due_time"><i class="fas fa-clock"></i> Hora de Vencimiento</label>
+                        <input type="time" id="due_time" name="due_time" required value="18:00">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-redo"></i> Tipo de Recurrencia</label>
+                    <div class="recurrence-options">
+                        <label class="radio-option">
+                            <input type="radio" name="recurrence_type" value="weekdays" checked onchange="updateRecurrenceUI()">
+                            <span>Días Hábiles (Lun-Vie)</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="recurrence_type" value="weekly" onchange="updateRecurrenceUI()">
+                            <span>Días Específicos</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="recurrence_type" value="monthly" onchange="updateRecurrenceUI()">
+                            <span>Mensual</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Weekly Days Selector (hidden by default) -->
+                <div id="weeklyOptions" class="form-group" style="display: none;">
+                    <label><i class="fas fa-calendar-week"></i> Seleccionar Días</label>
+                    <div class="day-checkboxes">
+                        <label><input type="checkbox" class="day-cb" value="1"> Lun</label>
+                        <label><input type="checkbox" class="day-cb" value="2"> Mar</label>
+                        <label><input type="checkbox" class="day-cb" value="3"> Mié</label>
+                        <label><input type="checkbox" class="day-cb" value="4"> Jue</label>
+                        <label><input type="checkbox" class="day-cb" value="5"> Vie</label>
+                        <label><input type="checkbox" class="day-cb" value="6"> Sáb</label>
+                        <label><input type="checkbox" class="day-cb" value="7"> Dom</label>
+                    </div>
+                    <input type="hidden" id="days_of_week" name="days_of_week" value="">
+                </div>
+
+                <!-- Monthly Day Selector (hidden by default) -->
+                <div id="monthlyOptions" class="form-group" style="display: none;">
+                    <label for="day_of_month"><i class="fas fa-calendar-day"></i> Día del Mes</label>
+                    <input type="number" id="day_of_month" name="day_of_month" min="1" max="31" placeholder="1-31">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label for="start_date"><i class="fas fa-calendar-plus"></i> Fecha de Inicio</label>
+                        <input type="date" id="start_date" name="start_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="end_date"><i class="fas fa-calendar-minus"></i> Fecha de Fin (Opcional)</label>
+                        <input type="date" id="end_date" name="end_date">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-users"></i> Asignar a</label>
+                    <select id="assignees" name="assignees" multiple required style="height: 120px;">
+                        {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-tags"></i> Etiquetas</label>
+                    <div class="tag-options">
+                        {% for tag in available_tags %}
+                        <label class="tag-option">
+                            <input type="checkbox" name="tags" value="{{ tag.id }}">
+                            <span class="tag-chip" style="background: {{ tag.color }};">{{ tag.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="time_spent"><i class="fas fa-hourglass-half"></i> Tiempo Estimado (minutos)</label>
+                    <input type="number" id="time_spent" name="time_spent" min="0" value="0" placeholder="Ej: 30">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal()" class="button-secondary">Cancelar</button>
+                <button type="submit" class="button-primary" onclick="prepareSubmit()">
+                    <i class="fas fa-check"></i> Crear
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.recurring-tasks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.recurring-task-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: all 0.2s ease;
+}
+
+.recurring-task-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.recurring-task-card.paused {
+    opacity: 0.7;
+    background: #f9fafb;
+}
+
+.rt-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.rt-title-section {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.rt-title-section h3 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-badge.active {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.status-badge.paused {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.rt-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.action-btn {
+    background: #f3f4f6;
+    border: none;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #6b7280;
+    transition: all 0.2s;
+}
+
+.action-btn:hover {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.action-btn.delete-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.rt-description {
+    color: #6b7280;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.rt-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.rt-detail {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: #6b7280;
+}
+
+.rt-detail i {
+    color: #9ca3af;
+    width: 16px;
+}
+
+.rt-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.rt-tags {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.rt-dates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    font-size: 0.85rem;
+    color: #9ca3af;
+    padding-top: 0.5rem;
+    border-top: 1px solid #f3f4f6;
+}
+
+.rt-dates span {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Priority colors */
+.priority-normal { color: #059669; }
+.priority-media { color: #d97706; }
+.priority-urgente { color: #dc2626; font-weight: 600; }
+
+/* Modal styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 16px;
+    max-height: 90vh;
+    overflow-y: auto;
+    width: 100%;
+    margin: 1rem;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h2 {
+    margin: 0;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #9ca3af;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    padding: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.recurrence-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.radio-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    padding: 0.5rem 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.radio-option:has(input:checked) {
+    border-color: #0ea5e9;
+    background: #f0f9ff;
+}
+
+.day-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.day-checkboxes label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.day-checkboxes label:has(input:checked) {
+    border-color: #0ea5e9;
+    background: #0ea5e9;
+    color: white;
+}
+
+.tag-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.tag-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.tag-option input {
+    width: auto;
+}
+</style>
+
+<script>
+// Set today's date as default start date
+document.getElementById('start_date').value = new Date().toISOString().split('T')[0];
+
+function openCreateModal() {
+    document.getElementById('createModal').style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('createModal').style.display = 'none';
+}
+
+function updateRecurrenceUI() {
+    const type = document.querySelector('input[name="recurrence_type"]:checked').value;
+    document.getElementById('weeklyOptions').style.display = type === 'weekly' ? 'block' : 'none';
+    document.getElementById('monthlyOptions').style.display = type === 'monthly' ? 'block' : 'none';
+}
+
+function prepareSubmit() {
+    // Collect checked days for weekly
+    const checkboxes = document.querySelectorAll('.day-cb:checked');
+    const days = Array.from(checkboxes).map(cb => cb.value).join(',');
+    document.getElementById('days_of_week').value = days;
+}
+
+function toggleRecurring(id) {
+    fetch(`/recurring-tasks/${id}/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Error al cambiar estado');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al cambiar estado');
+    });
+}
+
+function deleteRecurring(id, title) {
+    if (!confirm(`¿Estás seguro de eliminar la tarea recurrente "${title}"?`)) return;
+    
+    fetch(`/recurring-tasks/${id}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById(`rt-${id}`).remove();
+        } else {
+            alert(data.error || 'Error al eliminar');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al eliminar');
+    });
+}
+
+function generateNow() {
+    if (!confirm('¿Generar las tareas pendientes para hoy?')) return;
+    
+    fetch('/api/recurring-tasks/generate-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Tareas generadas exitosamente');
+        } else {
+            alert('Error: ' + (data.error || 'Error desconocido'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al generar tareas');
+    });
+}
+
+// Close modal when clicking outside
+document.getElementById('createModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+</script>
+{% endblock %}

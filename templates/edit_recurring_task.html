@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 800px; margin: 0 auto;">
+    <h2><i class="fas fa-edit"></i> Editar Tarea Recurrente</h2>
+
+    <form method="POST">
+        <div class="form-group">
+            <label for="title"><i class="fas fa-heading"></i> Título</label>
+            <input type="text" id="title" name="title" required value="{{ rt.title }}">
+        </div>
+
+        <div class="form-group">
+            <label for="description"><i class="fas fa-align-left"></i> Descripción</label>
+            <textarea id="description" name="description" rows="2">{{ rt.description or '' }}</textarea>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="priority"><i class="fas fa-exclamation-circle"></i> Prioridad</label>
+                <select id="priority" name="priority" required>
+                    <option value="Normal" {% if rt.priority=='Normal' %}selected{% endif %}>Normal</option>
+                    <option value="Media" {% if rt.priority=='Media' %}selected{% endif %}>Media</option>
+                    <option value="Urgente" {% if rt.priority=='Urgente' %}selected{% endif %}>Urgente</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="due_time"><i class="fas fa-clock"></i> Hora de Vencimiento</label>
+                <input type="time" id="due_time" name="due_time" required value="{{ rt.due_time.strftime('%H:%M') }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label><i class="fas fa-redo"></i> Tipo de Recurrencia</label>
+            <div class="recurrence-options">
+                <label class="radio-option">
+                    <input type="radio" name="recurrence_type" value="weekdays" {% if rt.recurrence_type=='weekdays'
+                        %}checked{% endif %} onchange="updateRecurrenceUI()">
+                    <span>Días Hábiles (Lun-Vie)</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="recurrence_type" value="weekly" {% if rt.recurrence_type=='weekly'
+                        %}checked{% endif %} onchange="updateRecurrenceUI()">
+                    <span>Días Específicos</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="recurrence_type" value="monthly" {% if rt.recurrence_type=='monthly'
+                        %}checked{% endif %} onchange="updateRecurrenceUI()">
+                    <span>Mensual</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Weekly Days Selector -->
+        <div id="weeklyOptions" class="form-group"
+            style="display: {% if rt.recurrence_type == 'weekly' %}block{% else %}none{% endif %};">
+            <label><i class="fas fa-calendar-week"></i> Seleccionar Días</label>
+            <div class="day-checkboxes">
+                {% set current_days = rt.days_of_week.split(',') if rt.days_of_week else [] %}
+                <label><input type="checkbox" class="day-cb" value="1" {% if '1' in current_days %}checked{% endif %}>
+                    Lun</label>
+                <label><input type="checkbox" class="day-cb" value="2" {% if '2' in current_days %}checked{% endif %}>
+                    Mar</label>
+                <label><input type="checkbox" class="day-cb" value="3" {% if '3' in current_days %}checked{% endif %}>
+                    Mié</label>
+                <label><input type="checkbox" class="day-cb" value="4" {% if '4' in current_days %}checked{% endif %}>
+                    Jue</label>
+                <label><input type="checkbox" class="day-cb" value="5" {% if '5' in current_days %}checked{% endif %}>
+                    Vie</label>
+                <label><input type="checkbox" class="day-cb" value="6" {% if '6' in current_days %}checked{% endif %}>
+                    Sáb</label>
+                <label><input type="checkbox" class="day-cb" value="7" {% if '7' in current_days %}checked{% endif %}>
+                    Dom</label>
+            </div>
+            <input type="hidden" id="days_of_week" name="days_of_week" value="{{ rt.days_of_week or '' }}">
+        </div>
+
+        <!-- Monthly Day Selector -->
+        <div id="monthlyOptions" class="form-group"
+            style="display: {% if rt.recurrence_type == 'monthly' %}block{% else %}none{% endif %};">
+            <label for="day_of_month"><i class="fas fa-calendar-day"></i> Día del Mes</label>
+            <input type="number" id="day_of_month" name="day_of_month" min="1" max="31"
+                value="{{ rt.day_of_month or '' }}" placeholder="1-31">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="start_date"><i class="fas fa-calendar-plus"></i> Fecha de Inicio</label>
+                <input type="date" id="start_date" name="start_date" required
+                    value="{{ rt.start_date.strftime('%Y-%m-%d') }}">
+            </div>
+            <div class="form-group">
+                <label for="end_date"><i class="fas fa-calendar-minus"></i> Fecha de Fin (Opcional)</label>
+                <input type="date" id="end_date" name="end_date"
+                    value="{{ rt.end_date.strftime('%Y-%m-%d') if rt.end_date else '' }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label><i class="fas fa-users"></i> Asignar a</label>
+            <select id="assignees" name="assignees" multiple required style="height: 120px;">
+                {% set assignee_ids = rt.assignees|map(attribute='id')|list %}
+                {% for user in users %}
+                <option value="{{ user.id }}" {% if user.id in assignee_ids %}selected{% endif %}>
+                    {{ user.full_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label><i class="fas fa-tags"></i> Etiquetas</label>
+            <div class="tag-options">
+                {% set tag_ids = rt.tags|map(attribute='id')|list %}
+                {% for tag in available_tags %}
+                <label class="tag-option">
+                    <input type="checkbox" name="tags" value="{{ tag.id }}" {% if tag.id in tag_ids %}checked{% endif
+                        %}>
+                    <span class="tag-chip" style="background: {{ tag.color }};">{{ tag.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="time_spent"><i class="fas fa-hourglass-half"></i> Tiempo Estimado (minutos)</label>
+            <input type="number" id="time_spent" name="time_spent" min="0" value="{{ rt.time_spent or 0 }}">
+        </div>
+
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+            <a href="{{ url_for('main.manage_recurring_tasks') }}" class="button-secondary">
+                <i class="fas fa-times"></i> Cancelar
+            </a>
+            <button type="submit" class="button-primary" onclick="prepareSubmit()">
+                <i class="fas fa-check"></i> Guardar Cambios
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+    .recurrence-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .radio-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        padding: 0.5rem 1rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+    .radio-option:has(input:checked) {
+        border-color: #0ea5e9;
+        background: #f0f9ff;
+    }
+
+    .day-checkboxes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .day-checkboxes label {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .day-checkboxes label:has(input:checked) {
+        border-color: #0ea5e9;
+        background: #0ea5e9;
+        color: white;
+    }
+
+    .tag-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .tag-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+    }
+
+    .tag-option input {
+        width: auto;
+    }
+</style>
+
+<script>
+    function updateRecurrenceUI() {
+        const type = document.querySelector('input[name="recurrence_type"]:checked').value;
+        document.getElementById('weeklyOptions').style.display = type === 'weekly' ? 'block' : 'none';
+        document.getElementById('monthlyOptions').style.display = type === 'monthly' ? 'block' : 'none';
+    }
+
+    function prepareSubmit() {
+        // Collect checked days for weekly
+        const checkboxes = document.querySelectorAll('.day-cb:checked');
+        const days = Array.from(checkboxes).map(cb => cb.value).join(',');
+        document.getElementById('days_of_week').value = days;
+    }
+</script>
+{% endblock %}

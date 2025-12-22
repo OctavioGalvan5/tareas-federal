@@ -67,6 +67,11 @@ def create_app(test_config=None):
     # Register custom Jinja2 filters
     app.jinja_env.filters['to_buenos_aires'] = to_buenos_aires
 
+    # Initialize scheduler for recurring tasks (only in production, not during testing)
+    if not app.config.get('TESTING'):
+        from scheduler import init_scheduler
+        init_scheduler(app)
+
     return app
 
 app = create_app()

@@ -78,6 +78,10 @@ class Task(db.Model):
     enabled_by_task_id = db.Column(db.Integer, db.ForeignKey('task.id'), nullable=True)  # Which task enabled it?
     enabled_by_task = db.relationship('Task', foreign_keys=[enabled_by_task_id], remote_side=[id])
     original_due_date = db.Column(db.DateTime, nullable=True)  # Original due_date before auto-adjustment
+    
+    # Recurring task origin
+    recurring_task_id = db.Column(db.Integer, db.ForeignKey('recurring_task.id'), nullable=True)
+    recurring_task = db.relationship('RecurringTask', backref='generated_tasks')
 
     def __repr__(self):
         return f'<Task {self.title}>'
@@ -146,3 +150,57 @@ class Expiration(db.Model):
     
     def __repr__(self):
         return f'<Expiration {self.title}>'
+
+# Association table for Many-to-Many relationship between RecurringTasks and Users (assignees)
+recurring_task_assignments = db.Table('recurring_task_assignments',
+    db.Column('recurring_task_id', db.Integer, db.ForeignKey('recurring_task.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), primary_key=True)
+)
+
+# Association table for Many-to-Many relationship between RecurringTasks and Tags
+recurring_task_tags = db.Table('recurring_task_tags',
+    db.Column('recurring_task_id', db.Integer, db.ForeignKey('recurring_task.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('tag_id', db.Integer, db.ForeignKey('tag.id', ondelete='CASCADE'), primary_key=True)
+)
+
+class RecurringTask(db.Model):
+    """
+    Tareas Recurrentes: define tareas que se crean automáticamente
+    según una programación (días hábiles, días específicos, etc.)
+    Solo los administradores pueden crear/editar tareas recurrentes.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    priority = db.Column(db.String(20), nullable=False, default='Normal')  # Normal, Media, Urgente
+    
+    # Recurrence configuration
+    recurrence_type = db.Column(db.String(20), nullable=False)  # 'weekdays', 'weekly', 'monthly'
+    days_of_week = db.Column(db.String(20), nullable=True)  # "1,2,3,4,5" for Mon-Fri, "1,3,5" for specific days
+    day_of_month = db.Column(db.Integer, nullable=True)  # For monthly: 1-31
+    
+    # Schedule
+    due_time = db.Column(db.Time, nullable=False)  # When the task is due (e.g., 18:00)
+    start_date = db.Column(db.Date, nullable=False)  # When to start creating tasks
+    end_date = db.Column(db.Date, nullable=True)  # When to stop (NULL = forever)
+    
+    # Time tracking default
+    time_spent = db.Column(db.Integer, nullable=True, default=0)  # Default time spent in minutes
+    
+    # Status
+    is_active = db.Column(db.Boolean, default=True)  # Pause/Resume
+    
+    # Metadata
+    creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_generated_date = db.Column(db.Date, nullable=True)  # Track last generation
+    
+    # Relationships
+    creator = db.relationship('User', foreign_keys=[creator_id], backref='created_recurring_tasks')
+    assignees = db.relationship('User', secondary=recurring_task_assignments,
+                                backref=db.backref('assigned_recurring_tasks', lazy='dynamic'))
+    tags = db.relationship('Tag', secondary=recurring_task_tags,
+                           backref=db.backref('recurring_tasks', lazy='dynamic'))
+    
+    def __repr__(self):
+        return f'<RecurringTask {self.title}>'

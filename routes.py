@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, make_response
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
-from models import User, Task, Tag, TaskTemplate, Expiration
+from models import User, Task, Tag, TaskTemplate, Expiration, RecurringTask
 from datetime import datetime, date, timedelta
 from pdf_utils import generate_task_pdf
 from excel_utils import generate_task_excel
@@ -2022,4 +2022,275 @@ def api_get_expiration(expiration_id):
         'due_date': expiration.due_date.strftime('%Y-%m-%d'),
         'tag_ids': [tag.id for tag in expiration.tags],
         'completed': expiration.completed
+    })
+
+
+# --- Recurring Tasks Routes (Admin Only) ---
+
+@main_bp.route('/recurring-tasks')
+@login_required
+def manage_recurring_tasks():
+    """Listar y gestionar tareas recurrentes - Solo admin"""
+    if not current_user.is_admin:
+        flash('Solo los administradores pueden gestionar tareas recurrentes.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    recurring_tasks = RecurringTask.query.order_by(RecurringTask.created_at.desc()).all()
+    users = User.query.order_by(User.full_name).all()
+    available_tags = Tag.query.order_by(Tag.name).all()
+    
+    return render_template('manage_recurring_tasks.html',
+                           recurring_tasks=recurring_tasks,
+                           users=users,
+                           available_tags=available_tags)
+
+
+@main_bp.route('/recurring-tasks/create', methods=['POST'])
+@login_required
+def create_recurring_task():
+    """Crear una nueva tarea recurrente - Solo admin"""
+    if not current_user.is_admin:
+        flash('Solo los administradores pueden crear tareas recurrentes.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    title = request.form.get('title')
+    description = request.form.get('description', '')
+    priority = request.form.get('priority', 'Normal')
+    recurrence_type = request.form.get('recurrence_type')
+    days_of_week = request.form.get('days_of_week', '')
+    day_of_month_str = request.form.get('day_of_month', '')
+    due_time_str = request.form.get('due_time')
+    start_date_str = request.form.get('start_date')
+    end_date_str = request.form.get('end_date', '')
+    time_spent_str = request.form.get('time_spent', '0')
+    assignee_ids = request.form.getlist('assignees')
+    tag_ids = request.form.getlist('tags')
+    
+    # Validations
+    if not title or not recurrence_type or not due_time_str or not start_date_str:
+        flash('Título, tipo de recurrencia, hora y fecha de inicio son requeridos.', 'danger')
+        return redirect(url_for('main.manage_recurring_tasks'))
+    
+    if not assignee_ids:
+        flash('Debes asignar al menos un usuario.', 'danger')
+        return redirect(url_for('main.manage_recurring_tasks'))
+    
+    # Parse time
+    try:
+        from datetime import time as dt_time
+        hour, minute = map(int, due_time_str.split(':'))
+        due_time = dt_time(hour, minute)
+    except ValueError:
+        flash('Formato de hora inválido.', 'danger')
+        return redirect(url_for('main.manage_recurring_tasks'))
+    
+    # Parse dates
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else None
+    except ValueError:
+        flash('Formato de fecha inválido.', 'danger')
+        return redirect(url_for('main.manage_recurring_tasks'))
+    
+    # Parse day_of_month for monthly recurrence
+    day_of_month = None
+    if recurrence_type == 'monthly' and day_of_month_str:
+        try:
+            day_of_month = int(day_of_month_str)
+            if day_of_month < 1 or day_of_month > 31:
+                raise ValueError()
+        except ValueError:
+            flash('Día del mes inválido (1-31).', 'danger')
+            return redirect(url_for('main.manage_recurring_tasks'))
+    
+    # Parse time_spent
+    try:
+        time_spent = int(time_spent_str) if time_spent_str else 0
+    except ValueError:
+        time_spent = 0
+    
+    # Create recurring task
+    new_recurring = RecurringTask(
+        title=title,
+        description=description,
+        priority=priority,
+        recurrence_type=recurrence_type,
+        days_of_week=days_of_week if recurrence_type == 'weekly' else None,
+        day_of_month=day_of_month,
+        due_time=due_time,
+        start_date=start_date,
+        end_date=end_date,
+        time_spent=time_spent,
+        creator_id=current_user.id,
+        is_active=True
+    )
+    
+    # Add assignees
+    for uid in assignee_ids:
+        user = User.query.get(int(uid))
+        if user:
+            new_recurring.assignees.append(user)
+    
+    # Add tags
+    for tid in tag_ids:
+        tag = Tag.query.get(int(tid))
+        if tag:
+            new_recurring.tags.append(tag)
+    
+    db.session.add(new_recurring)
+    db.session.commit()
+    
+    flash(f'Tarea recurrente "{title}" creada exitosamente.', 'success')
+    return redirect(url_for('main.manage_recurring_tasks'))
+
+
+@main_bp.route('/recurring-tasks/<int:rt_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_recurring_task(rt_id):
+    """Editar una tarea recurrente - Solo admin"""
+    if not current_user.is_admin:
+        flash('Solo los administradores pueden editar tareas recurrentes.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    rt = RecurringTask.query.get_or_404(rt_id)
+    
+    if request.method == 'POST':
+        rt.title = request.form.get('title', rt.title)
+        rt.description = request.form.get('description', '')
+        rt.priority = request.form.get('priority', 'Normal')
+        rt.recurrence_type = request.form.get('recurrence_type', rt.recurrence_type)
+        
+        # Update days_of_week for weekly
+        if rt.recurrence_type == 'weekly':
+            rt.days_of_week = request.form.get('days_of_week', '')
+        else:
+            rt.days_of_week = None
+        
+        # Update day_of_month for monthly
+        if rt.recurrence_type == 'monthly':
+            day_str = request.form.get('day_of_month', '')
+            rt.day_of_month = int(day_str) if day_str else None
+        else:
+            rt.day_of_month = None
+        
+        # Update time
+        due_time_str = request.form.get('due_time')
+        if due_time_str:
+            from datetime import time as dt_time
+            hour, minute = map(int, due_time_str.split(':'))
+            rt.due_time = dt_time(hour, minute)
+        
+        # Update dates
+        start_date_str = request.form.get('start_date')
+        if start_date_str:
+            rt.start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        
+        end_date_str = request.form.get('end_date', '')
+        rt.end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else None
+        
+        # Update time_spent
+        time_spent_str = request.form.get('time_spent', '0')
+        rt.time_spent = int(time_spent_str) if time_spent_str else 0
+        
+        # Update assignees
+        assignee_ids = request.form.getlist('assignees')
+        rt.assignees = []
+        for uid in assignee_ids:
+            user = User.query.get(int(uid))
+            if user:
+                rt.assignees.append(user)
+        
+        # Update tags
+        tag_ids = request.form.getlist('tags')
+        rt.tags = []
+        for tid in tag_ids:
+            tag = Tag.query.get(int(tid))
+            if tag:
+                rt.tags.append(tag)
+        
+        db.session.commit()
+        flash('Tarea recurrente actualizada.', 'success')
+        return redirect(url_for('main.manage_recurring_tasks'))
+    
+    # GET - show edit form
+    users = User.query.order_by(User.full_name).all()
+    available_tags = Tag.query.order_by(Tag.name).all()
+    return render_template('edit_recurring_task.html', rt=rt, users=users, available_tags=available_tags)
+
+
+@main_bp.route('/recurring-tasks/<int:rt_id>/toggle', methods=['POST'])
+@login_required
+def toggle_recurring_task(rt_id):
+    """Pausar/Reanudar una tarea recurrente - Solo admin"""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    
+    rt = RecurringTask.query.get_or_404(rt_id)
+    rt.is_active = not rt.is_active
+    db.session.commit()
+    
+    status = 'activada' if rt.is_active else 'pausada'
+    return jsonify({
+        'success': True,
+        'is_active': rt.is_active,
+        'message': f'Tarea recurrente {status}'
+    })
+
+
+@main_bp.route('/recurring-tasks/<int:rt_id>/delete', methods=['POST'])
+@login_required
+def delete_recurring_task(rt_id):
+    """Eliminar una tarea recurrente - Solo admin"""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    
+    rt = RecurringTask.query.get_or_404(rt_id)
+    title = rt.title
+    db.session.delete(rt)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': f'Tarea recurrente "{title}" eliminada'})
+
+
+@main_bp.route('/api/recurring-tasks/generate-now', methods=['POST'])
+@login_required
+def generate_recurring_tasks_now():
+    """Forzar generación de tareas recurrentes ahora - Solo admin (para testing)"""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    
+    from flask import current_app
+    from scheduler import generate_daily_tasks
+    
+    try:
+        generate_daily_tasks(current_app._get_current_object())
+        return jsonify({'success': True, 'message': 'Tareas generadas exitosamente'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@main_bp.route('/api/recurring-tasks/<int:rt_id>')
+@login_required
+def api_get_recurring_task(rt_id):
+    """API para obtener datos de una tarea recurrente"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'No autorizado'}), 403
+    
+    rt = RecurringTask.query.get_or_404(rt_id)
+    
+    return jsonify({
+        'id': rt.id,
+        'title': rt.title,
+        'description': rt.description or '',
+        'priority': rt.priority,
+        'recurrence_type': rt.recurrence_type,
+        'days_of_week': rt.days_of_week or '',
+        'day_of_month': rt.day_of_month,
+        'due_time': rt.due_time.strftime('%H:%M') if rt.due_time else '',
+        'start_date': rt.start_date.strftime('%Y-%m-%d') if rt.start_date else '',
+        'end_date': rt.end_date.strftime('%Y-%m-%d') if rt.end_date else '',
+        'time_spent': rt.time_spent or 0,
+        'is_active': rt.is_active,
+        'assignee_ids': [u.id for u in rt.assignees],
+        'tag_ids': [t.id for t in rt.tags]
     })

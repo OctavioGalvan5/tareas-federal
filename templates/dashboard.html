@@ -203,6 +203,9 @@
                 <span class="status-badge anulado-badge">ANULADO</span>
                 {% endif %}
                 <span class="priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
+                {% if task.recurring_task_id %}
+                <span class="recurring-badge" title="Tarea recurrente"><i class="fas fa-sync-alt"></i></span>
+                {% endif %}
                 <div class="task-tags">
                     {% for tag in task.tags %}
                     <span class="tag-chip"
@@ -340,6 +343,12 @@
         font-size: 0.7rem;
         font-weight: 700;
         margin-left: 0.5rem;
+    }
+
+    .recurring-badge {
+        color: #0ea5e9;
+        margin-left: 0.5rem;
+        font-size: 0.85rem;
     }
 </style>
 {% endblock %}

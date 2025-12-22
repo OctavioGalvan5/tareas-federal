@@ -78,7 +78,14 @@ def dashboard():
         
     # Handle status filter - exclude 'Anulado' by default
     if filter_status:
-        if filter_status in ['Pending', 'Completed', 'Anulado']:
+        if filter_status == 'Overdue':
+            # Overdue = Pending tasks with due_date < today
+            today_date = date.today()
+            tasks_query = tasks_query.filter(
+                Task.status == 'Pending',
+                db.func.date(Task.due_date) < today_date
+            )
+        elif filter_status in ['Pending', 'Completed', 'Anulado']:
             tasks_query = tasks_query.filter(Task.status == filter_status)
     else:
         # By default, exclude 'Anulado' tasks
@@ -1027,7 +1034,15 @@ def reports_data():
         
     # Filter by status if provided
     if status_filter and status_filter != 'All':
-        query = query.filter(Task.status == status_filter)
+        if status_filter == 'Overdue':
+            # Overdue = Pending tasks with due_date < today
+            today_date = date.today()
+            query = query.filter(
+                Task.status == 'Pending',
+                db.func.date(Task.due_date) < today_date
+            )
+        else:
+            query = query.filter(Task.status == status_filter)
     
     # Filter by date range
     if start_date_str and end_date_str:

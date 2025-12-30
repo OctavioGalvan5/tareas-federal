@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 600px; margin: 0 auto;">
+    <h2><i class="fas fa-user-edit"></i> Editar Usuario: {{ user.username }}</h2>
+
+    <form method="POST" style="margin-top: 1.5rem;">
+        <div class="form-group">
+            <label for="full_name"><i class="fas fa-user"></i> Nombre Completo</label>
+            <input type="text" id="full_name" name="full_name" value="{{ user.full_name }}" required>
+        </div>
+
+        <div class="form-group">
+            <label for="password"><i class="fas fa-key"></i> Nueva Contraseña (dejar vacío para no cambiar)</label>
+            <input type="password" id="password" name="password" placeholder="Nueva contraseña">
+        </div>
+
+        <div class="form-group">
+            <label for="role"><i class="fas fa-user-tag"></i> Rol</label>
+            <select id="role" name="role" style="padding: 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                <option value="usuario" {% if user.role=='usuario' %}selected{% endif %}>Usuario</option>
+                <option value="supervisor" {% if user.role=='supervisor' %}selected{% endif %}>Supervisor</option>
+                <option value="gerente" {% if user.role=='gerente' %}selected{% endif %}>Gerente (ve todas las áreas)
+                </option>
+            </select>
+            <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.3rem;">
+                <i class="fas fa-info-circle"></i> Los gerentes pueden ver tareas de TODAS las áreas
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label><i class="fas fa-building"></i> Áreas Asignadas</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+                {% for area in all_areas %}
+                <label
+                    style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: {{ area.color }}10; border: 1px solid {{ area.color }}40; border-radius: 6px; cursor: pointer;">
+                    <input type="checkbox" name="areas" value="{{ area.id }}" {% if area in user.areas %}checked{% endif
+                        %} style="width: auto;">
+                    <span style="color: {{ area.color }}; font-weight: 500;">{{ area.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.5rem;">
+                <i class="fas fa-info-circle"></i> El usuario solo verá tareas de las áreas seleccionadas
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <input type="checkbox" name="is_admin" {% if user.is_admin %}checked{% endif %} style="width: auto;">
+                <span><i class="fas fa-shield-alt"></i> Administrador (puede crear tareas y gestionar el sistema)</span>
+            </label>
+        </div>
+
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+            <a href="{{ url_for('admin.manage_users') }}" class="button-secondary" style="text-decoration: none;">
+                <i class="fas fa-times"></i> Cancelar
+            </a>
+            <button type="submit" class="button">
+                <i class="fas fa-save"></i> Guardar Cambios
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

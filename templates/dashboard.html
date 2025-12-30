@@ -125,6 +125,24 @@
                 </select>
             </div>
 
+            {% if all_areas %}
+            <div style="flex: 1; min-width: 130px;">
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Área</label>
+                <select name="area" onchange="this.form.submit()"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    <option value="">{% if current_user_is_gerente %}Todas las áreas{% else %}Mis áreas{% endif %}
+                    </option>
+                    {% for area in all_areas %}
+                    <option value="{{ area.id }}" {% if request.args.get('area')|int==area.id %}selected{% endif %}
+                        style="color: {{ area.color }};">
+                        {{ area.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
             <div style="flex: 0 0 auto; min-width: 140px;">
                 <label
                     style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Ordenar</label>
@@ -205,6 +223,12 @@
                 <span class="status-badge anulado-badge">ANULADO</span>
                 {% endif %}
                 <span class="priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
+                {% if task.area %}
+                <span class="area-badge"
+                    style="background-color: {{ task.area.color }}20; color: {{ task.area.color }}; border: 1px solid {{ task.area.color }}40; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-left: 0.25rem;">
+                    <i class="fas fa-building"></i> {{ task.area.name }}
+                </span>
+                {% endif %}
                 {% if task.recurring_task_id %}
                 <span class="recurring-badge" title="Tarea recurrente"><i class="fas fa-sync-alt"></i></span>
                 {% endif %}

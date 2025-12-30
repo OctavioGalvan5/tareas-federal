@@ -7,6 +7,27 @@ from extensions import db, login_manager
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# Association table for Many-to-Many relationship between Users and Areas
+user_areas = db.Table('user_areas',
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('area_id', db.Integer, db.ForeignKey('area.id', ondelete='CASCADE'), primary_key=True)
+)
+
+class Area(db.Model):
+    """
+    Áreas de la organización: Federal, Contable, Legajos, Provincial, etc.
+    Los usuarios pertenecen a una o más áreas y solo ven tareas de sus áreas.
+    Los gerentes pueden ver todas las áreas.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    color = db.Column(db.String(7), nullable=False, default='#6366f1')  # Hex color
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Area {self.name}>'
+
 # Association table for Many-to-Many relationship between Users and Tasks
 task_assignments = db.Table('task_assignments',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
@@ -28,15 +49,26 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     notifications_enabled = db.Column(db.Boolean, default=True)
     
+    # Role: 'usuario' (default), 'supervisor', 'gerente'
+    # gerente can see ALL tasks from ALL areas
+    role = db.Column(db.String(20), nullable=False, default='usuario')
+    
     # Relationships - specify foreign_keys to avoid ambiguity
     created_tasks = db.relationship('Task', foreign_keys='Task.creator_id', backref='creator', lazy=True)
     assigned_tasks = db.relationship('Task', secondary=task_assignments, backref=db.backref('assignees', lazy=True))
+    
+    # Many-to-Many relationship with Areas
+    areas = db.relationship('Area', secondary=user_areas, backref=db.backref('users', lazy='dynamic'))
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+    
+    def can_see_all_areas(self):
+        """Check if user can see tasks from all areas (gerente role)"""
+        return self.role == 'gerente' or self.is_admin
 
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -47,6 +79,10 @@ class Task(db.Model):
     due_date = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    # Area assignment - nullable for backward compatibility during migration
+    area_id = db.Column(db.Integer, db.ForeignKey('area.id'), nullable=True)
+    area = db.relationship('Area', backref=db.backref('tasks', lazy='dynamic'))
     
     # Tracking completion
     completed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
@@ -144,6 +180,10 @@ class Expiration(db.Model):
     completed = db.Column(db.Boolean, default=False)
     completed_at = db.Column(db.DateTime, nullable=True)
     
+    # Area assignment - nullable for backward compatibility
+    area_id = db.Column(db.Integer, db.ForeignKey('area.id'), nullable=True)
+    area = db.relationship('Area', backref=db.backref('expirations', lazy='dynamic'))
+    
     # Relationships
     creator = db.relationship('User', backref='expirations')
     tags = db.relationship('Tag', secondary=expiration_tags, backref=db.backref('expirations', lazy='dynamic'))
@@ -173,6 +213,10 @@ class RecurringTask(db.Model):
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     priority = db.Column(db.String(20), nullable=False, default='Normal')  # Normal, Media, Urgente
+    
+    # Area assignment - nullable for backward compatibility
+    area_id = db.Column(db.Integer, db.ForeignKey('area.id'), nullable=True)
+    area = db.relationship('Area', backref=db.backref('recurring_tasks', lazy='dynamic'))
     
     # Recurrence configuration
     recurrence_type = db.Column(db.String(20), nullable=False)  # 'weekdays', 'weekly', 'monthly'

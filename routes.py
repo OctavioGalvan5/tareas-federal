@@ -58,17 +58,38 @@ def logout():
 @main_bp.route('/')
 @login_required
 def dashboard():
+    # Import Area model
+    from models import Area
+    
     # Filter logic
     filter_assignee = request.args.get('assignee')
     filter_creator = request.args.get('creator')
     filter_status = request.args.get('status')
-    filter_tag = request.args.get('tag_filter')  # AGREGADO
-    sort_order = request.args.get('sort', 'asc')  # Default: ascending
+    filter_tag = request.args.get('tag_filter')
+    filter_area = request.args.get('area')  # NEW: Area filter
+    sort_order = request.args.get('sort', 'asc')
 
-    # Base query: Show ALL tasks to ALL users by default
-    # Optimize: Eager load assignees and tags to prevent N+1 queries
-    # Only show ENABLED tasks (not blocked by parent dependency)
-    tasks_query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(Task.enabled == True)
+    # Base query: Eager load assignees, tags, and area
+    tasks_query = Task.query.options(
+        joinedload(Task.assignees), 
+        joinedload(Task.tags),
+        joinedload(Task.area)  # NEW: Load area relationship
+    ).filter(Task.enabled == True)
+    
+    # NEW: Area-based filtering
+    # Gerentes/admins can see all areas, others only see their assigned areas
+    if not current_user.can_see_all_areas():
+        # Get user's area IDs
+        user_area_ids = [area.id for area in current_user.areas]
+        if user_area_ids:
+            tasks_query = tasks_query.filter(Task.area_id.in_(user_area_ids))
+        else:
+            # User has no areas assigned - show no tasks (or could show all)
+            tasks_query = tasks_query.filter(Task.area_id == None)
+    
+    # NEW: Additional area filter (for gerentes filtering specific area)
+    if filter_area:
+        tasks_query = tasks_query.filter(Task.area_id == int(filter_area))
     
     if filter_assignee:
         tasks_query = tasks_query.filter(Task.assignees.any(id=filter_assignee))
@@ -79,7 +100,6 @@ def dashboard():
     # Handle status filter - exclude 'Anulado' by default
     if filter_status:
         if filter_status == 'Overdue':
-            # Overdue = Pending tasks with due_date < today
             today_date = date.today()
             tasks_query = tasks_query.filter(
                 Task.status == 'Pending',
@@ -88,10 +108,9 @@ def dashboard():
         elif filter_status in ['Pending', 'Completed', 'Anulado']:
             tasks_query = tasks_query.filter(Task.status == filter_status)
     else:
-        # By default, exclude 'Anulado' tasks
         tasks_query = tasks_query.filter(Task.status != 'Anulado')
 
-    if filter_tag:  # NUEVO
+    if filter_tag:
         tasks_query = tasks_query.filter(Task.tags.any(id=int(filter_tag)))
 
     # Search filter
@@ -103,8 +122,7 @@ def dashboard():
             (Task.description.ilike(search_term))
         )
         
-    # Sort by status first (Pending before Completed), then by due_date
-    # Using db.case to assign sort priority: Pending=0, Completed=1, Anulado=2
+    # Sort by status first, then by due_date
     status_order = db.case(
         (Task.status == 'Pending', 0),
         (Task.status == 'Completed', 1),
@@ -116,17 +134,33 @@ def dashboard():
     else:
         tasks = tasks_query.order_by(status_order, Task.due_date.asc()).all()
     
-    # Check for tasks due today for highlighting
     today = date.today()
     
-    users = User.query.all() # For filters
-    all_tags = Tag.query.order_by(Tag.name).all()  # NUEVO
+    users = User.query.all()
+    all_tags = Tag.query.order_by(Tag.name).all()
     
-    return render_template('dashboard.html', tasks=tasks, today=today, users=users, all_tags=all_tags, sort_order=sort_order)
+    # NEW: Get areas for filter dropdown
+    if current_user.can_see_all_areas():
+        all_areas = Area.query.order_by(Area.name).all()
+    else:
+        all_areas = current_user.areas
+    
+    return render_template('dashboard.html', 
+        tasks=tasks, 
+        today=today, 
+        users=users, 
+        all_tags=all_tags, 
+        sort_order=sort_order,
+        all_areas=all_areas,  # NEW: Pass areas to template
+        current_user_is_gerente=current_user.can_see_all_areas()  # NEW
+    )
 
 @main_bp.route('/task/new', methods=['GET', 'POST'])
 @login_required
 def create_task():
+    # Import Area model
+    from models import Area
+    
     # --- SOLO ADMINISTRADORES PUEDEN CREAR TAREAS ---
     if not current_user.is_admin:
         flash('Solo los administradores pueden crear tareas. Usa el calendario de vencimientos para crear recordatorios.', 'danger')
@@ -135,6 +169,12 @@ def create_task():
     users = User.query.all()
     available_tags = Tag.query.order_by(Tag.name).all()
     templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
+    
+    # Load available areas based on user role
+    if current_user.can_see_all_areas():
+        available_areas = Area.query.order_by(Area.name).all()
+    else:
+        available_areas = current_user.areas
 
     if request.method == 'POST':
         title = request.form.get('title')
@@ -142,6 +182,7 @@ def create_task():
         priority = request.form.get('priority')
         due_date_str = request.form.get('due_date')
         time_spent_str = request.form.get('time_spent')
+        area_id_str = request.form.get('area_id')  # NEW: Get area from form
         
         due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
         
@@ -153,6 +194,18 @@ def create_task():
             except ValueError:
                 time_spent = None
         
+        # Parse area_id
+        area_id = None
+        if area_id_str and area_id_str.strip():
+            try:
+                area_id = int(area_id_str)
+            except ValueError:
+                area_id = None
+        
+        # If no area selected and user has only one area, use that one
+        if area_id is None and len(available_areas) == 1:
+            area_id = available_areas[0].id
+        
         # Process task creation
         assignee_ids = request.form.getlist('assignees')
         
@@ -162,7 +215,8 @@ def create_task():
             priority=priority,
             due_date=due_date,
             creator_id=current_user.id,
-            time_spent=time_spent
+            time_spent=time_spent,
+            area_id=area_id  # NEW: Assign area
         )
         
         # Add assignees
@@ -203,7 +257,7 @@ def create_task():
         flash('Tarea creada exitosamente.', 'success')
         return redirect(url_for('main.dashboard'))
         
-    return render_template('create_task.html', users=users, available_tags=available_tags, templates=templates)
+    return render_template('create_task.html', users=users, available_tags=available_tags, templates=templates, available_areas=available_areas)
 
 @main_bp.route('/task/<int:task_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -791,28 +845,141 @@ def export_excel():
 @admin_bp.route('/users', methods=['GET', 'POST'])
 @login_required
 def manage_users():
-    # Ideally only for admins, but for now let's allow all or check is_admin
+    from models import Area
+    
     if not current_user.is_admin:
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.dashboard'))
+    
+    all_areas = Area.query.order_by(Area.name).all()
         
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         full_name = request.form.get('full_name')
         is_admin = 'is_admin' in request.form
+        role = request.form.get('role', 'usuario')  # NEW: Get role
+        area_ids = request.form.getlist('areas')  # NEW: Get assigned areas
         
         if User.query.filter_by(username=username).first():
             flash('El nombre de usuario ya existe.', 'warning')
         else:
-            new_user = User(username=username, full_name=full_name, is_admin=is_admin, email=f"{username}@example.com") # Mock email
+            new_user = User(
+                username=username, 
+                full_name=full_name, 
+                is_admin=is_admin, 
+                email=f"{username}@example.com",
+                role=role  # NEW: Assign role
+            )
             new_user.set_password(password)
+            
+            # NEW: Assign areas
+            for area_id in area_ids:
+                area = Area.query.get(int(area_id))
+                if area:
+                    new_user.areas.append(area)
+            
             db.session.add(new_user)
             db.session.commit()
             flash('Usuario creado exitosamente.', 'success')
             
     users = User.query.all()
-    return render_template('users.html', users=users)
+    return render_template('users.html', users=users, all_areas=all_areas)
+
+# --- Area Management Routes ---
+@admin_bp.route('/areas', methods=['GET', 'POST'])
+@login_required
+def manage_areas():
+    """Manage areas (departments) - Admin only"""
+    from models import Area
+    
+    if not current_user.is_admin:
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        color = request.form.get('color', '#6366f1')
+        
+        if not name:
+            flash('El nombre del área es requerido.', 'warning')
+        elif Area.query.filter_by(name=name).first():
+            flash('Ya existe un área con ese nombre.', 'warning')
+        else:
+            new_area = Area(
+                name=name,
+                description=description,
+                color=color
+            )
+            db.session.add(new_area)
+            db.session.commit()
+            flash(f'Área "{name}" creada exitosamente.', 'success')
+    
+    areas = Area.query.order_by(Area.name).all()
+    return render_template('manage_areas.html', areas=areas)
+
+@admin_bp.route('/areas/<int:area_id>/delete', methods=['POST'])
+@login_required
+def delete_area(area_id):
+    """Delete an area - Admin only"""
+    from models import Area
+    
+    if not current_user.is_admin:
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    area = Area.query.get_or_404(area_id)
+    
+    # Check if area has tasks
+    task_count = area.tasks.count()
+    if task_count > 0:
+        flash(f'No se puede eliminar el área "{area.name}" porque tiene {task_count} tareas asignadas.', 'danger')
+        return redirect(url_for('admin.manage_areas'))
+    
+    area_name = area.name
+    db.session.delete(area)
+    db.session.commit()
+    flash(f'Área "{area_name}" eliminada.', 'success')
+    return redirect(url_for('admin.manage_areas'))
+
+@admin_bp.route('/users/<int:user_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_user(user_id):
+    """Edit user - update role and areas - Admin only"""
+    from models import Area
+    
+    if not current_user.is_admin:
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    user = User.query.get_or_404(user_id)
+    all_areas = Area.query.order_by(Area.name).all()
+    
+    if request.method == 'POST':
+        user.full_name = request.form.get('full_name', user.full_name)
+        user.is_admin = 'is_admin' in request.form
+        user.role = request.form.get('role', 'usuario')
+        
+        # Update password if provided
+        new_password = request.form.get('password', '').strip()
+        if new_password:
+            user.set_password(new_password)
+        
+        # Update areas
+        area_ids = request.form.getlist('areas')
+        user.areas.clear()
+        for area_id in area_ids:
+            area = Area.query.get(int(area_id))
+            if area:
+                user.areas.append(area)
+        
+        db.session.commit()
+        flash(f'Usuario "{user.username}" actualizado.', 'success')
+        return redirect(url_for('admin.manage_users'))
+    
+    return render_template('edit_user.html', user=user, all_areas=all_areas)
+
 
 # --- API Routes for Notifications ---
 @main_bp.route('/api/tasks/due_soon')

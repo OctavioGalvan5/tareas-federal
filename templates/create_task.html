@@ -119,6 +119,28 @@
             </select>
         </div>
 
+        <!-- 🏢 Area Selector -->
+        {% if available_areas %}
+        <div class="form-group">
+            <label for="area_id"><i class="fas fa-building"></i> Área</label>
+            <select id="area_id" name="area_id" {% if available_areas|length==1 %}{% else %}required{% endif %}
+                style="padding: 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                {% if available_areas|length > 1 %}
+                <option value="">-- Seleccionar área --</option>
+                {% endif %}
+                {% for area in available_areas %}
+                <option value="{{ area.id }}" {% if available_areas|length==1 %}selected{% endif %}
+                    style="color: {{ area.color }};">
+                    {{ area.name }}
+                </option>
+                {% endfor %}
+            </select>
+            <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.3rem;">
+                <i class="fas fa-info-circle"></i> La tarea será visible solo para usuarios asignados a esta área
+            </p>
+        </div>
+        {% endif %}
+
         <!-- 🔹 Selector de Etiquetas -->
         <div class="form-group">
             <label><i class="fas fa-tags"></i> Etiquetas (opcional)</label>

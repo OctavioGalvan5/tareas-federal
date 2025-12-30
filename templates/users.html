@@ -2,9 +2,14 @@
 
 {% block content %}
 <div class="card">
-    <h2><i class="fas fa-users-cog"></i> Gestión de Usuarios</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2><i class="fas fa-users-cog"></i> Gestión de Usuarios</h2>
+        <a href="{{ url_for('admin.manage_areas') }}" class="button-secondary">
+            <i class="fas fa-building"></i> Gestionar Áreas
+        </a>
+    </div>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; margin-top: 2rem;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; margin-top: 1rem;">
         <div
             style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); padding: 2rem; border-radius: 12px; border: 2px solid var(--border-color);">
             <h3 style="margin-bottom: 1.5rem;"><i class="fas fa-user-plus"></i> Crear Nuevo Usuario</h3>
@@ -22,6 +27,34 @@
                     <label for="password"><i class="fas fa-lock"></i> Contraseña</label>
                     <input type="password" id="password" name="password" required placeholder="Contraseña segura">
                 </div>
+
+                <!-- Role Selector -->
+                <div class="form-group">
+                    <label for="role"><i class="fas fa-user-tag"></i> Rol</label>
+                    <select id="role" name="role"
+                        style="padding: 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                        <option value="usuario">Usuario</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="gerente">Gerente (ve todas las áreas)</option>
+                    </select>
+                </div>
+
+                <!-- Areas Selector -->
+                {% if all_areas %}
+                <div class="form-group">
+                    <label><i class="fas fa-building"></i> Áreas</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+                        {% for area in all_areas %}
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; background: {{ area.color }}10; border: 1px solid {{ area.color }}40; border-radius: 6px; cursor: pointer; font-size: 0.9rem;">
+                            <input type="checkbox" name="areas" value="{{ area.id }}" style="width: auto;">
+                            <span style="color: {{ area.color }}; font-weight: 500;">{{ area.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
                 <div class="form-group">
                     <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                         <input type="checkbox" name="is_admin" style="width: auto; margin: 0;">
@@ -42,7 +75,9 @@
                         <tr>
                             <th><i class="fas fa-user"></i> Usuario</th>
                             <th><i class="fas fa-id-badge"></i> Nombre</th>
-                            <th><i class="fas fa-shield-alt"></i> Rol</th>
+                            <th><i class="fas fa-building"></i> Áreas</th>
+                            <th><i class="fas fa-user-tag"></i> Rol</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -51,16 +86,44 @@
                             <td style="font-weight: 600;">{{ user.username }}</td>
                             <td>{{ user.full_name }}</td>
                             <td>
+                                {% if user.areas %}
+                                {% for area in user.areas %}
+                                <span
+                                    style="background: {{ area.color }}20; color: {{ area.color }}; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; margin-right: 0.25rem;">
+                                    {{ area.name }}
+                                </span>
+                                {% endfor %}
+                                {% else %}
+                                <span style="color: #9ca3af; font-size: 0.85rem;">Sin áreas</span>
+                                {% endif %}
+                            </td>
+                            <td>
                                 {% if user.is_admin %}
                                 <span
-                                    style="background: var(--primary-gradient); color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.875rem; font-weight: 600;">
+                                    style="background: var(--primary-gradient); color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">
                                     <i class="fas fa-crown"></i> Admin
+                                </span>
+                                {% elif user.role == 'gerente' %}
+                                <span
+                                    style="background: #8b5cf6; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">
+                                    <i class="fas fa-eye"></i> Gerente
+                                </span>
+                                {% elif user.role == 'supervisor' %}
+                                <span
+                                    style="background: #0ea5e9; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">
+                                    <i class="fas fa-user-tie"></i> Supervisor
                                 </span>
                                 {% else %}
                                 <span style="color: var(--text-light);">
                                     <i class="fas fa-user"></i> Usuario
                                 </span>
                                 {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="button-secondary"
+                                    style="padding: 0.4rem 0.6rem; font-size: 0.85rem;" title="Editar usuario">
+                                    <i class="fas fa-edit"></i>
+                                </a>
                             </td>
                         </tr>
                         {% endfor %}

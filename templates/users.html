@@ -98,7 +98,7 @@
                             <th><i class="fas fa-user"></i> Usuario</th>
                             <th><i class="fas fa-id-badge"></i> Nombre</th>
                             <th><i class="fas fa-building"></i> Áreas</th>
-                            <th><i class="fas fa-user-tag"></i> Rol</th>
+                            <th style="min-width: 180px;"><i class="fas fa-user-tag"></i> Rol</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -119,24 +119,25 @@
                                 <span style="color: #9ca3af; font-size: 0.85rem;">Sin áreas</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td style="vertical-align: middle;">
                                 {% if user.is_admin %}
                                 <span
-                                    style="background: var(--primary-gradient); color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">
+                                    style="background: var(--primary-gradient); color: white; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                                     <i class="fas fa-crown"></i> Admin
                                 </span>
                                 {% elif user.role == 'gerente' %}
                                 <span
-                                    style="background: #8b5cf6; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">
+                                    style="background: #8b5cf6; color: white; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 4px rgba(139, 92, 246, 0.2);">
                                     <i class="fas fa-eye"></i> Gerente
                                 </span>
                                 {% elif user.role == 'supervisor' %}
                                 <span
-                                    style="background: #0ea5e9; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">
+                                    style="background: #0ea5e9; color: white; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2); white-space: nowrap;">
                                     <i class="fas fa-user-tie"></i> Supervisor
                                 </span>
                                 {% else %}
-                                <span style="color: var(--text-light);">
+                                <span
+                                    style="color: var(--text-light); display: inline-flex; align-items: center; gap: 0.4rem;">
                                     <i class="fas fa-user"></i> Usuario
                                 </span>
                                 {% endif %}

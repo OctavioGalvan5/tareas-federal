@@ -129,6 +129,10 @@ class Tag(db.Model):
     created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Area assignment - nullable for backward compatibility
+    area_id = db.Column(db.Integer, db.ForeignKey('area.id'), nullable=True)
+    area = db.relationship('Area', backref=db.backref('tags', lazy='dynamic'))
+    
     # Relationship for creator
     created_by = db.relationship('User', backref='created_tags')
     
@@ -151,6 +155,10 @@ class TaskTemplate(db.Model):
     created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     time_spent = db.Column(db.Integer, nullable=True, default=0)  # Default time spent in minutes
+    
+    # Area assignment - nullable for backward compatibility
+    area_id = db.Column(db.Integer, db.ForeignKey('area.id'), nullable=True)
+    area = db.relationship('Area', backref=db.backref('templates', lazy='dynamic'))
     
     # Relationships
     created_by = db.relationship('User', backref='created_templates')

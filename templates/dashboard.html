@@ -3,7 +3,7 @@
 {% block content %}
 <div class="dashboard-header">
     <h1><i class="fas fa-clipboard-list"></i> Mis Tareas</h1>
-    {% if current_user.is_admin %}
+    {% if current_user.is_admin or current_user.role == 'supervisor' %}
     <div style="display: flex; gap: 0.5rem;">
         <button onclick="document.getElementById('importModal').style.display='flex'" class="button-secondary">
             <i class="fas fa-file-import"></i> Importar Excel
@@ -15,7 +15,7 @@
     {% endif %}
 </div>
 
-{% if current_user.is_admin %}
+{% if current_user.is_admin or current_user.role == 'supervisor' %}
 <!-- Import Modal -->
 <div id="importModal"
     style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
@@ -125,14 +125,14 @@
                 </select>
             </div>
 
-            {% if all_areas %}
+            {% if all_areas and current_user.is_admin %}
+            <!-- Area filter - Only for admins -->
             <div style="flex: 1; min-width: 130px;">
                 <label
                     style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Área</label>
                 <select name="area" onchange="this.form.submit()"
                     style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
-                    <option value="">{% if current_user_is_gerente %}Todas las áreas{% else %}Mis áreas{% endif %}
-                    </option>
+                    <option value="">Todas las áreas</option>
                     {% for area in all_areas %}
                     <option value="{{ area.id }}" {% if request.args.get('area')|int==area.id %}selected{% endif %}
                         style="color: {{ area.color }};">

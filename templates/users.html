@@ -28,39 +28,61 @@
                     <input type="password" id="password" name="password" required placeholder="Contraseña segura">
                 </div>
 
-                <!-- Role Selector -->
+                <!-- Role Selector - Only visible for Admins -->
+                {% if not is_supervisor %}
                 <div class="form-group">
                     <label for="role"><i class="fas fa-user-tag"></i> Rol</label>
-                    <select id="role" name="role"
+                    <select id="role" name="role" onchange="handleRoleChange()"
                         style="padding: 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px;">
                         <option value="usuario">Usuario</option>
-                        <option value="supervisor">Supervisor</option>
+                        <option value="supervisor">Supervisor (solo 1 área)</option>
                         <option value="gerente">Gerente (ve todas las áreas)</option>
                     </select>
+                    <p id="supervisorAreaNote"
+                        style="display: none; font-size: 0.8rem; color: #f59e0b; margin-top: 0.3rem;">
+                        <i class="fas fa-exclamation-triangle"></i> Los supervisores solo pueden tener 1 área asignada
+                    </p>
                 </div>
+                {% endif %}
 
                 <!-- Areas Selector -->
                 {% if all_areas %}
                 <div class="form-group">
                     <label><i class="fas fa-building"></i> Áreas</label>
-                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+                    {% if is_supervisor %}
+                    <!-- Supervisor: Fixed area display -->
+                    <div
+                        style="padding: 0.5rem 0.75rem; background: {{ all_areas[0].color }}15; border: 1px solid {{ all_areas[0].color }}40; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.5rem;">
+                        <span style="color: {{ all_areas[0].color }}; font-weight: 500;">{{ all_areas[0].name }}</span>
+                    </div>
+                    <input type="hidden" name="areas" value="{{ all_areas[0].id }}">
+                    <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.3rem;">
+                        <i class="fas fa-info-circle"></i> Los usuarios que crees serán asignados a tu área
+                    </p>
+                    {% else %}
+                    <!-- Admin: Area checkboxes -->
+                    <div id="areasContainer" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
                         {% for area in all_areas %}
                         <label
                             style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; background: {{ area.color }}10; border: 1px solid {{ area.color }}40; border-radius: 6px; cursor: pointer; font-size: 0.9rem;">
-                            <input type="checkbox" name="areas" value="{{ area.id }}" style="width: auto;">
+                            <input type="checkbox" name="areas" value="{{ area.id }}" class="area-checkbox"
+                                style="width: auto;">
                             <span style="color: {{ area.color }}; font-weight: 500;">{{ area.name }}</span>
                         </label>
                         {% endfor %}
                     </div>
+                    {% endif %}
                 </div>
                 {% endif %}
 
+                {% if not is_supervisor %}
                 <div class="form-group">
                     <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                         <input type="checkbox" name="is_admin" style="width: auto; margin: 0;">
                         <span><i class="fas fa-shield-alt"></i> Es Administrador</span>
                     </label>
                 </div>
+                {% endif %}
                 <button type="submit" style="width: 100%;">
                     <i class="fas fa-plus"></i> Crear Usuario
                 </button>
@@ -120,10 +142,12 @@
                                 {% endif %}
                             </td>
                             <td>
+                                {% if not is_supervisor %}
                                 <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="button-secondary"
                                     style="padding: 0.4rem 0.6rem; font-size: 0.85rem;" title="Editar usuario">
                                     <i class="fas fa-edit"></i>
                                 </a>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -133,4 +157,60 @@
         </div>
     </div>
 </div>
+
+<script>
+    function handleRoleChange() {
+        const roleSelect = document.getElementById('role');
+        const areasContainer = document.getElementById('areasContainer');
+        const supervisorNote = document.getElementById('supervisorAreaNote');
+        const checkboxes = document.querySelectorAll('.area-checkbox');
+
+        if (!roleSelect || !areasContainer) return;
+
+        const isSupervisor = roleSelect.value === 'supervisor';
+
+        // Show/hide note
+        if (supervisorNote) {
+            supervisorNote.style.display = isSupervisor ? 'block' : 'none';
+        }
+
+        if (isSupervisor) {
+            // Enforce only 1 area for supervisors
+            let checkedCount = 0;
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    checkedCount++;
+                    if (checkedCount > 1) {
+                        cb.checked = false;
+                    }
+                }
+            });
+
+            // Add listener to enforce 1 area
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', enforceSingleArea);
+            });
+        } else {
+            // Remove restriction
+            checkboxes.forEach(cb => {
+                cb.removeEventListener('change', enforceSingleArea);
+            });
+        }
+    }
+
+    function enforceSingleArea(event) {
+        const roleSelect = document.getElementById('role');
+        if (roleSelect && roleSelect.value === 'supervisor' && event.target.checked) {
+            // Uncheck all others
+            document.querySelectorAll('.area-checkbox').forEach(cb => {
+                if (cb !== event.target) {
+                    cb.checked = false;
+                }
+            });
+        }
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', handleRoleChange);
+</script>
 {% endblock %}

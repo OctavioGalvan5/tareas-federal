@@ -17,12 +17,18 @@
 
         <div class="form-group">
             <label for="role"><i class="fas fa-user-tag"></i> Rol</label>
-            <select id="role" name="role" style="padding: 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+            <select id="role" name="role" onchange="handleRoleChange()"
+                style="padding: 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px;">
                 <option value="usuario" {% if user.role=='usuario' %}selected{% endif %}>Usuario</option>
-                <option value="supervisor" {% if user.role=='supervisor' %}selected{% endif %}>Supervisor</option>
+                <option value="supervisor" {% if user.role=='supervisor' %}selected{% endif %}>Supervisor (solo 1 área)
+                </option>
                 <option value="gerente" {% if user.role=='gerente' %}selected{% endif %}>Gerente (ve todas las áreas)
                 </option>
             </select>
+            <p id="supervisorAreaNote"
+                style="{% if user.role != 'supervisor' %}display: none;{% endif %} font-size: 0.8rem; color: #f59e0b; margin-top: 0.3rem;">
+                <i class="fas fa-exclamation-triangle"></i> Los supervisores solo pueden tener 1 área asignada
+            </p>
             <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.3rem;">
                 <i class="fas fa-info-circle"></i> Los gerentes pueden ver tareas de TODAS las áreas
             </p>
@@ -30,12 +36,12 @@
 
         <div class="form-group">
             <label><i class="fas fa-building"></i> Áreas Asignadas</label>
-            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+            <div id="areasContainer" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
                 {% for area in all_areas %}
                 <label
                     style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: {{ area.color }}10; border: 1px solid {{ area.color }}40; border-radius: 6px; cursor: pointer;">
-                    <input type="checkbox" name="areas" value="{{ area.id }}" {% if area in user.areas %}checked{% endif
-                        %} style="width: auto;">
+                    <input type="checkbox" name="areas" value="{{ area.id }}" class="area-checkbox" {% if area in
+                        user.areas %}checked{% endif %} style="width: auto;">
                     <span style="color: {{ area.color }}; font-weight: 500;">{{ area.name }}</span>
                 </label>
                 {% endfor %}
@@ -62,4 +68,59 @@
         </div>
     </form>
 </div>
+
+<script>
+    function handleRoleChange() {
+        const roleSelect = document.getElementById('role');
+        const supervisorNote = document.getElementById('supervisorAreaNote');
+        const checkboxes = document.querySelectorAll('.area-checkbox');
+
+        if (!roleSelect) return;
+
+        const isSupervisor = roleSelect.value === 'supervisor';
+
+        // Show/hide note
+        if (supervisorNote) {
+            supervisorNote.style.display = isSupervisor ? 'block' : 'none';
+        }
+
+        if (isSupervisor) {
+            // Enforce only 1 area for supervisors
+            let checkedCount = 0;
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    checkedCount++;
+                    if (checkedCount > 1) {
+                        cb.checked = false;
+                    }
+                }
+            });
+
+            // Add listener to enforce 1 area
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', enforceSingleArea);
+            });
+        } else {
+            // Remove restriction
+            checkboxes.forEach(cb => {
+                cb.removeEventListener('change', enforceSingleArea);
+            });
+        }
+    }
+
+    function enforceSingleArea(event) {
+        const roleSelect = document.getElementById('role');
+        if (roleSelect && roleSelect.value === 'supervisor' && event.target.checked) {
+            // Uncheck all others
+            document.querySelectorAll('.area-checkbox').forEach(cb => {
+                if (cb !== event.target) {
+                    cb.checked = false;
+                }
+            });
+        }
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', handleRoleChange);
+</script>
 {% endblock %}

@@ -84,8 +84,8 @@ def dashboard():
         if user_area_ids:
             tasks_query = tasks_query.filter(Task.area_id.in_(user_area_ids))
         else:
-            # User has no areas assigned - show no tasks (or could show all)
-            tasks_query = tasks_query.filter(Task.area_id == None)
+            # User has no areas assigned - show no tasks
+            tasks_query = tasks_query.filter(Task.area_id == -1)
     
     # NEW: Additional area filter (for gerentes filtering specific area)
     if filter_area:
@@ -136,14 +136,21 @@ def dashboard():
     
     today = date.today()
     
-    users = User.query.all()
-    all_tags = Tag.query.order_by(Tag.name).all()
-    
-    # NEW: Get areas for filter dropdown
-    if current_user.can_see_all_areas():
+    # Filter users by area for non-admins
+    if current_user.is_admin or current_user.can_see_all_areas():
+        users = User.query.all()
         all_areas = Area.query.order_by(Area.name).all()
+        all_tags = Tag.query.order_by(Tag.name).all()
     else:
+        # Non-admins see only users and tags in their areas
+        users = [u for u in User.query.all() if any(area in u.areas for area in current_user.areas)]
         all_areas = current_user.areas
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            # Strict area filter - only show tags from user's areas
+            all_tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all()
+        else:
+            all_tags = []
     
     return render_template('dashboard.html', 
         tasks=tasks, 
@@ -161,20 +168,32 @@ def create_task():
     # Import Area model
     from models import Area
     
-    # --- SOLO ADMINISTRADORES PUEDEN CREAR TAREAS ---
-    if not current_user.is_admin:
-        flash('Solo los administradores pueden crear tareas. Usa el calendario de vencimientos para crear recordatorios.', 'danger')
+    # --- ADMINISTRADORES Y SUPERVISORES PUEDEN CREAR TAREAS ---
+    if not current_user.is_admin and current_user.role != 'supervisor':
+        flash('Solo los administradores y supervisores pueden crear tareas. Usa el calendario de vencimientos para crear recordatorios.', 'danger')
         return redirect(url_for('main.dashboard'))
     
-    users = User.query.all()
-    available_tags = Tag.query.order_by(Tag.name).all()
-    templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
-    
     # Load available areas based on user role
-    if current_user.can_see_all_areas():
+    # Supervisors only have access to their single area
+    if current_user.is_admin:
         available_areas = Area.query.order_by(Area.name).all()
+        users = User.query.all()  # Admins see all users
+        available_tags = Tag.query.order_by(Tag.name).all()
+        templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
     else:
-        available_areas = current_user.areas
+        # Supervisor: only their assigned area (should be only 1)
+        available_areas = current_user.areas[:1] if current_user.areas else []
+        # Supervisors only see users in their area
+        if available_areas:
+            users = [u for u in User.query.all() if any(area in u.areas for area in available_areas)]
+            # Filter tags and templates by area
+            user_area_ids = [a.id for a in available_areas]
+            available_tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all()
+            templates = TaskTemplate.query.filter(TaskTemplate.area_id.in_(user_area_ids)).order_by(TaskTemplate.name).all()
+        else:
+            users = []
+            available_tags = []
+            templates = []
 
     if request.method == 'POST':
         title = request.form.get('title')
@@ -394,11 +413,14 @@ def task_details(task_id):
 @login_required
 def task_tree():
     """Display all tasks in a hierarchical tree view"""
+    from models import Area
+    
     # Get filter parameters (same as dashboard)
     filter_assignee = request.args.get('assignee')
     filter_creator = request.args.get('creator')
     filter_status = request.args.get('status', '')
     filter_tag = request.args.get('tag_filter')
+    filter_area = request.args.get('area')
     sort_order = request.args.get('sort', 'asc')
     search_query = request.args.get('q', '')
     
@@ -408,6 +430,23 @@ def task_tree():
         joinedload(Task.assignees),
         joinedload(Task.tags)
     ).filter(Task.parent_id == None)
+    
+    # --- FILTER BY AREA ---
+    if current_user.is_admin:
+        if filter_area:
+            query = query.filter(Task.area_id == int(filter_area))
+        available_areas = Area.query.order_by(Area.name).all()
+        show_area_filter = True
+    else:
+        # Non-admins see only tasks from their specific areas (NOT including NULL areas)
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            query = query.filter(Task.area_id.in_(user_area_ids))
+        else:
+            # User has no areas - show nothing
+            query = query.filter(Task.area_id == -1)  # Impossible condition
+        available_areas = current_user.areas
+        show_area_filter = False
     
     # Apply assignee filter
     if filter_assignee:
@@ -448,20 +487,29 @@ def task_tree():
     else:
         root_tasks = query.order_by(status_order, Task.due_date.asc()).all()
     
-    # Get counts for stats
-    total_tasks = Task.query.filter(Task.status != 'Anulado').count()
-    tasks_with_children = Task.query.filter(
-        Task.status != 'Anulado',
-        Task.children.any()
-    ).count()
-    tasks_with_parent = Task.query.filter(
-        Task.status != 'Anulado',
-        Task.parent_id != None
-    ).count()
+    # Get counts for stats - FILTERED BY AREA
+    stats_query_base = Task.query.filter(Task.status != 'Anulado')
+    if not current_user.is_admin:
+        if user_area_ids:
+            stats_query_base = stats_query_base.filter(Task.area_id.in_(user_area_ids))
+        else:
+            stats_query_base = stats_query_base.filter(Task.area_id == -1)
     
-    # Get users and tags for filter dropdowns
-    users = User.query.all()
-    all_tags = Tag.query.order_by(Tag.name).all()
+    total_tasks = stats_query_base.count()
+    tasks_with_children = stats_query_base.filter(Task.children.any()).count()
+    tasks_with_parent = stats_query_base.filter(Task.parent_id != None).count()
+    
+    # Get users and tags for filter dropdowns - FILTERED BY AREA
+    if current_user.is_admin:
+        users = User.query.all()
+        all_tags = Tag.query.order_by(Tag.name).all()
+    else:
+        users = [u for u in User.query.all() if any(area in u.areas for area in current_user.areas)]
+        # Strict filter - only tags from user's areas
+        if user_area_ids:
+            all_tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all()
+        else:
+            all_tags = []
     
     return render_template('task_tree.html', 
                            root_tasks=root_tasks,
@@ -469,22 +517,28 @@ def task_tree():
                            filter_assignee=filter_assignee,
                            filter_creator=filter_creator,
                            filter_tag=filter_tag,
+                           filter_area=filter_area,
                            sort_order=sort_order,
                            search_query=search_query,
                            total_tasks=total_tasks,
                            tasks_with_children=tasks_with_children,
                            tasks_with_parent=tasks_with_parent,
                            users=users,
-                           all_tags=all_tags)
+                           all_tags=all_tags,
+                           all_areas=available_areas,
+                           show_area_filter=show_area_filter)
 
 @main_bp.route('/calendar')
 @login_required
 def calendar():
+    from models import Area
+    
     # Get filter parameters
     period = request.args.get('period', 'all')  # today, week, month, all
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
     filter_user = request.args.get('creator')  # Keep 'creator' param name for backward compatibility
+    filter_area = request.args.get('area')
     
     # Base query: show ALL tasks by default (matching dashboard behavior)
     # Only show ENABLED tasks (not blocked by parent dependency)
@@ -492,6 +546,23 @@ def calendar():
     
     # Exclude 'Anulado' tasks by default
     query = query.filter(Task.status != 'Anulado')
+    
+    # --- FILTER BY AREA ---
+    if current_user.is_admin:
+        if filter_area:
+            query = query.filter(Task.area_id == int(filter_area))
+        available_areas = Area.query.order_by(Area.name).all()
+        show_area_filter = True
+    else:
+        # Non-admins see only tasks from their specific areas (NOT including NULL areas)
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            query = query.filter(Task.area_id.in_(user_area_ids))
+        else:
+            # User has no areas - show nothing
+            query = query.filter(Task.area_id == -1)
+        available_areas = current_user.areas
+        show_area_filter = False
     
     # Filter by user (assignee) if selected
     if filter_user:
@@ -542,7 +613,14 @@ def calendar():
     ).distinct().all()
     event_dates = [d[0].strftime('%Y-%m-%d') for d in event_dates_query if d[0]]
     
-    return render_template('calendar.html', tasks=tasks, current_period=period, today=today, users=users, event_dates=event_dates)
+    return render_template('calendar.html', 
+                          tasks=tasks, 
+                          current_period=period, 
+                          today=today, 
+                          users=users, 
+                          event_dates=event_dates,
+                          all_areas=available_areas,
+                          show_area_filter=show_area_filter)
 
 @main_bp.route('/task/<int:task_id>/toggle', methods=['POST'])
 @login_required
@@ -847,19 +925,41 @@ def export_excel():
 def manage_users():
     from models import Area
     
-    if not current_user.is_admin:
+    # Allow both admins and supervisors to manage users
+    is_supervisor = current_user.role == 'supervisor'
+    
+    if not current_user.is_admin and not is_supervisor:
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('main.dashboard'))
     
-    all_areas = Area.query.order_by(Area.name).all()
+    # Supervisors can only see/manage their area
+    if is_supervisor:
+        supervisor_area = current_user.areas[0] if current_user.areas else None
+        if not supervisor_area:
+            flash('No tienes un área asignada. Contacta a un administrador.', 'danger')
+            return redirect(url_for('main.dashboard'))
+        all_areas = [supervisor_area]
+    else:
+        all_areas = Area.query.order_by(Area.name).all()
         
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         full_name = request.form.get('full_name')
-        is_admin = 'is_admin' in request.form
-        role = request.form.get('role', 'usuario')  # NEW: Get role
-        area_ids = request.form.getlist('areas')  # NEW: Get assigned areas
+        
+        # Supervisors cannot create admins or other supervisors
+        if is_supervisor:
+            is_admin = False
+            role = 'usuario'  # Supervisors can only create regular users
+            area_ids = [str(supervisor_area.id)]  # Force to supervisor's area
+        else:
+            is_admin = 'is_admin' in request.form
+            role = request.form.get('role', 'usuario')
+            area_ids = request.form.getlist('areas')
+        
+        # Enforce: supervisors can only have 1 area
+        if role == 'supervisor' and len(area_ids) > 1:
+            area_ids = area_ids[:1]  # Keep only the first area
         
         if User.query.filter_by(username=username).first():
             flash('El nombre de usuario ya existe.', 'warning')
@@ -869,11 +969,11 @@ def manage_users():
                 full_name=full_name, 
                 is_admin=is_admin, 
                 email=f"{username}@example.com",
-                role=role  # NEW: Assign role
+                role=role
             )
             new_user.set_password(password)
             
-            # NEW: Assign areas
+            # Assign areas
             for area_id in area_ids:
                 area = Area.query.get(int(area_id))
                 if area:
@@ -882,9 +982,15 @@ def manage_users():
             db.session.add(new_user)
             db.session.commit()
             flash('Usuario creado exitosamente.', 'success')
-            
-    users = User.query.all()
-    return render_template('users.html', users=users, all_areas=all_areas)
+    
+    # Get users to display
+    if is_supervisor:
+        # Supervisors only see users in their area
+        users = [u for u in User.query.all() if supervisor_area in u.areas]
+    else:
+        users = User.query.all()
+    
+    return render_template('users.html', users=users, all_areas=all_areas, is_supervisor=is_supervisor)
 
 # --- Area Management Routes ---
 @admin_bp.route('/areas', methods=['GET', 'POST'])
@@ -968,6 +1074,12 @@ def edit_user(user_id):
         
         # Update areas
         area_ids = request.form.getlist('areas')
+        
+        # Enforce: supervisors can only have 1 area
+        if user.role == 'supervisor' and len(area_ids) > 1:
+            area_ids = area_ids[:1]  # Keep only the first area
+            flash('Los supervisores solo pueden tener 1 área asignada. Se mantuvo la primera área seleccionada.', 'info')
+        
         user.areas.clear()
         for area_id in area_ids:
             area = Area.query.get(int(area_id))
@@ -1071,15 +1183,29 @@ def api_toggle_notifications():
 @main_bp.route('/tags')
 @login_required
 def tags():
-    """Tags management page - accessible to all users"""
-    all_tags = Tag.query.order_by(Tag.name).all()
+    """Tags management page - filtered by area"""
+    if current_user.is_admin:
+        all_tags = Tag.query.order_by(Tag.name).all()
+    else:
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            all_tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all()
+        else:
+            all_tags = []
     return render_template('tags.html', tags=all_tags)
 
 @main_bp.route('/api/tags', methods=['GET'])
 @login_required
 def api_get_tags():
-    """Get all tags"""
-    tags = Tag.query.order_by(Tag.name).all()
+    """Get all tags - filtered by area"""
+    if current_user.is_admin:
+        tags = Tag.query.order_by(Tag.name).all()
+    else:
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all()
+        else:
+            tags = []
     return jsonify({
         'tags': [{
             'id': tag.id,
@@ -1091,7 +1217,7 @@ def api_get_tags():
 @main_bp.route('/api/tags', methods=['POST'])
 @login_required
 def api_create_tag():
-    """Create a new tag - accessible to all users"""
+    """Create a new tag - accessible to all users, assigns area automatically"""
     
     data = request.get_json()
     name = data.get('name', '').strip()
@@ -1105,10 +1231,17 @@ def api_create_tag():
     if existing:
         return jsonify({'success': False, 'message': 'Este tag ya existe'}), 400
     
+    # Determine area_id based on user
+    # Non-admins get their first area automatically
+    area_id = None
+    if not current_user.is_admin and current_user.areas:
+        area_id = current_user.areas[0].id
+    
     new_tag = Tag(
         name=name,
         color=color,
-        created_by_id=current_user.id
+        created_by_id=current_user.id,
+        area_id=area_id
     )
     
     db.session.add(new_tag)
@@ -1171,9 +1304,38 @@ def api_delete_tag(tag_id):
 @main_bp.route('/reports')
 @login_required
 def reports():
-    users = User.query.all()
-    tags = Tag.query.order_by(Tag.name).all()
-    return render_template('reports.html', users=users, tags=tags)
+    from models import Area
+    
+    # Filter users by area for non-admins
+    if current_user.is_admin:
+        users = User.query.all()
+        available_areas = Area.query.order_by(Area.name).all()
+        show_area_filter = True
+    else:
+        # Non-admins see only users in their areas
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            users = [u for u in User.query.all() if any(area in u.areas for area in current_user.areas)]
+        else:
+            users = []
+        available_areas = current_user.areas
+        show_area_filter = False
+    
+    # Filter tags by area
+    if current_user.is_admin:
+        tags = Tag.query.order_by(Tag.name).all()
+    else:
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all()
+        else:
+            tags = []
+            
+    return render_template('reports.html', 
+                          users=users, 
+                          tags=tags,
+                          all_areas=available_areas,
+                          show_area_filter=show_area_filter)
 
 @main_bp.route('/api/reports/data', methods=['POST'])
 @login_required
@@ -1182,6 +1344,7 @@ def reports_data():
     user_ids = data.get('user_ids', [])
     tag_ids = data.get('tag_ids', []) # New filter
     status_filter = data.get('status') # New filter
+    area_filter = data.get('area')  # Area filter (admin only)
     start_date_str = data.get('start_date')
     end_date_str = data.get('end_date')
     
@@ -1190,6 +1353,20 @@ def reports_data():
         Task.status != 'Anulado',
         Task.enabled == True  # Only include enabled tasks in reports
     )
+    
+    # --- FILTER BY AREA ---
+    if current_user.is_admin:
+        # Admin can filter by specific area
+        if area_filter and area_filter != 'all':
+            query = query.filter(Task.area_id == int(area_filter))
+    else:
+        # Non-admins see only tasks from their specific areas (NOT including NULL areas)
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            query = query.filter(Task.area_id.in_(user_area_ids))
+        else:
+            # User has no areas - show nothing
+            query = query.filter(Task.area_id == -1)
     
     # Filter by users if provided
     if user_ids:
@@ -1681,9 +1858,19 @@ def download_import_template():
 @main_bp.route('/import/tasks', methods=['POST'])
 @login_required
 def import_tasks():
-    """Import tasks from an uploaded Excel file - SOLO ADMIN"""
-    if not current_user.is_admin:
-        flash('Solo los administradores pueden importar tareas.', 'danger')
+    """Import tasks from an uploaded Excel file - ADMIN and SUPERVISORS"""
+    # Determine supervisor's area for automatic assignment
+    is_supervisor = current_user.role == 'supervisor'
+    supervisor_area_id = None
+    
+    if is_supervisor:
+        if current_user.areas:
+            supervisor_area_id = current_user.areas[0].id
+        else:
+            flash('No tienes un área asignada. Contacta a un administrador.', 'danger')
+            return redirect(url_for('main.dashboard'))
+    elif not current_user.is_admin:
+        flash('Solo los administradores y supervisores pueden importar tareas.', 'danger')
         return redirect(url_for('main.dashboard'))
     
     from openpyxl import load_workbook
@@ -1807,7 +1994,8 @@ def import_tasks():
                 due_date=due_date,
                 creator_id=current_user.id,
                 time_spent=time_spent,
-                status=status
+                status=status,
+                area_id=supervisor_area_id  # For supervisors, assigns to their area; for admins, None (inherits default)
             )
             
             # Set completed info if status is Completed
@@ -1846,7 +2034,7 @@ def import_tasks():
 @main_bp.route('/templates', methods=['GET', 'POST'])
 @login_required
 def manage_templates():
-    """View and create task templates"""
+    """View and create task templates - assigns area automatically"""
     if request.method == 'POST':
         name = request.form.get('name')
         title = request.form.get('title')
@@ -1867,6 +2055,11 @@ def manage_templates():
             flash('Ya existe una plantilla con ese nombre.', 'danger')
             return redirect(url_for('main.manage_templates'))
         
+        # Determine area_id based on user
+        area_id = None
+        if not current_user.is_admin and current_user.areas:
+            area_id = current_user.areas[0].id
+        
         template = TaskTemplate(
             name=name,
             title=title,
@@ -1874,7 +2067,8 @@ def manage_templates():
             priority=priority,
             default_days=default_days,
             created_by_id=current_user.id,
-            time_spent=time_spent
+            time_spent=time_spent,
+            area_id=area_id
         )
         
         # Add tags
@@ -1889,8 +2083,20 @@ def manage_templates():
         flash(f'Plantilla "{name}" creada exitosamente.', 'success')
         return redirect(url_for('main.manage_templates'))
     
-    templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
-    available_tags = Tag.query.order_by(Tag.name).all()
+    # Filter templates and tags by area for non-admins
+    if current_user.is_admin:
+        templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
+        available_tags = Tag.query.order_by(Tag.name).all()
+    else:
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            # Strict filter - only from user's areas
+            templates = TaskTemplate.query.filter(TaskTemplate.area_id.in_(user_area_ids)).order_by(TaskTemplate.name).all()
+            available_tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all()
+        else:
+            templates = []
+            available_tags = []
+    
     return render_template('manage_templates.html', templates=templates, available_tags=available_tags)
 
 @main_bp.route('/templates/<int:template_id>/delete', methods=['POST'])
@@ -2007,14 +2213,35 @@ def api_validate_parent(task_id, parent_id):
 @main_bp.route('/expirations')
 @login_required
 def expiration_calendar():
-    """Calendario de vencimientos - visible para todos los usuarios"""
+    """Calendario de vencimientos - filtrado por área"""
+    from models import Area
+    
     period = request.args.get('period', 'all')
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
     filter_tag = request.args.get('tag_filter')
+    filter_area = request.args.get('area')
     
-    # Query all expirations (visible for everyone)
+    # Query expirations with eager loading
     query = Expiration.query.options(joinedload(Expiration.tags), joinedload(Expiration.creator))
+    
+    # --- FILTER BY AREA ---
+    # Admins can see all areas and use filter
+    if current_user.is_admin:
+        if filter_area:
+            query = query.filter(Expiration.area_id == int(filter_area))
+        available_areas = Area.query.order_by(Area.name).all()
+        show_area_filter = True
+    else:
+        # Non-admins see only expirations from their specific areas (NOT including NULL areas)
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            query = query.filter(Expiration.area_id.in_(user_area_ids))
+        else:
+            # User has no areas - show nothing
+            query = query.filter(Expiration.area_id == -1)
+        available_areas = current_user.areas
+        show_area_filter = False
     
     # Apply date filters
     today = date.today()
@@ -2068,13 +2295,15 @@ def expiration_calendar():
                           current_period=period, 
                           today=today,
                           available_tags=available_tags,
-                          event_dates=event_dates)
+                          event_dates=event_dates,
+                          all_areas=available_areas,
+                          show_area_filter=show_area_filter)
 
 
 @main_bp.route('/expirations/create', methods=['POST'])
 @login_required
 def create_expiration():
-    """Crear un nuevo vencimiento - disponible para todos los usuarios"""
+    """Crear un nuevo vencimiento - asigna área automáticamente"""
     title = request.form.get('title')
     description = request.form.get('description', '')
     due_date_str = request.form.get('due_date')
@@ -2089,11 +2318,18 @@ def create_expiration():
         flash('Formato de fecha inválido.', 'danger')
         return redirect(url_for('main.expiration_calendar'))
     
+    # Determine area_id based on user role
+    # Non-admins get their first area automatically
+    area_id = None
+    if not current_user.is_admin and current_user.areas:
+        area_id = current_user.areas[0].id
+    
     new_expiration = Expiration(
         title=title,
         description=description,
         due_date=due_date,
-        creator_id=current_user.id
+        creator_id=current_user.id,
+        area_id=area_id
     )
     
     # Add tags
@@ -2212,14 +2448,30 @@ def api_get_expiration(expiration_id):
 @main_bp.route('/recurring-tasks')
 @login_required
 def manage_recurring_tasks():
-    """Listar y gestionar tareas recurrentes - Solo admin"""
-    if not current_user.is_admin:
-        flash('Solo los administradores pueden gestionar tareas recurrentes.', 'danger')
+    """Listar y gestionar tareas recurrentes - Admin y Supervisores"""
+    # Allow admins and supervisors
+    if not current_user.is_admin and current_user.role != 'supervisor':
+        flash('Solo los administradores y supervisores pueden gestionar tareas recurrentes.', 'danger')
         return redirect(url_for('main.dashboard'))
     
-    recurring_tasks = RecurringTask.query.order_by(RecurringTask.created_at.desc()).all()
-    users = User.query.order_by(User.full_name).all()
-    available_tags = Tag.query.order_by(Tag.name).all()
+    # Filter by area for supervisors
+    if current_user.is_admin:
+        recurring_tasks = RecurringTask.query.order_by(RecurringTask.created_at.desc()).all()
+        users = User.query.order_by(User.full_name).all()
+        available_tags = Tag.query.order_by(Tag.name).all()
+    else:
+        # Supervisor: only see recurring tasks from their area
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            # Strict filter - only from user's areas
+            recurring_tasks = RecurringTask.query.filter(RecurringTask.area_id.in_(user_area_ids)).order_by(RecurringTask.created_at.desc()).all()
+            # Only show users from their areas
+            users = [u for u in User.query.order_by(User.full_name).all() if any(area in u.areas for area in current_user.areas)]
+            available_tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all()
+        else:
+            recurring_tasks = []
+            users = []
+            available_tags = []
     
     return render_template('manage_recurring_tasks.html',
                            recurring_tasks=recurring_tasks,
@@ -2230,9 +2482,10 @@ def manage_recurring_tasks():
 @main_bp.route('/recurring-tasks/create', methods=['POST'])
 @login_required
 def create_recurring_task():
-    """Crear una nueva tarea recurrente - Solo admin"""
-    if not current_user.is_admin:
-        flash('Solo los administradores pueden crear tareas recurrentes.', 'danger')
+    """Crear una nueva tarea recurrente - Admin y Supervisores"""
+    # Allow admins and supervisors
+    if not current_user.is_admin and current_user.role != 'supervisor':
+        flash('Solo los administradores y supervisores pueden crear tareas recurrentes.', 'danger')
         return redirect(url_for('main.dashboard'))
     
     title = request.form.get('title')
@@ -2291,6 +2544,11 @@ def create_recurring_task():
     except ValueError:
         time_spent = 0
     
+    # Determine area_id based on user
+    area_id = None
+    if not current_user.is_admin and current_user.areas:
+        area_id = current_user.areas[0].id
+    
     # Create recurring task
     new_recurring = RecurringTask(
         title=title,
@@ -2304,7 +2562,8 @@ def create_recurring_task():
         end_date=end_date,
         time_spent=time_spent,
         creator_id=current_user.id,
-        is_active=True
+        is_active=True,
+        area_id=area_id
     )
     
     # Add assignees
@@ -2329,12 +2588,20 @@ def create_recurring_task():
 @main_bp.route('/recurring-tasks/<int:rt_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_recurring_task(rt_id):
-    """Editar una tarea recurrente - Solo admin"""
-    if not current_user.is_admin:
-        flash('Solo los administradores pueden editar tareas recurrentes.', 'danger')
+    """Editar una tarea recurrente - Admin y Supervisores"""
+    # Allow admins and supervisors
+    if not current_user.is_admin and current_user.role != 'supervisor':
+        flash('Solo los administradores y supervisores pueden editar tareas recurrentes.', 'danger')
         return redirect(url_for('main.dashboard'))
     
     rt = RecurringTask.query.get_or_404(rt_id)
+    
+    # Supervisors can only edit recurring tasks from their area
+    if not current_user.is_admin:
+        user_area_ids = [a.id for a in current_user.areas]
+        if rt.area_id not in user_area_ids and rt.area_id is not None:
+            flash('No tienes permiso para editar esta tarea recurrente.', 'danger')
+            return redirect(url_for('main.manage_recurring_tasks'))
     
     if request.method == 'POST':
         rt.title = request.form.get('title', rt.title)
@@ -2403,11 +2670,19 @@ def edit_recurring_task(rt_id):
 @main_bp.route('/recurring-tasks/<int:rt_id>/toggle', methods=['POST'])
 @login_required
 def toggle_recurring_task(rt_id):
-    """Pausar/Reanudar una tarea recurrente - Solo admin"""
-    if not current_user.is_admin:
+    """Pausar/Reanudar una tarea recurrente - Admin y Supervisores"""
+    # Allow admins and supervisors
+    if not current_user.is_admin and current_user.role != 'supervisor':
         return jsonify({'success': False, 'error': 'No autorizado'}), 403
     
     rt = RecurringTask.query.get_or_404(rt_id)
+    
+    # Supervisors can only toggle recurring tasks from their area
+    if not current_user.is_admin:
+        user_area_ids = [a.id for a in current_user.areas]
+        if rt.area_id not in user_area_ids and rt.area_id is not None:
+            return jsonify({'success': False, 'error': 'No autorizado para esta tarea'}), 403
+    
     rt.is_active = not rt.is_active
     db.session.commit()
     

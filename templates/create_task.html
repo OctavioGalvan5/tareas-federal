@@ -37,18 +37,23 @@
         </div>
     </div>
     {% else %}
-    {% if not current_user.is_admin %}
+    {% if current_user.is_admin or current_user.role == 'supervisor' %}
+    <div style="margin-bottom: 1.5rem; text-align: center;">
+        <div
+            style="margin-bottom: 1rem; color: #b45309; background: #fffbeb; padding: 1rem; border-radius: 8px; border: 1px solid #fcd34d;">
+            <i class="fas fa-info-circle"></i> No hay plantillas disponibles para esta área.
+        </div>
+        <a href="{{ url_for('main.manage_templates') }}" class="button-secondary" style="text-decoration: none;">
+            <i class="fas fa-copy"></i> Crear Primera Plantilla
+        </a>
+    </div>
+    {% else %}
     <div
         style="margin-bottom: 1.5rem; padding: 1.5rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; text-align: center;">
         <i class="fas fa-exclamation-triangle" style="font-size: 2rem; color: #dc2626; margin-bottom: 0.5rem;"></i>
         <p style="color: #991b1b; font-weight: 600; margin-bottom: 0.5rem;">No hay plantillas disponibles</p>
-        <p style="color: #7f1d1d; font-size: 0.9rem;">Contacta a un administrador para crear plantillas de tareas.</p>
-    </div>
-    {% else %}
-    <div style="margin-bottom: 1.5rem; text-align: center;">
-        <a href="{{ url_for('main.manage_templates') }}" class="button-secondary" style="text-decoration: none;">
-            <i class="fas fa-copy"></i> Crear Plantillas de Tareas
-        </a>
+        <p style="color: #7f1d1d; font-size: 0.9rem;">Contacta a un supervisor o administrador para crear plantillas.
+        </p>
     </div>
     {% endif %}
     {% endif %}
@@ -119,8 +124,8 @@
             </select>
         </div>
 
-        <!-- 🏢 Area Selector -->
-        {% if available_areas %}
+        <!-- 🏢 Area Selector - Only for Admins -->
+        {% if current_user.is_admin and available_areas %}
         <div class="form-group">
             <label for="area_id"><i class="fas fa-building"></i> Área</label>
             <select id="area_id" name="area_id" {% if available_areas|length==1 %}{% else %}required{% endif %}
@@ -137,6 +142,21 @@
             </select>
             <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.3rem;">
                 <i class="fas fa-info-circle"></i> La tarea será visible solo para usuarios asignados a esta área
+            </p>
+        </div>
+        {% elif current_user.role == 'supervisor' and available_areas %}
+        <!-- Supervisor: Fixed area badge (no selector) -->
+        <div class="form-group">
+            <label><i class="fas fa-building"></i> Área</label>
+            <div
+                style="padding: 0.75rem 1rem; background: {{ available_areas[0].color }}15; border: 2px solid {{ available_areas[0].color }}50; border-radius: 8px; display: inline-flex; align-items: center; gap: 0.5rem;">
+                <i class="fas fa-building" style="color: {{ available_areas[0].color }};"></i>
+                <span style="font-weight: 600; color: {{ available_areas[0].color }};">{{ available_areas[0].name
+                    }}</span>
+            </div>
+            <input type="hidden" name="area_id" value="{{ available_areas[0].id }}">
+            <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.3rem;">
+                <i class="fas fa-info-circle"></i> Las tareas se asignarán automáticamente a tu área
             </p>
         </div>
         {% endif %}

@@ -48,6 +48,11 @@
                         %}checked{% endif %} onchange="updateRecurrenceUI()">
                     <span>Mensual</span>
                 </label>
+                <label class="radio-option">
+                    <input type="radio" name="recurrence_type" value="custom" {% if rt.recurrence_type=='custom'
+                        %}checked{% endif %} onchange="updateRecurrenceUI()">
+                    <span>Fechas Manuales</span>
+                </label>
             </div>
         </div>
 
@@ -81,6 +86,32 @@
             <label for="day_of_month"><i class="fas fa-calendar-day"></i> Día del Mes</label>
             <input type="number" id="day_of_month" name="day_of_month" min="1" max="31"
                 value="{{ rt.day_of_month or '' }}" placeholder="1-31">
+        </div>
+
+        <!-- Custom Dates Selector -->
+        <div id="customOptions" class="form-group"
+            style="display: {% if rt.recurrence_type == 'custom' %}block{% else %}none{% endif %};">
+            <label><i class="fas fa-calendar-alt"></i> Seleccionar Fechas</label>
+            <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 0.75rem;">
+                Haz clic en las fechas del calendario para seleccionarlas o deseleccionarlas.
+            </p>
+            <div class="custom-calendar-container">
+                <div class="calendar-nav">
+                    <button type="button" onclick="changeMonth(-1)" class="calendar-nav-btn"><i
+                            class="fas fa-chevron-left"></i></button>
+                    <span id="calendarMonthYear"></span>
+                    <button type="button" onclick="changeMonth(1)" class="calendar-nav-btn"><i
+                            class="fas fa-chevron-right"></i></button>
+                </div>
+                <div class="calendar-grid" id="calendarGrid"></div>
+            </div>
+            <div class="selected-dates-container" id="selectedDatesContainer">
+                <label style="font-size: 0.85rem; color: #6b7280;">Fechas seleccionadas:</label>
+                <div class="selected-dates-chips" id="selectedDatesChips">
+                    <span style="color: #9ca3af; font-style: italic;">Ninguna fecha seleccionada</span>
+                </div>
+            </div>
+            <input type="hidden" id="custom_dates" name="custom_dates" value="{{ rt.custom_dates or '' }}">
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
@@ -200,13 +231,164 @@
     .tag-option input {
         width: auto;
     }
+
+    /* Custom Calendar Styles */
+    .custom-calendar-container {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .calendar-nav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .calendar-nav-btn {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .calendar-nav-btn:hover {
+        background: #f3f4f6;
+        border-color: #d1d5db;
+    }
+
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+    }
+
+    .calendar-day-header {
+        text-align: center;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #9ca3af;
+        padding: 0.5rem 0;
+    }
+
+    .calendar-day {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.15s;
+        border: 2px solid transparent;
+    }
+
+    .calendar-day:hover:not(.empty):not(.past) {
+        background: #e0f2fe;
+    }
+
+    .calendar-day.selected {
+        background: #0ea5e9;
+        color: white;
+        font-weight: 600;
+    }
+
+    .calendar-day.today {
+        border-color: #0ea5e9;
+    }
+
+    .calendar-day.empty {
+        cursor: default;
+    }
+
+    .calendar-day.past {
+        color: #d1d5db;
+        cursor: not-allowed;
+    }
+
+    .selected-dates-container {
+        margin-top: 1rem;
+    }
+
+    .selected-dates-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+        min-height: 32px;
+    }
+
+    .date-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: #0ea5e9;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+    }
+
+    .date-chip button {
+        background: none;
+        border: none;
+        color: white;
+        cursor: pointer;
+        padding: 0;
+        font-size: 1rem;
+        line-height: 1;
+        opacity: 0.8;
+    }
+
+    .date-chip button:hover {
+        opacity: 1;
+    }
 </style>
 
 <script>
+    // ===== Custom Dates Calendar Logic =====
+    let currentCalendarDate = new Date();
+    let selectedDates = [];
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+    // Load existing custom dates on page load
+    document.addEventListener('DOMContentLoaded', function () {
+        const existingDates = document.getElementById('custom_dates').value;
+        if (existingDates) {
+            try {
+                selectedDates = JSON.parse(existingDates);
+            } catch (e) {
+                selectedDates = [];
+            }
+        }
+
+        // Initialize calendar if custom type is selected
+        const recurrenceType = document.querySelector('input[name="recurrence_type"]:checked');
+        if (recurrenceType && recurrenceType.value === 'custom') {
+            initCalendar();
+            updateSelectedDatesDisplay();
+        }
+    });
+
     function updateRecurrenceUI() {
         const type = document.querySelector('input[name="recurrence_type"]:checked').value;
         document.getElementById('weeklyOptions').style.display = type === 'weekly' ? 'block' : 'none';
         document.getElementById('monthlyOptions').style.display = type === 'monthly' ? 'block' : 'none';
+        document.getElementById('customOptions').style.display = type === 'custom' ? 'block' : 'none';
+
+        if (type === 'custom') {
+            initCalendar();
+            updateSelectedDatesDisplay();
+        }
     }
 
     function prepareSubmit() {
@@ -214,6 +396,120 @@
         const checkboxes = document.querySelectorAll('.day-cb:checked');
         const days = Array.from(checkboxes).map(cb => cb.value).join(',');
         document.getElementById('days_of_week').value = days;
+
+        // Ensure custom_dates is updated
+        if (document.getElementById('custom_dates')) {
+            document.getElementById('custom_dates').value = JSON.stringify(selectedDates || []);
+        }
+    }
+
+    function initCalendar() {
+        renderCalendar();
+    }
+
+    function changeMonth(delta) {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+        renderCalendar();
+    }
+
+    function renderCalendar() {
+        const grid = document.getElementById('calendarGrid');
+        const monthYear = document.getElementById('calendarMonthYear');
+
+        if (!grid || !monthYear) return;
+
+        const year = currentCalendarDate.getFullYear();
+        const month = currentCalendarDate.getMonth();
+
+        monthYear.textContent = `${monthNames[month]} ${year}`;
+
+        grid.innerHTML = '';
+
+        dayNames.forEach(day => {
+            const header = document.createElement('div');
+            header.className = 'calendar-day-header';
+            header.textContent = day;
+            grid.appendChild(header);
+        });
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        for (let i = 0; i < firstDay; i++) {
+            const empty = document.createElement('div');
+            empty.className = 'calendar-day empty';
+            grid.appendChild(empty);
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(year, month, day);
+            const dateStr = date.toISOString().split('T')[0];
+
+            const dayEl = document.createElement('div');
+            dayEl.className = 'calendar-day';
+            dayEl.textContent = day;
+
+            if (date < today) {
+                dayEl.classList.add('past');
+            } else {
+                if (selectedDates.includes(dateStr)) {
+                    dayEl.classList.add('selected');
+                }
+
+                if (date.getTime() === today.getTime()) {
+                    dayEl.classList.add('today');
+                }
+
+                dayEl.onclick = () => toggleDate(dateStr);
+            }
+
+            grid.appendChild(dayEl);
+        }
+    }
+
+    function toggleDate(dateStr) {
+        const index = selectedDates.indexOf(dateStr);
+        if (index > -1) {
+            selectedDates.splice(index, 1);
+        } else {
+            selectedDates.push(dateStr);
+        }
+        selectedDates.sort();
+        updateSelectedDatesDisplay();
+        renderCalendar();
+    }
+
+    function removeDate(dateStr) {
+        const index = selectedDates.indexOf(dateStr);
+        if (index > -1) {
+            selectedDates.splice(index, 1);
+            updateSelectedDatesDisplay();
+            renderCalendar();
+        }
+    }
+
+    function updateSelectedDatesDisplay() {
+        const container = document.getElementById('selectedDatesChips');
+        const hiddenInput = document.getElementById('custom_dates');
+
+        if (!container) return;
+
+        if (selectedDates.length === 0) {
+            container.innerHTML = '<span style="color: #9ca3af; font-style: italic;">Ninguna fecha seleccionada</span>';
+            hiddenInput.value = '';
+        } else {
+            container.innerHTML = selectedDates.map(dateStr => {
+                const date = new Date(dateStr + 'T12:00:00');
+                const formatted = date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+                return `<span class="date-chip">
+                    ${formatted}
+                    <button type="button" onclick="removeDate('${dateStr}')">&times;</button>
+                </span>`;
+            }).join('');
+            hiddenInput.value = JSON.stringify(selectedDates);
+        }
     }
 </script>
 {% endblock %}

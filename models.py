@@ -227,9 +227,10 @@ class RecurringTask(db.Model):
     area = db.relationship('Area', backref=db.backref('recurring_tasks', lazy='dynamic'))
     
     # Recurrence configuration
-    recurrence_type = db.Column(db.String(20), nullable=False)  # 'weekdays', 'weekly', 'monthly'
+    recurrence_type = db.Column(db.String(20), nullable=False)  # 'weekdays', 'weekly', 'monthly', 'custom'
     days_of_week = db.Column(db.String(20), nullable=True)  # "1,2,3,4,5" for Mon-Fri, "1,3,5" for specific days
     day_of_month = db.Column(db.Integer, nullable=True)  # For monthly: 1-31
+    custom_dates = db.Column(db.Text, nullable=True)  # JSON array: ["2026-01-15", "2026-02-20", ...]
     
     # Schedule
     due_time = db.Column(db.Time, nullable=False)  # When the task is due (e.g., 18:00)

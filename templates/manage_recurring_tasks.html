@@ -28,14 +28,15 @@
                     {% endif %}
                 </div>
                 <div class="rt-actions">
-                    <button class="action-btn" onclick="toggleRecurring({{ rt.id }})" 
-                            title="{{ 'Reanudar' if not rt.is_active else 'Pausar' }}">
+                    <button class="action-btn" onclick="toggleRecurring({{ rt.id }})"
+                        title="{{ 'Reanudar' if not rt.is_active else 'Pausar' }}">
                         <i class="fas {{ 'fa-play' if not rt.is_active else 'fa-pause' }}"></i>
                     </button>
                     <a href="{{ url_for('main.edit_recurring_task', rt_id=rt.id) }}" class="action-btn" title="Editar">
                         <i class="fas fa-edit"></i>
                     </a>
-                    <button class="action-btn delete-btn" onclick="deleteRecurring({{ rt.id }}, '{{ rt.title }}')" title="Eliminar">
+                    <button class="action-btn delete-btn" onclick="deleteRecurring({{ rt.id }}, '{{ rt.title }}')"
+                        title="Eliminar">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -51,13 +52,16 @@
                         <i class="fas fa-clock"></i>
                         <span>
                             {% if rt.recurrence_type == 'weekdays' %}
-                                Días hábiles (Lun-Vie)
+                            Días hábiles (Lun-Vie)
                             {% elif rt.recurrence_type == 'weekly' %}
-                                Semanal: 
-                                {% set day_names = {1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom'} %}
-                                {% for d in rt.days_of_week.split(',') %}{{ day_names[d|int] }}{% if not loop.last %}, {% endif %}{% endfor %}
+                            Semanal:
+                            {% set day_names = {1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom'} %}
+                            {% for d in rt.days_of_week.split(',') %}{{ day_names[d|int] }}{% if not loop.last %}, {%
+                            endif %}{% endfor %}
                             {% elif rt.recurrence_type == 'monthly' %}
-                                Mensual: Día {{ rt.day_of_month }}
+                            Mensual: Día {{ rt.day_of_month }}
+                            {% elif rt.recurrence_type == 'custom' %}
+                            Fechas manuales ({{ (rt.custom_dates|from_json|default([]))|length }} fechas)
                             {% endif %}
                         </span>
                     </div>
@@ -93,7 +97,8 @@
                     <span><i class="fas fa-infinity"></i> Sin fecha de fin</span>
                     {% endif %}
                     {% if rt.last_generated_date %}
-                    <span><i class="fas fa-history"></i> Última generación: {{ rt.last_generated_date.strftime('%d/%m/%Y') }}</span>
+                    <span><i class="fas fa-history"></i> Última generación: {{
+                        rt.last_generated_date.strftime('%d/%m/%Y') }}</span>
                     {% endif %}
                 </div>
             </div>
@@ -137,7 +142,8 @@
 
                 <div class="form-group">
                     <label for="description"><i class="fas fa-align-left"></i> Descripción</label>
-                    <textarea id="description" name="description" rows="2" placeholder="Descripción opcional"></textarea>
+                    <textarea id="description" name="description" rows="2"
+                        placeholder="Descripción opcional"></textarea>
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
@@ -159,7 +165,8 @@
                     <label><i class="fas fa-redo"></i> Tipo de Recurrencia</label>
                     <div class="recurrence-options">
                         <label class="radio-option">
-                            <input type="radio" name="recurrence_type" value="weekdays" checked onchange="updateRecurrenceUI()">
+                            <input type="radio" name="recurrence_type" value="weekdays" checked
+                                onchange="updateRecurrenceUI()">
                             <span>Días Hábiles (Lun-Vie)</span>
                         </label>
                         <label class="radio-option">
@@ -169,6 +176,10 @@
                         <label class="radio-option">
                             <input type="radio" name="recurrence_type" value="monthly" onchange="updateRecurrenceUI()">
                             <span>Mensual</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="recurrence_type" value="custom" onchange="updateRecurrenceUI()">
+                            <span>Fechas Manuales</span>
                         </label>
                     </div>
                 </div>
@@ -192,6 +203,31 @@
                 <div id="monthlyOptions" class="form-group" style="display: none;">
                     <label for="day_of_month"><i class="fas fa-calendar-day"></i> Día del Mes</label>
                     <input type="number" id="day_of_month" name="day_of_month" min="1" max="31" placeholder="1-31">
+                </div>
+
+                <!-- Custom Dates Selector (hidden by default) -->
+                <div id="customOptions" class="form-group" style="display: none;">
+                    <label><i class="fas fa-calendar-alt"></i> Seleccionar Fechas</label>
+                    <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 0.75rem;">
+                        Haz clic en las fechas del calendario para seleccionarlas o deseleccionarlas.
+                    </p>
+                    <div class="custom-calendar-container">
+                        <div class="calendar-nav">
+                            <button type="button" onclick="changeMonth(-1)" class="calendar-nav-btn"><i
+                                    class="fas fa-chevron-left"></i></button>
+                            <span id="calendarMonthYear"></span>
+                            <button type="button" onclick="changeMonth(1)" class="calendar-nav-btn"><i
+                                    class="fas fa-chevron-right"></i></button>
+                        </div>
+                        <div class="calendar-grid" id="calendarGrid"></div>
+                    </div>
+                    <div class="selected-dates-container" id="selectedDatesContainer">
+                        <label style="font-size: 0.85rem; color: #6b7280;">Fechas seleccionadas:</label>
+                        <div class="selected-dates-chips" id="selectedDatesChips">
+                            <span style="color: #9ca3af; font-style: italic;">Ninguna fecha seleccionada</span>
+                        </div>
+                    </div>
+                    <input type="hidden" id="custom_dates" name="custom_dates" value="">
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
@@ -242,357 +278,630 @@
 </div>
 
 <style>
-.recurring-tasks-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
+    .recurring-tasks-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
 
-.recurring-task-card {
-    background: white;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 1.5rem;
-    transition: all 0.2s ease;
-}
+    .recurring-task-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1.5rem;
+        transition: all 0.2s ease;
+    }
 
-.recurring-task-card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
+    .recurring-task-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
 
-.recurring-task-card.paused {
-    opacity: 0.7;
-    background: #f9fafb;
-}
+    .recurring-task-card.paused {
+        opacity: 0.7;
+        background: #f9fafb;
+    }
 
-.rt-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1rem;
-}
+    .rt-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 1rem;
+    }
 
-.rt-title-section {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
+    .rt-title-section {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
 
-.rt-title-section h3 {
-    margin: 0;
-    font-size: 1.1rem;
-}
+    .rt-title-section h3 {
+        margin: 0;
+        font-size: 1.1rem;
+    }
 
-.status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 600;
-}
+    .status-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
 
-.status-badge.active {
-    background: #d1fae5;
-    color: #059669;
-}
+    .status-badge.active {
+        background: #d1fae5;
+        color: #059669;
+    }
 
-.status-badge.paused {
-    background: #fef3c7;
-    color: #d97706;
-}
+    .status-badge.paused {
+        background: #fef3c7;
+        color: #d97706;
+    }
 
-.rt-actions {
-    display: flex;
-    gap: 0.5rem;
-}
+    .rt-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
 
-.action-btn {
-    background: #f3f4f6;
-    border: none;
-    padding: 0.5rem 0.75rem;
-    border-radius: 8px;
-    cursor: pointer;
-    color: #6b7280;
-    transition: all 0.2s;
-}
+    .action-btn {
+        background: #f3f4f6;
+        border: none;
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        cursor: pointer;
+        color: #6b7280;
+        transition: all 0.2s;
+    }
 
-.action-btn:hover {
-    background: #e5e7eb;
-    color: #374151;
-}
+    .action-btn:hover {
+        background: #e5e7eb;
+        color: #374151;
+    }
 
-.action-btn.delete-btn:hover {
-    background: #fee2e2;
-    color: #dc2626;
-}
+    .action-btn.delete-btn:hover {
+        background: #fee2e2;
+        color: #dc2626;
+    }
 
-.rt-description {
-    color: #6b7280;
-    font-size: 0.9rem;
-    margin-bottom: 1rem;
-}
+    .rt-description {
+        color: #6b7280;
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+    }
 
-.rt-details {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1.5rem;
-    margin-bottom: 1rem;
-}
+    .rt-details {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+        margin-bottom: 1rem;
+    }
 
-.rt-detail {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.9rem;
-    color: #6b7280;
-}
+    .rt-detail {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+        color: #6b7280;
+    }
 
-.rt-detail i {
-    color: #9ca3af;
-    width: 16px;
-}
+    .rt-detail i {
+        color: #9ca3af;
+        width: 16px;
+    }
 
-.rt-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: center;
-    margin-bottom: 1rem;
-}
+    .rt-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
 
-.rt-tags {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
+    .rt-tags {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
 
-.rt-dates {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1.5rem;
-    font-size: 0.85rem;
-    color: #9ca3af;
-    padding-top: 0.5rem;
-    border-top: 1px solid #f3f4f6;
-}
+    .rt-dates {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+        font-size: 0.85rem;
+        color: #9ca3af;
+        padding-top: 0.5rem;
+        border-top: 1px solid #f3f4f6;
+    }
 
-.rt-dates span {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
+    .rt-dates span {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
 
-/* Priority colors */
-.priority-normal { color: #059669; }
-.priority-media { color: #d97706; }
-.priority-urgente { color: #dc2626; font-weight: 600; }
+    /* Priority colors */
+    .priority-normal {
+        color: #059669;
+    }
 
-/* Modal styles */
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-}
+    .priority-media {
+        color: #d97706;
+    }
 
-.modal-content {
-    background: white;
-    border-radius: 16px;
-    max-height: 90vh;
-    overflow-y: auto;
-    width: 100%;
-    margin: 1rem;
-}
+    .priority-urgente {
+        color: #dc2626;
+        font-weight: 600;
+    }
 
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem;
-    border-bottom: 1px solid #e5e7eb;
-}
+    /* Modal styles */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
 
-.modal-header h2 {
-    margin: 0;
-}
+    .modal-content {
+        background: white;
+        border-radius: 16px;
+        max-height: 90vh;
+        overflow-y: auto;
+        width: 100%;
+        margin: 1rem;
+    }
 
-.close-btn {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: #9ca3af;
-}
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
 
-.modal-body {
-    padding: 1.5rem;
-}
+    .modal-header h2 {
+        margin: 0;
+    }
 
-.modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-    padding: 1.5rem;
-    border-top: 1px solid #e5e7eb;
-}
+    .close-btn {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #9ca3af;
+    }
 
-.recurrence-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-}
+    .modal-body {
+        padding: 1.5rem;
+    }
 
-.radio-option {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    padding: 0.5rem 1rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    transition: all 0.2s;
-}
+    .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        padding: 1.5rem;
+        border-top: 1px solid #e5e7eb;
+    }
 
-.radio-option:has(input:checked) {
-    border-color: #0ea5e9;
-    background: #f0f9ff;
-}
+    .recurrence-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
 
-.day-checkboxes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-}
+    .radio-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        padding: 0.5rem 1rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
 
-.day-checkboxes label {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
+    .radio-option:has(input:checked) {
+        border-color: #0ea5e9;
+        background: #f0f9ff;
+    }
 
-.day-checkboxes label:has(input:checked) {
-    border-color: #0ea5e9;
-    background: #0ea5e9;
-    color: white;
-}
+    .day-checkboxes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
 
-.tag-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
+    .day-checkboxes label {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
 
-.tag-option {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-}
+    .day-checkboxes label:has(input:checked) {
+        border-color: #0ea5e9;
+        background: #0ea5e9;
+        color: white;
+    }
 
-.tag-option input {
-    width: auto;
-}
+    .tag-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .tag-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+    }
+
+    .tag-option input {
+        width: auto;
+    }
+
+    /* Custom Calendar Styles */
+    .custom-calendar-container {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .calendar-nav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .calendar-nav-btn {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .calendar-nav-btn:hover {
+        background: #f3f4f6;
+        border-color: #d1d5db;
+    }
+
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+    }
+
+    .calendar-day-header {
+        text-align: center;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #9ca3af;
+        padding: 0.5rem 0;
+    }
+
+    .calendar-day {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.15s;
+        border: 2px solid transparent;
+    }
+
+    .calendar-day:hover:not(.empty):not(.past) {
+        background: #e0f2fe;
+    }
+
+    .calendar-day.selected {
+        background: #0ea5e9;
+        color: white;
+        font-weight: 600;
+    }
+
+    .calendar-day.today {
+        border-color: #0ea5e9;
+    }
+
+    .calendar-day.empty {
+        cursor: default;
+    }
+
+    .calendar-day.past {
+        color: #d1d5db;
+        cursor: not-allowed;
+    }
+
+    .selected-dates-container {
+        margin-top: 1rem;
+    }
+
+    .selected-dates-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+        min-height: 32px;
+    }
+
+    .date-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: #0ea5e9;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+    }
+
+    .date-chip button {
+        background: none;
+        border: none;
+        color: white;
+        cursor: pointer;
+        padding: 0;
+        font-size: 1rem;
+        line-height: 1;
+        opacity: 0.8;
+    }
+
+    .date-chip button:hover {
+        opacity: 1;
+    }
 </style>
 
 <script>
-// Set today's date as default start date
-document.getElementById('start_date').value = new Date().toISOString().split('T')[0];
+    // Set today's date as default start date
+    document.getElementById('start_date').value = new Date().toISOString().split('T')[0];
 
-function openCreateModal() {
-    document.getElementById('createModal').style.display = 'flex';
-}
+    function openCreateModal() {
+        document.getElementById('createModal').style.display = 'flex';
+    }
 
-function closeModal() {
-    document.getElementById('createModal').style.display = 'none';
-}
+    function closeModal() {
+        document.getElementById('createModal').style.display = 'none';
+    }
 
-function updateRecurrenceUI() {
-    const type = document.querySelector('input[name="recurrence_type"]:checked').value;
-    document.getElementById('weeklyOptions').style.display = type === 'weekly' ? 'block' : 'none';
-    document.getElementById('monthlyOptions').style.display = type === 'monthly' ? 'block' : 'none';
-}
+    function updateRecurrenceUI() {
+        const type = document.querySelector('input[name="recurrence_type"]:checked').value;
+        document.getElementById('weeklyOptions').style.display = type === 'weekly' ? 'block' : 'none';
+        document.getElementById('monthlyOptions').style.display = type === 'monthly' ? 'block' : 'none';
+        document.getElementById('customOptions').style.display = type === 'custom' ? 'block' : 'none';
 
-function prepareSubmit() {
-    // Collect checked days for weekly
-    const checkboxes = document.querySelectorAll('.day-cb:checked');
-    const days = Array.from(checkboxes).map(cb => cb.value).join(',');
-    document.getElementById('days_of_week').value = days;
-}
-
-function toggleRecurring(id) {
-    fetch(`/recurring-tasks/${id}/toggle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert(data.error || 'Error al cambiar estado');
+        // Initialize calendar when custom type is selected
+        if (type === 'custom') {
+            initCalendar();
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error al cambiar estado');
-    });
-}
+    }
 
-function deleteRecurring(id, title) {
-    if (!confirm(`¿Estás seguro de eliminar la tarea recurrente "${title}"?`)) return;
-    
-    fetch(`/recurring-tasks/${id}/delete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            document.getElementById(`rt-${id}`).remove();
-        } else {
-            alert(data.error || 'Error al eliminar');
+    function prepareSubmit() {
+        // Collect checked days for weekly
+        const checkboxes = document.querySelectorAll('.day-cb:checked');
+        const days = Array.from(checkboxes).map(cb => cb.value).join(',');
+        document.getElementById('days_of_week').value = days;
+
+        // Ensure custom_dates is updated
+        if (document.getElementById('custom_dates')) {
+            document.getElementById('custom_dates').value = JSON.stringify(selectedDates || []);
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error al eliminar');
-    });
-}
+    }
 
-function generateNow() {
-    if (!confirm('¿Generar las tareas pendientes para hoy?')) return;
-    
-    fetch('/api/recurring-tasks/generate-now', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('Tareas generadas exitosamente');
-        } else {
-            alert('Error: ' + (data.error || 'Error desconocido'));
+    function toggleRecurring(id) {
+        fetch(`/recurring-tasks/${id}/toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.error || 'Error al cambiar estado');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al cambiar estado');
+            });
+    }
+
+    function deleteRecurring(id, title) {
+        if (!confirm(`¿Estás seguro de eliminar la tarea recurrente "${title}"?`)) return;
+
+        fetch(`/recurring-tasks/${id}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById(`rt-${id}`).remove();
+                } else {
+                    alert(data.error || 'Error al eliminar');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al eliminar');
+            });
+    }
+
+    function generateNow() {
+        if (!confirm('¿Generar las tareas pendientes para hoy?')) return;
+
+        fetch('/api/recurring-tasks/generate-now', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Tareas generadas exitosamente');
+                } else {
+                    alert('Error: ' + (data.error || 'Error desconocido'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al generar tareas');
+            });
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('createModal').addEventListener('click', function (e) {
+        if (e.target === this) closeModal();
+    });
+
+    // ===== Custom Dates Calendar Logic =====
+    let currentCalendarDate = new Date();
+    let selectedDates = [];
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+    function initCalendar() {
+        renderCalendar();
+    }
+
+    function changeMonth(delta) {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+        renderCalendar();
+    }
+
+    function renderCalendar() {
+        const grid = document.getElementById('calendarGrid');
+        const monthYear = document.getElementById('calendarMonthYear');
+
+        if (!grid || !monthYear) return;
+
+        const year = currentCalendarDate.getFullYear();
+        const month = currentCalendarDate.getMonth();
+
+        monthYear.textContent = `${monthNames[month]} ${year}`;
+
+        // Clear grid
+        grid.innerHTML = '';
+
+        // Add day headers
+        dayNames.forEach(day => {
+            const header = document.createElement('div');
+            header.className = 'calendar-day-header';
+            header.textContent = day;
+            grid.appendChild(header);
+        });
+
+        // Get first day of month and number of days
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Add empty cells for days before first day
+        for (let i = 0; i < firstDay; i++) {
+            const empty = document.createElement('div');
+            empty.className = 'calendar-day empty';
+            grid.appendChild(empty);
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error al generar tareas');
-    });
-}
 
-// Close modal when clicking outside
-document.getElementById('createModal').addEventListener('click', function(e) {
-    if (e.target === this) closeModal();
-});
+        // Add days
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(year, month, day);
+            const dateStr = date.toISOString().split('T')[0];
+
+            const dayEl = document.createElement('div');
+            dayEl.className = 'calendar-day';
+            dayEl.textContent = day;
+
+            // Check if past
+            if (date < today) {
+                dayEl.classList.add('past');
+            } else {
+                // Check if selected
+                if (selectedDates.includes(dateStr)) {
+                    dayEl.classList.add('selected');
+                }
+
+                // Check if today
+                if (date.getTime() === today.getTime()) {
+                    dayEl.classList.add('today');
+                }
+
+                dayEl.onclick = () => toggleDate(dateStr);
+            }
+
+            grid.appendChild(dayEl);
+        }
+    }
+
+    function toggleDate(dateStr) {
+        const index = selectedDates.indexOf(dateStr);
+        if (index > -1) {
+            selectedDates.splice(index, 1);
+        } else {
+            selectedDates.push(dateStr);
+        }
+        selectedDates.sort();
+        updateSelectedDatesDisplay();
+        renderCalendar();
+    }
+
+    function removeDate(dateStr) {
+        const index = selectedDates.indexOf(dateStr);
+        if (index > -1) {
+            selectedDates.splice(index, 1);
+            updateSelectedDatesDisplay();
+            renderCalendar();
+        }
+    }
+
+    function updateSelectedDatesDisplay() {
+        const container = document.getElementById('selectedDatesChips');
+        const hiddenInput = document.getElementById('custom_dates');
+
+        if (!container) return;
+
+        if (selectedDates.length === 0) {
+            container.innerHTML = '<span style="color: #9ca3af; font-style: italic;">Ninguna fecha seleccionada</span>';
+            hiddenInput.value = '';
+        } else {
+            container.innerHTML = selectedDates.map(dateStr => {
+                const date = new Date(dateStr + 'T12:00:00');
+                const formatted = date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+                return `<span class="date-chip">
+                    ${formatted}
+                    <button type="button" onclick="removeDate('${dateStr}')">&times;</button>
+                </span>`;
+            }).join('');
+            hiddenInput.value = JSON.stringify(selectedDates);
+        }
+    }
+
+    // Initialize calendar when modal opens
+    const originalOpenModal = openCreateModal;
+    openCreateModal = function () {
+        originalOpenModal();
+        selectedDates = [];
+        currentCalendarDate = new Date();
+        initCalendar();
+        updateSelectedDatesDisplay();
+    };
 </script>
 {% endblock %}

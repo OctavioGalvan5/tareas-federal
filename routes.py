@@ -2549,6 +2549,13 @@ def create_recurring_task():
     if not current_user.is_admin and current_user.areas:
         area_id = current_user.areas[0].id
     
+    # Parse custom_dates for custom recurrence
+    custom_dates = None
+    if recurrence_type == 'custom':
+        custom_dates_str = request.form.get('custom_dates', '')
+        if custom_dates_str:
+            custom_dates = custom_dates_str  # Already JSON string from frontend
+    
     # Create recurring task
     new_recurring = RecurringTask(
         title=title,
@@ -2557,6 +2564,7 @@ def create_recurring_task():
         recurrence_type=recurrence_type,
         days_of_week=days_of_week if recurrence_type == 'weekly' else None,
         day_of_month=day_of_month,
+        custom_dates=custom_dates,
         due_time=due_time,
         start_date=start_date,
         end_date=end_date,
@@ -2621,6 +2629,12 @@ def edit_recurring_task(rt_id):
             rt.day_of_month = int(day_str) if day_str else None
         else:
             rt.day_of_month = None
+        
+        # Update custom_dates for custom recurrence
+        if rt.recurrence_type == 'custom':
+            rt.custom_dates = request.form.get('custom_dates', '')
+        else:
+            rt.custom_dates = None
         
         # Update time
         due_time_str = request.form.get('due_time')
@@ -2743,6 +2757,7 @@ def api_get_recurring_task(rt_id):
         'recurrence_type': rt.recurrence_type,
         'days_of_week': rt.days_of_week or '',
         'day_of_month': rt.day_of_month,
+        'custom_dates': rt.custom_dates or '',
         'due_time': rt.due_time.strftime('%H:%M') if rt.due_time else '',
         'start_date': rt.start_date.strftime('%Y-%m-%d') if rt.start_date else '',
         'end_date': rt.end_date.strftime('%Y-%m-%d') if rt.end_date else '',

@@ -61,6 +61,17 @@ def should_generate_today(recurring_task, today):
         # Check if it's the right day and not a holiday
         return today.day == recurring_task.day_of_month and today not in AR_HOLIDAYS
     
+    elif recurrence_type == 'custom':
+        # custom_dates: JSON array of ISO date strings
+        if not recurring_task.custom_dates:
+            return False
+        import json
+        try:
+            custom_dates = json.loads(recurring_task.custom_dates)
+            return today.isoformat() in custom_dates
+        except (json.JSONDecodeError, TypeError):
+            return False
+    
     return False
 
 

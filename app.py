@@ -66,6 +66,17 @@ def create_app(test_config=None):
     
     # Register custom Jinja2 filters
     app.jinja_env.filters['to_buenos_aires'] = to_buenos_aires
+    
+    # Add from_json filter for parsing JSON in templates
+    import json
+    def from_json(value):
+        if not value:
+            return []
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    app.jinja_env.filters['from_json'] = from_json
 
     # Initialize scheduler for recurring tasks (only in production, not during testing)
     if not app.config.get('TESTING'):

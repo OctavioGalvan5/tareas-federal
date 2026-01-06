@@ -1835,9 +1835,9 @@ def calculate_kpis(tasks, global_completed):
 @main_bp.route('/import/template')
 @login_required
 def download_import_template():
-    """Download the Excel template for importing tasks - SOLO ADMIN"""
-    if not current_user.is_admin:
-        flash('Solo los administradores pueden importar tareas.', 'danger')
+    """Download the Excel template for importing tasks - ADMIN y SUPERVISORES"""
+    if not current_user.is_admin and current_user.role != 'supervisor':
+        flash('Solo los administradores y supervisores pueden importar tareas.', 'danger')
         return redirect(url_for('main.dashboard'))
     
     import os

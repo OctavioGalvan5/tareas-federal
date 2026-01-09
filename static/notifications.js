@@ -174,18 +174,25 @@ function toggleNotifications() {
         .then(response => response.json())
         .then(data => {
             const toggle = document.getElementById('notificationToggle');
+            const notificationText = toggle.querySelector('.notification-text');
+
             if (data.notifications_enabled) {
                 toggle.classList.add('active');
-                alert('Notificaciones activadas');
+                if (notificationText) {
+                    notificationText.innerHTML = '<span style="color: #86efac;"><i class="fas fa-check-circle"></i> Activadas</span>';
+                }
                 checkTasksDueSoon();
             } else {
                 toggle.classList.remove('active');
-                alert('Notificaciones desactivadas');
+                if (notificationText) {
+                    notificationText.innerHTML = '<span style="color: #fca5a5;"><i class="fas fa-times-circle"></i> Desactivadas</span>';
+                }
                 closeNotificationModal();
             }
         })
         .catch(error => console.error('Error toggling notifications:', error));
 }
+
 
 function updateNotificationToggle() {
     // This will be called from inline script in base.html

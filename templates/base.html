@@ -7,6 +7,7 @@
     <meta name="description" content="Sistema de gestión de tareas para profesionales legales">
     <title>Gestor de Tareas Federal - Caja de Abogados</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='sidebar.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='notifications.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='tags.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='buttons.css') }}">
@@ -17,109 +18,190 @@
 </head>
 
 <body>
-    <nav class="navbar">
-        <a href="{{ url_for('main.dashboard') }}" class="navbar-brand">
-            <i class="fas fa-gavel"></i> Gestor de Tareas
-        </a>
-        <div class="navbar-nav">
-            {% if current_user.is_authenticated %}
-            <a href="{{ url_for('main.dashboard') }}">
-                <i class="fas fa-tasks"></i> Mis Tareas
-            </a>
-            {% if current_user.can_create_tasks() %}
-            <a href="{{ url_for('main.create_task') }}">
-                <i class="fas fa-plus-circle"></i> Nueva Tarea
-            </a>
-            {% endif %}
-            <a href="{{ url_for('main.expiration_calendar') }}">
-                <i class="fas fa-clock"></i> Vencimientos
-            </a>
-            <a href="{{ url_for('main.calendar') }}">
-                <i class="fas fa-calendar-alt"></i> Calendario
-            </a>
-            <a href="{{ url_for('main.task_tree') }}">
-                <i class="fas fa-sitemap"></i> Árbol
-            </a>
-            {% if current_user.can_see_reports() %}
-            <a href="{{ url_for('main.reports') }}">
-                <i class="fas fa-chart-line"></i> Reportes
-            </a>
-            {% endif %}
-            <a href="{{ url_for('main.tags') }}">
-                <i class="fas fa-tags"></i> Etiquetas
-            </a>
-            {% if current_user.is_admin or current_user.role == 'supervisor' %}
-            <a href="{{ url_for('admin.manage_users') }}">
-                <i class="fas fa-users"></i> Usuarios
-            </a>
-            {% endif %}
+    {% if current_user.is_authenticated %}
+    <!-- Mobile Menu Button -->
+    <button class="mobile-menu-btn" aria-label="Abrir menú">
+        <i class="fas fa-bars"></i>
+    </button>
 
-            {% if current_user.can_create_tasks() %}
-            <a href="{{ url_for('main.manage_templates') }}">
-                <i class="fas fa-copy"></i> Plantillas
+    <!-- Sidebar Overlay (for mobile) -->
+    <div class="sidebar-overlay"></div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <!-- Header with Logo and Toggle -->
+        <div class="sidebar-header">
+            <a href="{{ url_for('main.dashboard') }}" class="sidebar-brand">
+                <div class="brand-icon">
+                    <i class="fas fa-gavel"></i>
+                </div>
+                <div class="brand-text">
+                    <span class="brand-title">Caja de Abogados</span>
+                    <span class="brand-subtitle">de Salta</span>
+                </div>
             </a>
-            <a href="{{ url_for('main.manage_recurring_tasks') }}">
-                <i class="fas fa-sync-alt"></i> Recurrentes
-            </a>
+            <button class="sidebar-toggle" title="Colapsar menú">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+        </div>
+
+        <!-- Navigation Links -->
+        <nav class="sidebar-nav">
+            <!-- Main Navigation -->
+            <div class="nav-section">
+                <div class="nav-section-title">Principal</div>
+                <a href="{{ url_for('main.dashboard') }}" class="nav-link" data-tooltip="Mis Tareas">
+                    <i class="fas fa-tasks"></i>
+                    <span>Mis Tareas</span>
+                </a>
+                {% if current_user.can_create_tasks() %}
+                <a href="{{ url_for('main.create_task') }}" class="nav-link" data-tooltip="Nueva Tarea">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>Nueva Tarea</span>
+                </a>
+                {% endif %}
+                <a href="{{ url_for('main.expiration_calendar') }}" class="nav-link" data-tooltip="Vencimientos">
+                    <i class="fas fa-clock"></i>
+                    <span>Vencimientos</span>
+                </a>
+                <a href="{{ url_for('main.calendar') }}" class="nav-link" data-tooltip="Calendario">
+                    <i class="fas fa-calendar-alt"></i>
+                    <span>Calendario</span>
+                </a>
+                <a href="{{ url_for('main.task_tree') }}" class="nav-link" data-tooltip="Árbol">
+                    <i class="fas fa-sitemap"></i>
+                    <span>Árbol</span>
+                </a>
+            </div>
+
+            <div class="nav-divider"></div>
+
+            <!-- Reports & Tags -->
+            <div class="nav-section">
+                <div class="nav-section-title">Gestión</div>
+                {% if current_user.can_see_reports() %}
+                <a href="{{ url_for('main.reports') }}" class="nav-link" data-tooltip="Reportes">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Reportes</span>
+                </a>
+                {% endif %}
+                <a href="{{ url_for('main.tags') }}" class="nav-link" data-tooltip="Etiquetas">
+                    <i class="fas fa-tags"></i>
+                    <span>Etiquetas</span>
+                </a>
+            </div>
+
+            {% if current_user.is_admin or current_user.role == 'supervisor' or current_user.can_create_tasks() %}
+            <div class="nav-divider"></div>
+
+            <!-- Admin Section -->
+            <div class="nav-section">
+                <div class="nav-section-title">Administración</div>
+                {% if current_user.is_admin or current_user.role == 'supervisor' %}
+                <a href="{{ url_for('admin.manage_users') }}" class="nav-link" data-tooltip="Usuarios">
+                    <i class="fas fa-users"></i>
+                    <span>Usuarios</span>
+                </a>
+                {% endif %}
+                {% if current_user.can_create_tasks() %}
+                <a href="{{ url_for('main.manage_templates') }}" class="nav-link" data-tooltip="Plantillas">
+                    <i class="fas fa-copy"></i>
+                    <span>Plantillas</span>
+                </a>
+                <a href="{{ url_for('main.manage_recurring_tasks') }}" class="nav-link" data-tooltip="Recurrentes">
+                    <i class="fas fa-sync-alt"></i>
+                    <span>Recurrentes</span>
+                </a>
+                {% endif %}
+            </div>
             {% endif %}
+        </nav>
 
-            <span class="user-display"
-                style="color: rgba(255, 255, 255, 0.9); margin-right: 0.5rem; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.1); padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.9rem;">
-                <i class="fas fa-user-circle"></i> {{ current_user.full_name }}
-            </span>
+        <!-- Footer with User Info -->
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="user-details">
+                    <div class="user-name">{{ current_user.full_name }}</div>
+                    <div class="user-role">
+                        {% if current_user.is_admin %}Admin
+                        {% elif current_user.role == 'gerente' %}Gerente
+                        {% elif current_user.role == 'supervisor' %}Supervisor
+                        {% elif current_user.role == 'usuario_plus' %}Usuario+
+                        {% else %}Usuario{% endif %}
+                    </div>
+                </div>
+            </div>
 
-            <button id="notificationToggle"
-                class="notification-toggle {% if current_user.notifications_enabled %}active{% endif %}"
-                onclick="toggleNotifications()" title="Notificaciones">
-                <i class="fas fa-bell"></i>
+            <div class="nav-divider"></div>
+
+            <button id="notificationToggle" onclick="toggleNotifications()" class="notification-status"
+                data-tooltip="Notificaciones"
+                style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.25rem; color: rgba(255,255,255,0.85); background: transparent; border: none; cursor: pointer; width: 100%; border-radius: 6px; transition: background 0.2s;">
+                <i class="fas fa-bell" style="width: 24px; text-align: center; flex-shrink: 0;"></i>
+                <span class="notification-text">
+                    {% if current_user.notifications_enabled %}
+                    <span style="color: #86efac;"><i class="fas fa-check-circle"></i> Activadas</span>
+                    {% else %}
+                    <span style="color: #fca5a5;"><i class="fas fa-times-circle"></i> Desactivadas</span>
+                    {% endif %}
+                </span>
             </button>
 
-            <a href="{{ url_for('auth.logout') }}">
-                <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+
+            <a href="{{ url_for('auth.logout') }}" class="nav-link logout-link" data-tooltip="Cerrar Sesión">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Cerrar Sesión</span>
             </a>
-            {% else %}
-            <a href="{{ url_for('auth.login') }}">
-                <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
-            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content Wrapper -->
+    <div class="main-wrapper">
+        {% else %}
+        <!-- No sidebar for non-authenticated users -->
+        <div>
             {% endif %}
-        </div>
-    </nav>
 
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <div class="alert alert-{{ category }}">
-            <i
-                class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-circle{% else %}info-circle{% endif %}"></i>
-            {{ message }}
+            <div class="container">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    <i
+                        class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-circle{% else %}info-circle{% endif %}"></i>
+                    {{ message }}
+                </div>
+                {% endfor %}
+                {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </div>
         </div>
-        {% endfor %}
+
+        {% block modals %}{% endblock %}
+
+        {% if current_user.is_authenticated %}
+        <!-- Notification Modal -->
+        <div id="notificationModal" class="modal-overlay" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2><i class="fas fa-exclamation-triangle"></i> ¡Tareas Próximas a Vencer!</h2>
+                </div>
+                <div class="modal-body" id="notificationContent">
+                    <!-- Content will be loaded via JavaScript -->
+                </div>
+                <div class="modal-footer">
+                    <button onclick="closeNotificationModal()" class="btn-primary">Entendido</button>
+                </div>
+            </div>
+        </div>
+        <script src="{{ url_for('static', filename='notifications.js') }}"></script>
+        <script src="{{ url_for('static', filename='sidebar.js') }}"></script>
         {% endif %}
-        {% endwith %}
-
-        {% block content %}{% endblock %}
-    </div>
-
-    {% block modals %}{% endblock %}
-
-    {% if current_user.is_authenticated %}
-    <!-- Notification Modal -->
-    <div id="notificationModal" class="modal-overlay" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2><i class="fas fa-exclamation-triangle"></i> ¡Tareas Próximas a Vencer!</h2>
-            </div>
-            <div class="modal-body" id="notificationContent">
-                <!-- Content will be loaded via JavaScript -->
-            </div>
-            <div class="modal-footer">
-                <button onclick="closeNotificationModal()" class="btn-primary">Entendido</button>
-            </div>
-        </div>
-    </div>
-    <script src="{{ url_for('static', filename='notifications.js') }}"></script>
-    {% endif %}
 </body>
 
 </html>

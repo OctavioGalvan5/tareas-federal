@@ -26,7 +26,7 @@
             <a href="{{ url_for('main.dashboard') }}">
                 <i class="fas fa-tasks"></i> Mis Tareas
             </a>
-            {% if current_user.is_admin or current_user.role == 'supervisor' %}
+            {% if current_user.can_create_tasks() %}
             <a href="{{ url_for('main.create_task') }}">
                 <i class="fas fa-plus-circle"></i> Nueva Tarea
             </a>
@@ -40,9 +40,11 @@
             <a href="{{ url_for('main.task_tree') }}">
                 <i class="fas fa-sitemap"></i> Árbol
             </a>
+            {% if current_user.can_see_reports() %}
             <a href="{{ url_for('main.reports') }}">
                 <i class="fas fa-chart-line"></i> Reportes
             </a>
+            {% endif %}
             <a href="{{ url_for('main.tags') }}">
                 <i class="fas fa-tags"></i> Etiquetas
             </a>
@@ -52,7 +54,7 @@
             </a>
             {% endif %}
 
-            {% if current_user.is_admin or current_user.role == 'supervisor' %}
+            {% if current_user.can_create_tasks() %}
             <a href="{{ url_for('main.manage_templates') }}">
                 <i class="fas fa-copy"></i> Plantillas
             </a>

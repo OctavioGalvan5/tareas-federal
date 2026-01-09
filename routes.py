@@ -76,18 +76,33 @@ def dashboard():
         joinedload(Task.area)  # NEW: Load area relationship
     ).filter(Task.enabled == True)
     
-    # NEW: Area-based filtering
-    # Gerentes/admins can see all areas, others only see their assigned areas
-    if not current_user.can_see_all_areas():
-        # Get user's area IDs
+    # NEW: Role-based visibility filtering
+    # - usuario/usuario_plus: only see tasks assigned to them OR created by them (within their areas)
+    # - supervisor: see ALL tasks in their area
+    # - gerente/admin: see ALL tasks
+    if current_user.can_only_see_own_tasks():
+        # Users can only see tasks they are assigned to OR tasks they created
+        user_area_ids = [area.id for area in current_user.areas]
+        if user_area_ids:
+            tasks_query = tasks_query.filter(
+                db.or_(
+                    Task.assignees.any(id=current_user.id),
+                    Task.creator_id == current_user.id
+                )
+            ).filter(Task.area_id.in_(user_area_ids))
+        else:
+            # User has no areas assigned - show no tasks
+            tasks_query = tasks_query.filter(Task.area_id == -1)
+    elif not current_user.can_see_all_areas():
+        # Supervisors see all tasks in their area
         user_area_ids = [area.id for area in current_user.areas]
         if user_area_ids:
             tasks_query = tasks_query.filter(Task.area_id.in_(user_area_ids))
         else:
-            # User has no areas assigned - show no tasks
             tasks_query = tasks_query.filter(Task.area_id == -1)
+    # Gerentes and admins see all tasks (no additional filter)
     
-    # NEW: Additional area filter (for gerentes filtering specific area)
+    # Additional area filter (for gerentes/supervisors filtering specific area)
     if filter_area:
         tasks_query = tasks_query.filter(Task.area_id == int(filter_area))
     
@@ -168,22 +183,22 @@ def create_task():
     # Import Area model
     from models import Area
     
-    # --- ADMINISTRADORES Y SUPERVISORES PUEDEN CREAR TAREAS ---
-    if not current_user.is_admin and current_user.role != 'supervisor':
-        flash('Solo los administradores y supervisores pueden crear tareas. Usa el calendario de vencimientos para crear recordatorios.', 'danger')
+    # --- CHECK PERMISSION TO CREATE TASKS ---
+    if not current_user.can_create_tasks():
+        flash('No tienes permiso para crear tareas. Usa el calendario de vencimientos para crear recordatorios.', 'danger')
         return redirect(url_for('main.dashboard'))
     
     # Load available areas based on user role
-    # Supervisors only have access to their single area
+    # Admins see all, others see only their area(s)
     if current_user.is_admin:
         available_areas = Area.query.order_by(Area.name).all()
         users = User.query.all()  # Admins see all users
         available_tags = Tag.query.order_by(Tag.name).all()
         templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
     else:
-        # Supervisor: only their assigned area (should be only 1)
+        # Supervisor/usuario_plus: only their assigned area(s)
         available_areas = current_user.areas[:1] if current_user.areas else []
-        # Supervisors only see users in their area
+        # Only see users in their area
         if available_areas:
             users = [u for u in User.query.all() if any(area in u.areas for area in available_areas)]
             # Filter tags and templates by area
@@ -193,6 +208,7 @@ def create_task():
         else:
             users = []
             available_tags = []
+
             templates = []
 
     if request.method == 'POST':
@@ -431,20 +447,34 @@ def task_tree():
         joinedload(Task.tags)
     ).filter(Task.parent_id == None)
     
-    # --- FILTER BY AREA ---
-    if current_user.is_admin:
+    # --- ROLE-BASED VISIBILITY FILTERING ---
+    user_area_ids = [a.id for a in current_user.areas]
+    
+    if current_user.can_only_see_own_tasks():
+        # Users can only see tasks they are assigned to OR created
+        if user_area_ids:
+            query = query.filter(
+                db.or_(
+                    Task.assignees.any(id=current_user.id),
+                    Task.creator_id == current_user.id
+                )
+            ).filter(Task.area_id.in_(user_area_ids))
+        else:
+            query = query.filter(Task.area_id == -1)
+        available_areas = current_user.areas
+        show_area_filter = False
+    elif current_user.can_see_all_areas():
+        # Gerentes/admins see all tasks
         if filter_area:
             query = query.filter(Task.area_id == int(filter_area))
         available_areas = Area.query.order_by(Area.name).all()
         show_area_filter = True
     else:
-        # Non-admins see only tasks from their specific areas (NOT including NULL areas)
-        user_area_ids = [a.id for a in current_user.areas]
+        # Supervisors see all tasks in their area
         if user_area_ids:
             query = query.filter(Task.area_id.in_(user_area_ids))
         else:
-            # User has no areas - show nothing
-            query = query.filter(Task.area_id == -1)  # Impossible condition
+            query = query.filter(Task.area_id == -1)
         available_areas = current_user.areas
         show_area_filter = False
     
@@ -547,19 +577,33 @@ def calendar():
     # Exclude 'Anulado' tasks by default
     query = query.filter(Task.status != 'Anulado')
     
-    # --- FILTER BY AREA ---
-    if current_user.is_admin:
+    # --- ROLE-BASED VISIBILITY FILTERING ---
+    user_area_ids = [a.id for a in current_user.areas]
+    
+    if current_user.can_only_see_own_tasks():
+        # Users can only see tasks they are assigned to OR created
+        if user_area_ids:
+            query = query.filter(
+                db.or_(
+                    Task.assignees.any(id=current_user.id),
+                    Task.creator_id == current_user.id
+                )
+            ).filter(Task.area_id.in_(user_area_ids))
+        else:
+            query = query.filter(Task.area_id == -1)
+        available_areas = current_user.areas
+        show_area_filter = False
+    elif current_user.can_see_all_areas():
+        # Gerentes/admins see all tasks
         if filter_area:
             query = query.filter(Task.area_id == int(filter_area))
         available_areas = Area.query.order_by(Area.name).all()
         show_area_filter = True
     else:
-        # Non-admins see only tasks from their specific areas (NOT including NULL areas)
-        user_area_ids = [a.id for a in current_user.areas]
+        # Supervisors see all tasks in their area
         if user_area_ids:
             query = query.filter(Task.area_id.in_(user_area_ids))
         else:
-            # User has no areas - show nothing
             query = query.filter(Task.area_id == -1)
         available_areas = current_user.areas
         show_area_filter = False
@@ -596,22 +640,48 @@ def calendar():
     # else: period == 'all' - no date filtering
     
     tasks = query.order_by(Task.due_date.asc()).all()
-    users = User.query.all()
     
-    # Get event dates for calendar widget (all dates with tasks in current month)
+    # Filter users by area (same logic as dashboard)
+    if current_user.can_see_all_areas():
+        users = User.query.all()
+    else:
+        # Non-admins see only users in their areas
+        users = [u for u in User.query.all() if any(area in u.areas for area in current_user.areas)]
+    
+    # Get event dates for calendar widget (dates with tasks the user can see)
     month_start = today.replace(day=1)
     if today.month == 12:
         month_end = today.replace(day=31)
     else:
         month_end = (today.replace(month=today.month + 1, day=1) - timedelta(days=1))
     
+    # Build event_dates query with same visibility rules as main query
     event_dates_query = db.session.query(db.func.date(Task.due_date)).filter(
         Task.enabled == True,
         Task.status != 'Anulado',
         db.func.date(Task.due_date) >= month_start,
         db.func.date(Task.due_date) <= month_end
-    ).distinct().all()
-    event_dates = [d[0].strftime('%Y-%m-%d') for d in event_dates_query if d[0]]
+    )
+    
+    # Apply same visibility filtering to event_dates
+    if current_user.can_only_see_own_tasks():
+        if user_area_ids:
+            event_dates_query = event_dates_query.filter(
+                db.or_(
+                    Task.assignees.any(id=current_user.id),
+                    Task.creator_id == current_user.id
+                )
+            ).filter(Task.area_id.in_(user_area_ids))
+        else:
+            event_dates_query = event_dates_query.filter(Task.area_id == -1)
+    elif not current_user.can_see_all_areas():
+        # Supervisors see all tasks in their area
+        if user_area_ids:
+            event_dates_query = event_dates_query.filter(Task.area_id.in_(user_area_ids))
+        else:
+            event_dates_query = event_dates_query.filter(Task.area_id == -1)
+    
+    event_dates = [d[0].strftime('%Y-%m-%d') for d in event_dates_query.distinct().all() if d[0]]
     
     return render_template('calendar.html', 
                           tasks=tasks, 
@@ -621,6 +691,7 @@ def calendar():
                           event_dates=event_dates,
                           all_areas=available_areas,
                           show_area_filter=show_area_filter)
+
 
 @main_bp.route('/task/<int:task_id>/toggle', methods=['POST'])
 @login_required
@@ -1306,8 +1377,14 @@ def api_delete_tag(tag_id):
 def reports():
     from models import Area
     
+    # --- CHECK PERMISSION TO VIEW REPORTS ---
+    if not current_user.can_see_reports():
+        flash('No tienes acceso a los reportes.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
     # Filter users by area for non-admins
     if current_user.is_admin:
+
         users = User.query.all()
         available_areas = Area.query.order_by(Area.name).all()
         show_area_filter = True
@@ -1340,7 +1417,12 @@ def reports():
 @main_bp.route('/api/reports/data', methods=['POST'])
 @login_required
 def reports_data():
+    # --- CHECK PERMISSION TO VIEW REPORTS ---
+    if not current_user.can_see_reports():
+        return jsonify({'error': 'No tienes acceso a los reportes'}), 403
+    
     data = request.get_json()
+
     user_ids = data.get('user_ids', [])
     tag_ids = data.get('tag_ids', []) # New filter
     status_filter = data.get('status') # New filter
@@ -1835,9 +1917,9 @@ def calculate_kpis(tasks, global_completed):
 @main_bp.route('/import/template')
 @login_required
 def download_import_template():
-    """Download the Excel template for importing tasks - ADMIN y SUPERVISORES"""
-    if not current_user.is_admin and current_user.role != 'supervisor':
-        flash('Solo los administradores y supervisores pueden importar tareas.', 'danger')
+    """Download the Excel template for importing tasks"""
+    if not current_user.can_create_tasks():
+        flash('No tienes permiso para importar tareas.', 'danger')
         return redirect(url_for('main.dashboard'))
     
     import os
@@ -1858,20 +1940,22 @@ def download_import_template():
 @main_bp.route('/import/tasks', methods=['POST'])
 @login_required
 def import_tasks():
-    """Import tasks from an uploaded Excel file - ADMIN and SUPERVISORS"""
-    # Determine supervisor's area for automatic assignment
-    is_supervisor = current_user.role == 'supervisor'
-    supervisor_area_id = None
+    """Import tasks from an uploaded Excel file"""
+    # Check permission first
+    if not current_user.can_create_tasks():
+        flash('No tienes permiso para importar tareas.', 'danger')
+        return redirect(url_for('main.dashboard'))
     
-    if is_supervisor:
+    # Determine user's area for automatic assignment (for non-admins)
+    is_limited_creator = current_user.role in ['supervisor', 'usuario_plus']
+    user_area_id = None
+    
+    if is_limited_creator:
         if current_user.areas:
-            supervisor_area_id = current_user.areas[0].id
+            user_area_id = current_user.areas[0].id
         else:
             flash('No tienes un área asignada. Contacta a un administrador.', 'danger')
             return redirect(url_for('main.dashboard'))
-    elif not current_user.is_admin:
-        flash('Solo los administradores y supervisores pueden importar tareas.', 'danger')
-        return redirect(url_for('main.dashboard'))
     
     from openpyxl import load_workbook
     
@@ -1995,7 +2079,7 @@ def import_tasks():
                 creator_id=current_user.id,
                 time_spent=time_spent,
                 status=status,
-                area_id=supervisor_area_id  # For supervisors, assigns to their area; for admins, None (inherits default)
+                area_id=user_area_id  # For non-admins, assigns to their area; for admins, None (inherits default)
             )
             
             # Set completed info if status is Completed
@@ -2035,6 +2119,11 @@ def import_tasks():
 @login_required
 def manage_templates():
     """View and create task templates - assigns area automatically"""
+    # Check permission to create tasks (which includes templates)
+    if not current_user.can_create_tasks():
+        flash('No tienes permiso para gestionar plantillas de tareas.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
     if request.method == 'POST':
         name = request.form.get('name')
         title = request.form.get('title')
@@ -2448,19 +2537,19 @@ def api_get_expiration(expiration_id):
 @main_bp.route('/recurring-tasks')
 @login_required
 def manage_recurring_tasks():
-    """Listar y gestionar tareas recurrentes - Admin y Supervisores"""
-    # Allow admins and supervisors
-    if not current_user.is_admin and current_user.role != 'supervisor':
-        flash('Solo los administradores y supervisores pueden gestionar tareas recurrentes.', 'danger')
+    """Listar y gestionar tareas recurrentes"""
+    # Check permission to create tasks
+    if not current_user.can_create_tasks():
+        flash('No tienes permiso para gestionar tareas recurrentes.', 'danger')
         return redirect(url_for('main.dashboard'))
     
-    # Filter by area for supervisors
-    if current_user.is_admin:
+    # Filter by area - admins/gerentes see all, others see only their area
+    if current_user.can_see_all_areas():
         recurring_tasks = RecurringTask.query.order_by(RecurringTask.created_at.desc()).all()
         users = User.query.order_by(User.full_name).all()
         available_tags = Tag.query.order_by(Tag.name).all()
     else:
-        # Supervisor: only see recurring tasks from their area
+        # Supervisor/usuario_plus: only see recurring tasks from their area
         user_area_ids = [a.id for a in current_user.areas]
         if user_area_ids:
             # Strict filter - only from user's areas
@@ -2482,10 +2571,10 @@ def manage_recurring_tasks():
 @main_bp.route('/recurring-tasks/create', methods=['POST'])
 @login_required
 def create_recurring_task():
-    """Crear una nueva tarea recurrente - Admin y Supervisores"""
-    # Allow admins and supervisors
-    if not current_user.is_admin and current_user.role != 'supervisor':
-        flash('Solo los administradores y supervisores pueden crear tareas recurrentes.', 'danger')
+    """Crear una nueva tarea recurrente"""
+    # Check permission to create tasks
+    if not current_user.can_create_tasks():
+        flash('No tienes permiso para crear tareas recurrentes.', 'danger')
         return redirect(url_for('main.dashboard'))
     
     title = request.form.get('title')
@@ -2596,16 +2685,16 @@ def create_recurring_task():
 @main_bp.route('/recurring-tasks/<int:rt_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_recurring_task(rt_id):
-    """Editar una tarea recurrente - Admin y Supervisores"""
-    # Allow admins and supervisors
-    if not current_user.is_admin and current_user.role != 'supervisor':
-        flash('Solo los administradores y supervisores pueden editar tareas recurrentes.', 'danger')
+    """Editar una tarea recurrente"""
+    # Check permission to create tasks
+    if not current_user.can_create_tasks():
+        flash('No tienes permiso para editar tareas recurrentes.', 'danger')
         return redirect(url_for('main.dashboard'))
     
     rt = RecurringTask.query.get_or_404(rt_id)
     
-    # Supervisors can only edit recurring tasks from their area
-    if not current_user.is_admin:
+    # Non-admins can only edit recurring tasks from their area
+    if not current_user.can_see_all_areas():
         user_area_ids = [a.id for a in current_user.areas]
         if rt.area_id not in user_area_ids and rt.area_id is not None:
             flash('No tienes permiso para editar esta tarea recurrente.', 'danger')
@@ -2684,15 +2773,15 @@ def edit_recurring_task(rt_id):
 @main_bp.route('/recurring-tasks/<int:rt_id>/toggle', methods=['POST'])
 @login_required
 def toggle_recurring_task(rt_id):
-    """Pausar/Reanudar una tarea recurrente - Admin y Supervisores"""
-    # Allow admins and supervisors
-    if not current_user.is_admin and current_user.role != 'supervisor':
+    """Pausar/Reanudar una tarea recurrente"""
+    # Check permission to create tasks
+    if not current_user.can_create_tasks():
         return jsonify({'success': False, 'error': 'No autorizado'}), 403
     
     rt = RecurringTask.query.get_or_404(rt_id)
     
-    # Supervisors can only toggle recurring tasks from their area
-    if not current_user.is_admin:
+    # Non-admins can only toggle recurring tasks from their area
+    if not current_user.can_see_all_areas():
         user_area_ids = [a.id for a in current_user.areas]
         if rt.area_id not in user_area_ids and rt.area_id is not None:
             return jsonify({'success': False, 'error': 'No autorizado para esta tarea'}), 403

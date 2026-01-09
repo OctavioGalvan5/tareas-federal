@@ -49,8 +49,11 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     notifications_enabled = db.Column(db.Boolean, default=True)
     
-    # Role: 'usuario' (default), 'supervisor', 'gerente'
-    # gerente can see ALL tasks from ALL areas
+    # Role: 'usuario' (default), 'usuario_plus', 'supervisor', 'gerente'
+    # usuario: can only see own tasks (assigned or created), cannot create tasks, cannot see reports
+    # usuario_plus: can create tasks but cannot see reports, can only see own tasks
+    # supervisor: can see all tasks in their area, can create tasks, can see reports
+    # gerente: can see ALL tasks from ALL areas
     role = db.Column(db.String(20), nullable=False, default='usuario')
     
     # Relationships - specify foreign_keys to avoid ambiguity
@@ -69,6 +72,22 @@ class User(UserMixin, db.Model):
     def can_see_all_areas(self):
         """Check if user can see tasks from all areas (gerente role)"""
         return self.role == 'gerente' or self.is_admin
+    
+    def can_see_all_area_tasks(self):
+        """Check if user can see all tasks from their areas (not just assigned)"""
+        return self.role in ['supervisor', 'gerente'] or self.is_admin
+    
+    def can_only_see_own_tasks(self):
+        """Check if user can only see tasks assigned to them or created by them"""
+        return self.role in ['usuario', 'usuario_plus']
+    
+    def can_create_tasks(self):
+        """Check if user can create tasks"""
+        return self.role in ['usuario_plus', 'supervisor', 'gerente'] or self.is_admin
+    
+    def can_see_reports(self):
+        """Check if user can see reports - only supervisor, gerente, and admin"""
+        return self.role in ['supervisor', 'gerente'] or self.is_admin
 
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)

@@ -306,8 +306,19 @@ def edit_task(task_id):
         flash('No tienes permiso para editar esta tarea.', 'danger')
         return redirect(url_for('main.dashboard'))
 
-    users = User.query.all()
-    available_tags = Tag.query.order_by(Tag.name).all()
+    if current_user.is_admin or current_user.role == 'gerente':
+        users = User.query.all()
+        available_tags = Tag.query.order_by(Tag.name).all()
+    else:
+        # Filter users by area (assignees)
+        users = [u for u in User.query.all() if any(area in u.areas for area in current_user.areas)]
+        
+        # Filter tags by area
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+             available_tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all()
+        else:
+             available_tags = []
 
     if request.method == 'POST':
         task.title = request.form.get('title')

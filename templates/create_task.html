@@ -65,33 +65,33 @@
         <div class="form-group">
             <label for="title"><i class="fas fa-heading"></i> Título</label>
             <input type="text" id="title" name="title" required placeholder="Título de la tarea" {% if not
-                current_user.is_admin and current_user.role !='supervisor' %}readonly{% endif %}>
+                current_user.can_create_tasks() %}readonly{% endif %}>
         </div>
 
         <div class="form-group">
             <label for="description"><i class="fas fa-align-left"></i> Descripción</label>
             <textarea id="description" name="description" rows="4" placeholder="Descripción detallada de la tarea" {% if
-                not current_user.is_admin and current_user.role !='supervisor' %}readonly{% endif %}></textarea>
+                not current_user.can_create_tasks() %}readonly{% endif %}></textarea>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div class="form-group">
                 <label for="priority"><i class="fas fa-exclamation-circle"></i> Prioridad</label>
-                <select id="priority" name="priority" required {% if not current_user.is_admin and current_user.role
-                    !='supervisor' %}disabled{% endif %}>
+                <select id="priority" name="priority" required {% if not current_user.can_create_tasks() %}disabled{%
+                    endif %}>
                     <option value="Normal">Normal</option>
                     <option value="Media">Media</option>
                     <option value="Urgente">Urgente</option>
                 </select>
-                {% if not current_user.is_admin and current_user.role != 'supervisor' %}
+                {% if not current_user.can_create_tasks() %}
                 <input type="hidden" name="priority" id="priority_hidden" value="Normal">
                 {% endif %}
             </div>
 
             <div class="form-group">
                 <label for="due_date"><i class="fas fa-calendar-day"></i> Fecha de Vencimiento</label>
-                <input type="date" id="due_date" name="due_date" required {% if not current_user.is_admin and
-                    current_user.role !='supervisor' %}readonly{% endif %}>
+                <input type="date" id="due_date" name="due_date" required {% if not current_user.can_create_tasks()
+                    %}readonly{% endif %}>
             </div>
         </div>
 
@@ -205,8 +205,8 @@
                 style="padding: 0.9rem 2rem; text-decoration: none; color: var(--text-light); font-weight: 600; border-radius: 10px; border: 2px solid var(--border-color); transition: var(--transition);">
                 <i class="fas fa-times"></i> Cancelar
             </a>
-            <button type="submit" id="submitBtn" {% if not current_user.is_admin and current_user.role !='supervisor'
-                and templates %}disabled style="opacity: 0.5; cursor: not-allowed;" {% endif %}>
+            <button type="submit" id="submitBtn" {% if not current_user.can_create_tasks() and templates %}disabled
+                style="opacity: 0.5; cursor: not-allowed;" {% endif %}>
                 <i class="fas fa-check"></i> Crear Tarea
             </button>
         </div>

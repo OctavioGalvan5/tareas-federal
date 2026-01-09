@@ -184,104 +184,701 @@
     </div>
 </form>
 
-<div class="task-list">
+<div class="tasks-grid">
     {% if tasks %}
     {% for task in tasks %}
     <div
-        class="task-item {% if task.due_date.date() == today and task.status == 'Pending' %}due-today{% endif %} {% if task.due_date.date() < today and task.status == 'Pending' %}overdue{% endif %} {% if task.status == 'Anulado' %}anulado{% endif %}">
-        <div class="task-info">
-            <h3>
+        class="task-card {% if task.status == 'Completed' %}completed{% elif task.status == 'Anulado' %}anulado{% elif task.due_date.date() < today %}overdue{% elif task.due_date.date() == today %}due-today{% endif %}">
+        <div class="task-card-header">
+            <!-- 🚨 Alert Banners -->
+            {% if task.status == 'Pending' %}
+            {% if task.due_date.date() < today %} <div class="status-banner overdue">
+                <i class="fas fa-exclamation-triangle"></i> ¡Vencida!
+        </div>
+        {% elif task.due_date.date() == today %}
+        <div class="status-banner due-today">
+            <i class="fas fa-clock"></i> Vence Hoy
+        </div>
+        {% endif %}
+        {% endif %}
+
+        <div class="header-main" {% if task.due_date.date() <=today and task.status=='Pending'
+            %}style="margin-top: 0.75rem;" {% endif %}>
+            <span class="priority-dot priority-{{ task.priority|lower }}" title="Prioridad {{ task.priority }}"></span>
+            <span class="task-id">#{{ task.id }}</span>
+            {% if task.parent_id %}
+            <span class="parent-badge" title="Subtarea de #{{ task.parent_id }}">
+                <i class="fas fa-level-up-alt"></i>
+            </span>
+            {% endif %}
+            {% if task.recurring_task_id %}
+            <span class="recurring-badge" title="Tarea recurrente">
+                <i class="fas fa-sync-alt"></i>
+            </span>
+            {% endif %}
+
+            <div class="action-buttons">
                 {% if task.status != 'Anulado' %}
                 {% if task.status == 'Completed' %}
-                <span class="toggle-btn completed" title="Tarea completada" style="cursor: default;">
-                    <i class="fas fa-check-circle"></i>
+                <span class="status-pill completed">
+                    <i class="fas fa-check"></i> Completada
                 </span>
                 {% else %}
-                <button class="toggle-btn" onclick="toggleTask({{ task.id }}, this)" title="Marcar como completada">
-                    <i class="fas fa-circle"></i>
+                <button class="action-btn complete" onclick="toggleTask({{ task.id }}, this)"
+                    title="Marcar como completada">
+                    <i class="far fa-check-circle"></i> <span>Completar</span>
                 </button>
                 {% endif %}
-                <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="toggle-btn" title="Editar tarea"
-                    style="text-decoration: none;">
-                    <i class="fas fa-edit"></i>
-                </a>
-                <button class="toggle-btn anular-btn" onclick="anularTask({{ task.id }})" title="Anular tarea">
-                    <i class="fas fa-ban"></i>
-                </button>
-                {% else %}
-                <span class="toggle-btn" style="color: #9ca3af;">
-                    <i class="fas fa-ban"></i>
-                </span>
-                {% endif %}
-                <a href="{{ url_for('main.task_details', task_id=task.id) }}"
-                    style="text-decoration: none; color: inherit;">
-                    <span
-                        class="task-title {% if task.status == 'Completed' %}completed-text{% endif %} {% if task.status == 'Anulado' %}anulado-text{% endif %}">{{
-                        task.title }}</span>
-                </a>
-                {% if task.status == 'Anulado' %}
-                <span class="status-badge anulado-badge">ANULADO</span>
-                {% endif %}
-                <span class="priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
-                {% if task.area %}
-                <span class="area-badge"
-                    style="background-color: {{ task.area.color }}20; color: {{ task.area.color }}; border: 1px solid {{ task.area.color }}40; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-left: 0.25rem;">
-                    <i class="fas fa-building"></i> {{ task.area.name }}
-                </span>
-                {% endif %}
-                {% if task.recurring_task_id %}
-                <span class="recurring-badge" title="Tarea recurrente"><i class="fas fa-sync-alt"></i></span>
-                {% endif %}
-                <div class="task-tags">
-                    {% for tag in task.tags %}
-                    <span class="tag-chip"
-                        style="background-color: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}40;">
-                        {{ tag.name }}
-                    </span>
-                    {% endfor %}
+
+                <div class="secondary-actions">
+                    <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="icon-btn edit" title="Editar">
+                        <i class="fas fa-pen"></i>
+                    </a>
+                    <button class="icon-btn ban" onclick="anularTask({{ task.id }})" title="Anular">
+                        <i class="fas fa-ban"></i>
+                    </button>
                 </div>
-            </h3>
-            <p>{{ task.description }}</p>
-            <div class="task-meta">
-                <span><i class="fas fa-user-edit"></i> Creado por: {{ task.creator.full_name }}</span>
-                <span><i class="fas fa-user-check"></i> Asignado a: {% for assignee in task.assignees %}{{
-                    assignee.full_name }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
-                {% if task.status == 'Completed' and task.completed_by %}
-                <span style="color: var(--success-color); font-weight: 600;"><i class="fas fa-check-circle"></i>
-                    Completado por: {{ task.completed_by.full_name }} ({{
-                    (task.completed_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M')
-                    }})</span>
-                {% if task.completed_at and task.due_date and task.completed_at.date() > task.due_date.date() %}
-                <span style="color: #d97706; font-weight: 500; margin-left: 0.5rem;"><i class="fas fa-clock"></i>
-                    Completada fuera de término</span>
-                {% endif %}
-                {% elif task.status == 'Anulado' and task.completed_by %}
-                <span style="color: #9ca3af; font-weight: 600;"><i class="fas fa-ban"></i>
-                    Anulado por: {{ task.completed_by.full_name }} ({{
-                    (task.completed_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M')
-                    }})</span>
+                {% else %}
+                <span class="status-badge anulado-badge">ANULADO</span>
                 {% endif %}
             </div>
         </div>
-        <div class="task-date">
-            <i class="fas fa-calendar"></i> Vence: {{ task.due_date.strftime('%d/%m/%Y') }}
-            {% if task.due_date.date() == today and task.status == 'Pending' %}
-            <br><span style="color: var(--danger-color); font-size: 0.8rem; font-weight: 700;"><i
-                    class="fas fa-exclamation-triangle"></i> ¡VENCE HOY!</span>
-            {% elif task.due_date.date() < today and task.status=='Pending' %} <br><span
-                    style="color: #d97706; font-size: 0.8rem; font-weight: 700;"><i class="fas fa-clock"></i>
-                    VENCIDA</span>
-                {% endif %}
+
+        <a href="{{ url_for('main.task_details', task_id=task.id) }}" class="task-title-link">
+            <h3 class="task-title">{{ task.title }}</h3>
+        </a>
+    </div>
+
+    <div class="task-card-body">
+        {% if task.description %}
+        <p class="task-description">{{ task.description|truncate(100) }}</p>
+        {% else %}
+        <p class="task-description empty">Sin descripción</p>
+        {% endif %}
+
+        <div class="tags-container">
+            {% if task.area %}
+            <span class="area-tag" style="--area-color: {{ task.area.color }};">
+                {{ task.area.name }}
+            </span>
+            {% endif %}
+            {% for tag in task.tags %}
+            <span class="tag-pill" style="--tag-color: {{ tag.color }};">
+                {{ tag.name }}
+            </span>
+            {% endfor %}
         </div>
     </div>
-    {% endfor %}
-    {% else %}
-    <div style="text-align: center; padding: 3rem; color: var(--text-light);">
-        <i class="fas fa-inbox" style="font-size: 4rem; opacity: 0.3; margin-bottom: 1rem;"></i>
-        <p style="font-size: 1.2rem;">No hay tareas que mostrar.</p>
+
+    <div class="task-card-footer">
+        <div class="meta-row">
+            <div class="meta-item assignees"
+                title="Asignado a: {% for u in task.assignees %}{{ u.full_name }}{% if not loop.last %}, {% endif %}{% endfor %}">
+                <i class="fas fa-users"></i>
+                <span>
+                    {% if task.assignees %}
+                    {{ task.assignees|length }}
+                    {% else %}
+                    0
+                    {% endif %}
+                </span>
+            </div>
+
+            <div
+                class="meta-item date {% if task.due_date.date() < today and task.status == 'Pending' %}text-danger{% elif task.due_date.date() == today and task.status == 'Pending' %}text-warning{% endif %}">
+                <i class="far fa-calendar-alt"></i>
+                <span>{{ task.due_date.strftime('%d/%m') }}</span>
+            </div>
+        </div>
+
+        {% if task.status == 'Completed' %}
+        <div class="completion-info">
+            Completado por {{ task.completed_by.full_name.split()[0] }}
+        </div>
+        {% endif %}
     </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">
+        <i class="fas fa-clipboard-check"></i>
+    </div>
+    <h3>No hay tareas pendientes</h3>
+    <p>¡Todo al día! Disfruta de tu tiempo libre o crea una nueva tarea.</p>
+    {% if current_user.can_create_tasks() %}
+    <a href="{{ url_for('main.create_task') }}" class="button">Crear Tarea</a>
     {% endif %}
 </div>
+{% endif %}
+</div>
+
+<style>
+    /* Dashboard Grid Layout */
+    .tasks-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+        padding: 0.5rem 0;
+    }
+
+    /* Task Card Style */
+    .task-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        display: flex;
+        flex-direction: column;
+        transition: all 0.2s ease;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+        height: 100%;
+        position: relative;
+    }
+
+    .task-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Status variants - Full Color Backgrounds for Urgency */
+    .task-card.overdue {
+        background-color: #fef2f2;
+        border: 1px solid #fecaca;
+        box-shadow: 0 4px 6px -1px rgba(220, 38, 38, 0.1), 0 2px 4px -1px rgba(220, 38, 38, 0.06);
+    }
+
+    .task-card.overdue .task-card-header {
+        background-color: #fee2e2;
+        border-bottom: 1px solid #fca5a5;
+    }
+
+    .task-card.overdue .task-title {
+        color: #991b1b;
+    }
+
+    .task-card.overdue .btn-icon {
+        color: #ef4444;
+    }
+
+    .task-card.overdue .btn-icon:hover {
+        background: #fecaca;
+        color: #b91c1c;
+    }
+
+    .task-card.due-today {
+        background-color: #fffbeb;
+        border: 1px solid #fde68a;
+        box-shadow: 0 4px 6px -1px rgba(217, 119, 6, 0.1), 0 2px 4px -1px rgba(217, 119, 6, 0.06);
+    }
+
+    .task-card.due-today .task-card-header {
+        background-color: #fef3c7;
+        border-bottom: 1px solid #fcd34d;
+    }
+
+    .task-card.due-today .task-title {
+        color: #92400e;
+    }
+
+    .task-card.due-today .btn-icon {
+        color: #d97706;
+    }
+
+    .task-card.due-today .btn-icon:hover {
+        background: #fde68a;
+        color: #b45309;
+    }
+
+    /* Green style for Completed Tasks */
+    .task-card.completed {
+        background-color: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        opacity: 0.9;
+    }
+
+    .task-card.completed .task-card-header {
+        background-color: #dcfce7;
+        border-bottom: 1px solid #86efac;
+    }
+
+    .task-card.completed .task-title {
+        color: #166534;
+        text-decoration: none;
+    }
+
+    .task-card.completed .btn-icon.completed {
+        color: #15803d;
+        background: #bbf7d0;
+        cursor: not-allowed;
+    }
+
+    .task-card.anulado {
+        opacity: 0.6;
+        background: #f1f5f9;
+        border-color: #e2e8f0;
+    }
+
+    /* Status Banners */
+    .status-banner {
+        padding: 0.4rem 1.25rem;
+        font-weight: 800;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .status-banner.overdue {
+        background: #ef4444;
+        color: white;
+    }
+
+    .status-banner.due-today {
+        background: #f59e0b;
+        color: white;
+    }
+
+    /* Update Footer for Colored Cards */
+    .task-card.overdue .task-card-footer {
+        background-color: #fee2e2;
+        border-top: 1px solid #fca5a5;
+    }
+
+    .task-card.overdue .footer-date {
+        color: #991b1b !important;
+    }
+
+    .task-card.due-today .task-card-footer {
+        background-color: #fef3c7;
+        border-top: 1px solid #fcd34d;
+    }
+
+    .task-card.due-today .footer-date {
+        color: #92400e !important;
+    }
+
+    .task-card.completed .task-card-footer {
+        background-color: #dcfce7;
+        border-top: 1px solid #86efac;
+    }
+
+    .task-card.completed .completion-info {
+        color: #15803d;
+        font-weight: 600;
+    }
+
+    /* Card Header */
+    .task-card-header {
+        padding: 1rem;
+        background: #fff;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .header-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.5rem;
+    }
+
+    .priority-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    .priority-dot.priority-urgente {
+        background-color: #ef4444;
+        box-shadow: 0 0 0 2px #fee2e2;
+    }
+
+    .priority-dot.priority-media {
+        background-color: #f59e0b;
+        box-shadow: 0 0 0 2px #fef3c7;
+    }
+
+    .priority-dot.priority-normal {
+        background-color: #3b82f6;
+        box-shadow: 0 0 0 2px #dbeafe;
+    }
+
+    .task-id {
+        font-size: 0.75rem;
+        color: #64748b;
+        background: #f1f5f9;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 600;
+    }
+
+    /* Revised Action Buttons */
+    .action-buttons {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        opacity: 0;
+        /* Hidden by default */
+        transition: opacity 0.2s ease-in-out;
+    }
+
+    .task-card:hover .action-buttons {
+        opacity: 1;
+        /* Show on hover */
+    }
+
+    /* Always show on mobile/touch devices */
+    @media (max-width: 768px) {
+        .action-buttons {
+            opacity: 1;
+        }
+    }
+
+    .secondary-actions {
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    .action-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 6px;
+        border: 1px solid transparent;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .action-btn.complete {
+        background: white;
+        border-color: #cbd5e1;
+        color: #475569;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .action-btn.complete:hover {
+        background: #f0fdf4;
+        border-color: #86efac;
+        color: #166534;
+    }
+
+    .action-btn.complete i {
+        font-size: 1rem;
+        color: #cbd5e1;
+        /* Inactive circle */
+    }
+
+    .action-btn.complete:hover i {
+        color: #16a34a;
+        /* Active check */
+    }
+
+    .status-pill.completed {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 6px;
+        background: #dcfce7;
+        color: #15803d;
+        font-size: 0.8rem;
+        font-weight: 700;
+    }
+
+    .icon-btn {
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        background: transparent;
+        border: none;
+        color: #94a3b8;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .icon-btn:hover {
+        background: #f1f5f9;
+        color: #334155;
+    }
+
+    .icon-btn.edit:hover {
+        background: #eff6ff;
+        color: #2563eb;
+    }
+
+    .icon-btn.ban:hover {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    /* Specific Context Colors */
+    .task-card.overdue .action-btn.complete:hover {
+        background: #fee2e2;
+        border-color: #fca5a5;
+        color: #991b1b;
+    }
+
+    .task-card.overdue .action-btn.complete:hover i {
+        color: #dc2626;
+    }
+
+    .task-card.due-today .action-btn.complete:hover {
+        background: #fef3c7;
+        border-color: #fcd34d;
+        color: #92400e;
+    }
+
+    .task-card.due-today .action-btn.complete:hover i {
+        color: #d97706;
+    }
+
+    .task-title-link {
+        text-decoration: none;
+        color: inherit;
+        display: block;
+    }
+
+    .task-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1e293b;
+        margin: 0;
+        line-height: 1.4;
+        transition: color 0.2s;
+    }
+
+    .task-title-link:hover .task-title {
+        color: #2563eb;
+    }
+
+    /* Alerts inside header */
+    .alert-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.75rem;
+        border-radius: 6px;
+        font-weight: 700;
+        font-size: 0.85rem;
+        margin-top: 0.4rem;
+        width: 100%;
+        /* Full width alert */
+    }
+
+    .alert-badge.overdue {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+    }
+
+    .alert-badge.due-today {
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+    }
+
+    /* Card Body */
+    .task-card-body {
+        padding: 1rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .task-description {
+        color: #475569;
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    .task-description.empty {
+        color: #cbd5e1;
+        font-style: italic;
+    }
+
+    .tags-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin-top: auto;
+    }
+
+    .tag-pill {
+        font-size: 0.7rem;
+        padding: 0.15rem 0.5rem;
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--tag-color) 15%, white);
+        color: var(--tag-color);
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .area-tag {
+        font-size: 0.7rem;
+        padding: 0.15rem 0.5rem;
+        border-radius: 4px;
+        background: color-mix(in srgb, var(--area-color) 10%, white);
+        color: var(--area-color);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+    }
+
+    /* Info Grid for Metadata */
+    .info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+        margin-top: auto;
+        font-size: 0.85rem;
+        color: #64748b;
+        background: rgba(255, 255, 255, 0.5);
+        padding: 0.5rem;
+        border-radius: 6px;
+    }
+
+    .info-item {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    /* Card Footer */
+    .task-card-footer {
+        padding: 0.75rem 1rem;
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .footer-date {
+        font-weight: 600;
+        color: #334155;
+        font-size: 0.9rem;
+    }
+
+    .footer-date.text-danger {
+        color: #dc2626 !important;
+    }
+
+    .footer-date.text-warning {
+        color: #d97706 !important;
+    }
+
+    .completion-info {
+        font-size: 0.75rem;
+        color: #10b981;
+        font-weight: 500;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        background: white;
+        border-radius: 16px;
+        border: 2px dashed #e2e8f0;
+        grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .empty-icon {
+        width: 80px;
+        height: 80px;
+        background: #f1f5f9;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .empty-icon i {
+        font-size: 2.5rem;
+        color: #94a3b8;
+    }
+
+    .empty-state h3 {
+        font-size: 1.25rem;
+        color: #334155;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        color: #64748b;
+        margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 640px) {
+        .tasks-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .action-buttons {
+            opacity: 1;
+        }
+
+        background: white;
+        border-radius: 16px;
+        border: 2px dashed #e2e8f0;
+        grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .empty-icon {
+        width: 80px;
+        height: 80px;
+        background: #f1f5f9;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .empty-icon i {
+        font-size: 2.5rem;
+        color: #94a3b8;
+    }
+
+    .empty-state h3 {
+        font-size: 1.25rem;
+        color: #334155;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        color: #64748b;
+        margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 640px) {
+        .tasks-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .action-buttons {
+            opacity: 1;
+        }
+    }
+</style>
 
 <script>
     function toggleTask(taskId, btn) {

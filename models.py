@@ -138,6 +138,9 @@ class Task(db.Model):
     recurring_task_id = db.Column(db.Integer, db.ForeignKey('recurring_task.id'), nullable=True)
     recurring_task = db.relationship('RecurringTask', backref='generated_tasks')
 
+    # Comment added on completion
+    completion_comment = db.Column(db.Text, nullable=True)
+
     def __repr__(self):
         return f'<Task {self.title}>'
 

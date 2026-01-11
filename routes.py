@@ -713,11 +713,16 @@ def toggle_task_status(task_id):
     if task.creator_id != current_user.id and current_user not in task.assignees:
         return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
     
+    # Get optional completion comment from request body
+    data = request.get_json() or {}
+    completion_comment = data.get('comment', '').strip() if data else ''
+    
     # Toggle status and track completion
     if task.status == 'Pending':
         task.status = 'Completed'
         task.completed_by_id = current_user.id
         task.completed_at = now_utc()
+        task.completion_comment = completion_comment if completion_comment else None
         
         # Enable child tasks when parent is completed
         enabled_children_count = 0
@@ -745,6 +750,7 @@ def toggle_task_status(task_id):
         task.status = 'Pending'
         task.completed_by_id = None
         task.completed_at = None
+        task.completion_comment = None  # Clear comment when reopening
     
     db.session.commit()
     

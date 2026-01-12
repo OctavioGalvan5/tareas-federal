@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, make_response
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
-from models import User, Task, Tag, TaskTemplate, Expiration, RecurringTask
+from models import User, Task, Tag, TaskTemplate, Expiration, RecurringTask, ActivityLog
 from datetime import datetime, date, timedelta
 from pdf_utils import generate_task_pdf
 from excel_utils import generate_task_excel
@@ -16,6 +16,35 @@ BUENOS_AIRES_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
 def now_utc():
     """Get current datetime in UTC (consistent with other datetimes in the app)."""
     return datetime.utcnow()
+
+
+def log_activity(user, action, description, target_type=None, target_id=None, area_id=None):
+    """
+    Registra una actividad en el log de auditoría.
+    
+    Args:
+        user: Usuario que realizó la acción
+        action: Tipo de acción ('task_created', 'task_completed', etc.)
+        description: Descripción legible ("creó la tarea #123")
+        target_type: Tipo de objeto afectado ('task', 'expiration', etc.)
+        target_id: ID del objeto afectado
+        area_id: ID del área asociada (para filtrado de supervisores)
+    """
+    try:
+        log = ActivityLog(
+            user_id=user.id,
+            action=action,
+            description=description,
+            target_type=target_type,
+            target_id=target_id,
+            area_id=area_id,
+            created_at=datetime.utcnow()
+        )
+        db.session.add(log)
+        db.session.commit()
+    except Exception as e:
+        print(f"Error logging activity: {e}")
+        db.session.rollback()
 
 
 main_bp = Blueprint('main', __name__)
@@ -41,6 +70,15 @@ def login():
             print(f"DEBUG: Password check result: {check}")
             if check:
                 login_user(user)
+                
+                # Log activity
+                log_activity(
+                    user=user,
+                    action='login',
+                    description='inició sesión',
+                    area_id=user.areas[0].id if user.areas else None
+                )
+                
                 return redirect(url_for('main.dashboard'))
         
         print("DEBUG: Login failed")
@@ -289,6 +327,17 @@ def create_task():
                 
         db.session.add(new_task)
         db.session.commit()
+        
+        # Log activity
+        log_activity(
+            user=current_user,
+            action='task_created',
+            description=f'creó la tarea "{new_task.title}"',
+            target_type='task',
+            target_id=new_task.id,
+            area_id=new_task.area_id
+        )
+        
         flash('Tarea creada exitosamente.', 'success')
         return redirect(url_for('main.dashboard'))
         
@@ -423,6 +472,17 @@ def edit_task(task_id):
                 child.parent_id = None
 
         db.session.commit()
+        
+        # Log activity
+        log_activity(
+            user=current_user,
+            action='task_edited',
+            description=f'editó la tarea "{task.title}"',
+            target_type='task',
+            target_id=task.id,
+            area_id=task.area_id
+        )
+        
         flash('Tarea actualizada exitosamente.', 'success')
         return redirect(url_for('main.dashboard'))
         
@@ -1083,6 +1143,14 @@ def export_excel():
     response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     response.headers['Content-Disposition'] = f'attachment; filename=reporte_tareas_{date.today()}.xlsx'
     
+    # Log activity
+    log_activity(
+        user=current_user,
+        action='export_excel',
+        description=f'exportó {len(tasks)} tareas a Excel',
+        area_id=current_user.areas[0].id if current_user.areas else None
+    )
+    
     return response
 
 # --- Admin Routes ---
@@ -1147,6 +1215,17 @@ def manage_users():
             
             db.session.add(new_user)
             db.session.commit()
+            
+            # Log activity
+            log_activity(
+                user=current_user,
+                action='user_created',
+                description=f'creó el usuario "{new_user.full_name}"',
+                target_type='user',
+                target_id=new_user.id,
+                area_id=new_user.areas[0].id if new_user.areas else None
+            )
+            
             flash('Usuario creado exitosamente.', 'success')
     
     # Get users to display
@@ -2194,6 +2273,15 @@ def import_tasks():
         
         db.session.commit()
         
+        # Log activity
+        if created_count > 0:
+            log_activity(
+                user=current_user,
+                action='tasks_imported',
+                description=f'importó {created_count} tareas desde Excel',
+                area_id=user_area_id or (current_user.areas[0].id if current_user.areas else None)
+            )
+        
         if created_count > 0:
             flash(f'Se importaron {created_count} tareas exitosamente.', 'success')
         
@@ -2593,6 +2681,16 @@ def create_expiration():
     db.session.add(new_expiration)
     db.session.commit()
     
+    # Log activity
+    log_activity(
+        user=current_user,
+        action='expiration_created',
+        description=f'creó el vencimiento "{new_expiration.title}"',
+        target_type='expiration',
+        target_id=new_expiration.id,
+        area_id=new_expiration.area_id
+    )
+    
     flash('Vencimiento creado exitosamente.', 'success')
     return redirect(url_for('main.expiration_calendar'))
 
@@ -2636,6 +2734,16 @@ def edit_expiration(expiration_id):
     
     db.session.commit()
     
+    # Log activity
+    log_activity(
+        user=current_user,
+        action='expiration_edited',
+        description=f'editó el vencimiento "{expiration.title}"',
+        target_type='expiration',
+        target_id=expiration.id,
+        area_id=expiration.area_id
+    )
+    
     flash('Vencimiento actualizado exitosamente.', 'success')
     return redirect(url_for('main.expiration_calendar'))
 
@@ -2654,6 +2762,18 @@ def toggle_expiration(expiration_id):
         expiration.completed_at = now_utc()
     
     db.session.commit()
+    
+    # Log activity
+    action = 'expiration_completed' if expiration.completed else 'expiration_reopened'
+    description = f'completó el vencimiento "{expiration.title}"' if expiration.completed else f'reabrió el vencimiento "{expiration.title}"'
+    log_activity(
+        user=current_user,
+        action=action,
+        description=description,
+        target_type='expiration',
+        target_id=expiration.id,
+        area_id=expiration.area_id
+    )
     
     return jsonify({
         'success': True,
@@ -2840,6 +2960,16 @@ def create_recurring_task():
     db.session.add(new_recurring)
     db.session.commit()
     
+    # Log activity
+    log_activity(
+        user=current_user,
+        action='recurring_created',
+        description=f'creó la tarea recurrente "{new_recurring.title}"',
+        target_type='recurring_task',
+        target_id=new_recurring.id,
+        area_id=new_recurring.area_id
+    )
+    
     flash(f'Tarea recurrente "{title}" creada exitosamente.', 'success')
     return redirect(url_for('main.manage_recurring_tasks'))
 
@@ -3017,3 +3147,102 @@ def api_get_recurring_task(rt_id):
         'assignee_ids': [u.id for u in rt.assignees],
         'tag_ids': [t.id for t in rt.tags]
     })
+
+
+# --- Activity Log Routes ---
+
+@main_bp.route('/activity-log')
+@login_required
+def activity_log():
+    """Registro de actividades - solo admin y supervisores"""
+    from models import Area
+    
+    # Only admins and supervisors can access
+    if current_user.role not in ['admin', 'supervisor', 'gerente']:
+        flash('No tienes permiso para acceder al registro de actividades.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    # Filters from query params
+    filter_user = request.args.get('user')
+    filter_action = request.args.get('action')
+    filter_area = request.args.get('area')
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+    
+    # Base query
+    query = ActivityLog.query.options(joinedload(ActivityLog.user), joinedload(ActivityLog.area))
+    
+    # Area filtering based on role
+    if current_user.is_admin or current_user.role == 'gerente':
+        # Admin/Gerente can see all, and can filter by area
+        if filter_area:
+            query = query.filter(ActivityLog.area_id == int(filter_area))
+        available_areas = Area.query.order_by(Area.name).all()
+        show_area_filter = True
+    else:
+        # Supervisor only sees their area(s)
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            query = query.filter(ActivityLog.area_id.in_(user_area_ids))
+        else:
+            query = query.filter(ActivityLog.area_id == -1)  # No results
+        available_areas = current_user.areas
+        show_area_filter = False
+    
+    # User filter
+    if filter_user:
+        query = query.filter(ActivityLog.user_id == int(filter_user))
+    
+    # Action filter
+    if filter_action:
+        query = query.filter(ActivityLog.action == filter_action)
+    
+    # Date range filter
+    if start_date_str:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            query = query.filter(db.func.date(ActivityLog.created_at) >= start_date)
+        except ValueError:
+            pass
+    
+    if end_date_str:
+        try:
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            query = query.filter(db.func.date(ActivityLog.created_at) <= end_date)
+        except ValueError:
+            pass
+    
+    # Order by most recent first, paginate
+    logs = query.order_by(ActivityLog.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    
+    # Get all users for filter dropdown
+    all_users = User.query.filter(User.is_active == True).order_by(User.full_name).all()
+    
+    # Get unique action types for filter dropdown
+    action_types = [
+        ('task_created', 'Tarea Creada'),
+        ('task_completed', 'Tarea Completada'),
+        ('task_reopened', 'Tarea Reabierta'),
+        ('task_edited', 'Tarea Editada'),
+        ('task_anulada', 'Tarea Anulada'),
+        ('expiration_created', 'Vencimiento Creado'),
+        ('expiration_completed', 'Vencimiento Completado'),
+        ('expiration_edited', 'Vencimiento Editado'),
+        ('login', 'Inicio de Sesión'),
+    ]
+    
+    today = date.today()
+    
+    return render_template('activity_log.html',
+                          logs=logs,
+                          all_users=all_users,
+                          action_types=action_types,
+                          all_areas=available_areas,
+                          show_area_filter=show_area_filter,
+                          current_filter_user=filter_user,
+                          current_filter_action=filter_action,
+                          current_filter_area=filter_area,
+                          today=today)
+

@@ -1,0 +1,437 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="activity-log-page">
+    <!-- Page Header -->
+    <div class="page-header">
+        <h2><i class="fas fa-history"></i> Registro de Actividades</h2>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="filters-section">
+        <form method="GET" class="filters-form">
+            <div class="filter-group">
+                <label>Usuario</label>
+                <select name="user" class="filter-input">
+                    <option value="">Todos los Usuarios</option>
+                    {% for user in all_users %}
+                    <option value="{{ user.id }}" {% if current_filter_user==user.id|string %}selected{% endif %}>
+                        {{ user.full_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label>Tipo de Acción</label>
+                <select name="action" class="filter-input">
+                    <option value="">Todas las Acciones</option>
+                    {% for action_code, action_name in action_types %}
+                    <option value="{{ action_code }}" {% if current_filter_action==action_code %}selected{% endif %}>
+                        {{ action_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {% if show_area_filter %}
+            <div class="filter-group">
+                <label>Área</label>
+                <select name="area" class="filter-input">
+                    <option value="">Todas las Áreas</option>
+                    {% for area in all_areas %}
+                    <option value="{{ area.id }}" {% if current_filter_area==area.id|string %}selected{% endif %}>
+                        {{ area.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <div class="filter-group">
+                <label>Desde</label>
+                <input type="date" name="start_date" class="filter-input"
+                    value="{{ request.args.get('start_date', '') }}">
+            </div>
+
+            <div class="filter-group">
+                <label>Hasta</label>
+                <input type="date" name="end_date" class="filter-input" value="{{ request.args.get('end_date', '') }}">
+            </div>
+
+            <div class="filter-actions">
+                <button type="submit" class="btn-filter">
+                    <i class="fas fa-filter"></i> Filtrar
+                </button>
+                <a href="{{ url_for('main.activity_log') }}" class="btn-clear">
+                    <i class="fas fa-times"></i> Limpiar
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Activity Log List -->
+    <div class="log-list-section">
+        {% if logs.items %}
+        <div class="log-list">
+            {% for log in logs.items %}
+            <div class="log-entry">
+                <div class="log-icon">
+                    {% if 'created' in log.action %}
+                    <i class="fas fa-plus-circle action-create"></i>
+                    {% elif 'completed' in log.action %}
+                    <i class="fas fa-check-circle action-complete"></i>
+                    {% elif 'edited' in log.action %}
+                    <i class="fas fa-edit action-edit"></i>
+                    {% elif 'anulada' in log.action %}
+                    <i class="fas fa-ban action-anular"></i>
+                    {% elif 'reopened' in log.action %}
+                    <i class="fas fa-undo action-reopen"></i>
+                    {% elif 'login' in log.action %}
+                    <i class="fas fa-sign-in-alt action-login"></i>
+                    {% else %}
+                    <i class="fas fa-circle action-other"></i>
+                    {% endif %}
+                </div>
+                <div class="log-content">
+                    <div class="log-main">
+                        <span class="log-user">{{ log.user.full_name }}</span>
+                        <span class="log-description">{{ log.description }}</span>
+                    </div>
+                    <div class="log-meta">
+                        <span class="log-time">
+                            <i class="fas fa-clock"></i>
+                            {{ (log.created_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M') }}
+                        </span>
+                        {% if log.area %}
+                        <span class="log-area">
+                            <i class="fas fa-building"></i>
+                            {{ log.area.name }}
+                        </span>
+                        {% endif %}
+                        {% if log.target_type and log.target_id %}
+                        <span class="log-target">
+                            <i class="fas fa-link"></i>
+                            {% if log.target_type == 'task' %}
+                            <a href="{{ url_for('main.task_details', task_id=log.target_id) }}">Tarea #{{ log.target_id
+                                }}</a>
+                            {% else %}
+                            {{ log.target_type|capitalize }} #{{ log.target_id }}
+                            {% endif %}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Pagination -->
+        {% if logs.pages > 1 %}
+        <div class="pagination">
+            {% if logs.has_prev %}
+            <a href="{{ url_for('main.activity_log', page=logs.prev_num, user=current_filter_user, action=current_filter_action, area=current_filter_area, start_date=request.args.get('start_date'), end_date=request.args.get('end_date')) }}"
+                class="page-btn">
+                <i class="fas fa-chevron-left"></i> Anterior
+            </a>
+            {% endif %}
+
+            <span class="page-info">Página {{ logs.page }} de {{ logs.pages }}</span>
+
+            {% if logs.has_next %}
+            <a href="{{ url_for('main.activity_log', page=logs.next_num, user=current_filter_user, action=current_filter_action, area=current_filter_area, start_date=request.args.get('start_date'), end_date=request.args.get('end_date')) }}"
+                class="page-btn">
+                Siguiente <i class="fas fa-chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-history"></i>
+            <p>No hay actividades registradas{% if request.args %} con los filtros seleccionados{% endif %}.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+    .activity-log-page {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .page-header {
+        margin-bottom: 1.5rem;
+    }
+
+    .page-header h2 {
+        color: var(--text-color);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0;
+    }
+
+    /* Filters Section */
+    .filters-section {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: var(--shadow-sm);
+        margin-bottom: 2rem;
+    }
+
+    .filters-form {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+
+    .filter-group {
+        flex: 1;
+        min-width: 150px;
+    }
+
+    .filter-group label {
+        display: block;
+        font-weight: 600;
+        color: var(--text-color);
+        margin-bottom: 0.5rem;
+        font-size: 0.85rem;
+    }
+
+    .filter-input {
+        width: 100%;
+        padding: 0.6rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-family: inherit;
+        font-size: 0.9rem;
+        transition: var(--transition);
+    }
+
+    .filter-input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+    }
+
+    .filter-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn-filter,
+    .btn-clear {
+        padding: 0.6rem 1rem;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        text-decoration: none;
+    }
+
+    .btn-filter {
+        background: var(--primary-gradient);
+        color: white;
+    }
+
+    .btn-filter:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .btn-clear {
+        background: #f1f5f9;
+        color: #64748b;
+    }
+
+    .btn-clear:hover {
+        background: #e2e8f0;
+    }
+
+    /* Log List */
+    .log-list-section {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .log-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .log-entry {
+        display: flex;
+        gap: 1rem;
+        padding: 1rem;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border-radius: 12px;
+        transition: var(--transition);
+        border-left: 4px solid var(--primary-color);
+    }
+
+    .log-entry:hover {
+        transform: translateX(5px);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .log-icon {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: white;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    .action-create {
+        color: #10b981;
+    }
+
+    .action-complete {
+        color: #059669;
+    }
+
+    .action-edit {
+        color: #3b82f6;
+    }
+
+    .action-anular {
+        color: #ef4444;
+    }
+
+    .action-reopen {
+        color: #f59e0b;
+    }
+
+    .action-login {
+        color: #8b5cf6;
+    }
+
+    .action-other {
+        color: #64748b;
+    }
+
+    .log-content {
+        flex: 1;
+    }
+
+    .log-main {
+        margin-bottom: 0.5rem;
+    }
+
+    .log-user {
+        font-weight: 700;
+        color: var(--text-color);
+        margin-right: 0.5rem;
+    }
+
+    .log-description {
+        color: #475569;
+    }
+
+    .log-meta {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        font-size: 0.8rem;
+        color: #94a3b8;
+    }
+
+    .log-meta i {
+        margin-right: 0.35rem;
+    }
+
+    .log-target a {
+        color: var(--primary-color);
+        text-decoration: none;
+    }
+
+    .log-target a:hover {
+        text-decoration: underline;
+    }
+
+    /* Pagination */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 1rem;
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .page-btn {
+        padding: 0.5rem 1rem;
+        background: var(--primary-gradient);
+        color: white;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 0.85rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: var(--transition);
+    }
+
+    .page-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .page-info {
+        color: #64748b;
+        font-weight: 500;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #94a3b8;
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .filters-form {
+            flex-direction: column;
+        }
+
+        .filter-group {
+            min-width: 100%;
+        }
+
+        .log-entry {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .log-meta {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+    }
+</style>
+{% endblock %}

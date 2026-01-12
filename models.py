@@ -279,3 +279,37 @@ class RecurringTask(db.Model):
     
     def __repr__(self):
         return f'<RecurringTask {self.title}>'
+
+
+class ActivityLog(db.Model):
+    """
+    Registro de actividades para auditoría.
+    Solo visible para administradores (todas las áreas) y supervisores (solo su área).
+    """
+    __tablename__ = 'activity_log'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Quién realizó la acción
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user = db.relationship('User', backref=db.backref('activity_logs', lazy='dynamic'))
+    
+    # Tipo de acción
+    action = db.Column(db.String(50), nullable=False)  # 'task_created', 'task_completed', etc.
+    
+    # Descripción legible
+    description = db.Column(db.String(500), nullable=False)  # "creó la tarea #123"
+    
+    # Objeto afectado (opcional)
+    target_type = db.Column(db.String(50), nullable=True)  # 'task', 'expiration', etc.
+    target_id = db.Column(db.Integer, nullable=True)
+    
+    # Área asociada (para filtrado de supervisores)
+    area_id = db.Column(db.Integer, db.ForeignKey('area.id'), nullable=True)
+    area = db.relationship('Area', backref=db.backref('activity_logs', lazy='dynamic'))
+    
+    # Timestamp (se convierte a hora de Buenos Aires en la vista)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<ActivityLog {self.action} by {self.user_id}>'

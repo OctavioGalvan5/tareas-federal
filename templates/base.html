@@ -102,6 +102,10 @@
                     <i class="fas fa-users"></i>
                     <span>Usuarios</span>
                 </a>
+                <a href="{{ url_for('main.activity_log') }}" class="nav-link" data-tooltip="Actividades">
+                    <i class="fas fa-history"></i>
+                    <span>Actividades</span>
+                </a>
                 {% endif %}
                 {% if current_user.can_create_tasks() %}
                 <a href="{{ url_for('main.manage_templates') }}" class="nav-link" data-tooltip="Plantillas">

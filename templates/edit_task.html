@@ -132,6 +132,33 @@
         </div>
         {% endif %}
 
+        {% if current_user.is_admin %}
+        <div class="form-group">
+            <label for="area_id"><i class="fas fa-building"></i> Área</label>
+            <select id="area_id" name="area_id" required>
+                {% for area in available_areas %}
+                <option value="{{ area.id }}" {% if task.area_id==area.id %}selected{% endif %}>{{ area.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% else %}
+        <div class="form-group">
+            <label><i class="fas fa-building"></i> Área</label>
+            <div style="padding: 0.5rem; background: #f1f5f9; border-radius: 6px; color: #64748b;">
+                {% if task.area %}
+                <span
+                    style="display: inline-block; padding: 0.25rem 0.5rem; background: {{ task.area.color }}20; color: {{ task.area.color }}; border-radius: 4px; font-weight: 600;">
+                    {{ task.area.name }}
+                </span>
+                {% else %}
+                <span style="color: #9ca3af;">Sin área asignada</span>
+                {% endif %}
+                <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 0.5rem;">(Solo
+                    administradores pueden editar)</span>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="form-group">
             <label><i class="fas fa-tags"></i> Etiquetas (opcional)</label>
             <div id="selectedTagsDisplay" class="selected-tags">

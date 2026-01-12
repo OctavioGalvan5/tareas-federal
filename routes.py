@@ -346,6 +346,8 @@ def create_task():
 @main_bp.route('/task/<int:task_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_task(task_id):
+    from models import Area
+    
     task = Task.query.get_or_404(task_id)
     
     # Verify user has access to this task (either creator or assignee)
@@ -355,9 +357,11 @@ def edit_task(task_id):
         flash('No tienes permiso para editar esta tarea.', 'danger')
         return redirect(url_for('main.dashboard'))
 
+    # Load available areas based on user role
     if current_user.is_admin or current_user.role == 'gerente':
         users = User.query.all()
         available_tags = Tag.query.order_by(Tag.name).all()
+        available_areas = Area.query.order_by(Area.name).all()
     else:
         # Filter users by area (assignees)
         users = [u for u in User.query.all() if any(area in u.areas for area in current_user.areas)]
@@ -368,6 +372,8 @@ def edit_task(task_id):
              available_tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all()
         else:
              available_tags = []
+        # Non-admins can only see their own areas
+        available_areas = current_user.areas
 
     if request.method == 'POST':
         task.title = request.form.get('title')
@@ -404,6 +410,15 @@ def edit_task(task_id):
                 user = User.query.get(int(user_id))
                 if user:
                     task.assignees.append(user)
+        
+        # Update area - ONLY if user is admin
+        if current_user.is_admin:
+            area_id_str = request.form.get('area_id')
+            if area_id_str and area_id_str.strip():
+                try:
+                    task.area_id = int(area_id_str)
+                except ValueError:
+                    pass  # Keep existing value if invalid
 
         # Update tags
         tag_ids = request.form.getlist('tags')
@@ -488,7 +503,7 @@ def edit_task(task_id):
         
         return redirect(url_for('main.dashboard'))
         
-    return render_template('edit_task.html', task=task, users=users, available_tags=available_tags)
+    return render_template('edit_task.html', task=task, users=users, available_tags=available_tags, available_areas=available_areas)
 
 @main_bp.route('/task/<int:task_id>')
 @login_required
@@ -847,8 +862,8 @@ def calendar():
 def toggle_task_status(task_id):
     task = Task.query.get_or_404(task_id)
     
-    # Verify user has access to this task (either creator or assignee)
-    if task.creator_id != current_user.id and current_user not in task.assignees:
+    # Verify user has access to this task (admin, creator, or assignee)
+    if not current_user.is_admin and task.creator_id != current_user.id and current_user not in task.assignees:
         return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
     
     # Get optional completion comment from request body

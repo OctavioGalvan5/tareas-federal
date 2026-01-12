@@ -892,6 +892,18 @@ def toggle_task_status(task_id):
     
     db.session.commit()
     
+    # Log activity
+    action = 'task_completed' if task.status == 'Completed' else 'task_reopened'
+    description = f'completó la tarea "{task.title}"' if task.status == 'Completed' else f'reabrió la tarea "{task.title}"'
+    log_activity(
+        user=current_user,
+        action=action,
+        description=description,
+        target_type='task',
+        target_id=task.id,
+        area_id=task.area_id
+    )
+    
     return jsonify({
         'success': True,
         'task_id': task.id,
@@ -913,6 +925,16 @@ def anular_task(task_id):
     task.completed_at = now_utc()  # Track when
     
     db.session.commit()
+    
+    # Log activity
+    log_activity(
+        user=current_user,
+        action='task_anulada',
+        description=f'anuló la tarea "{task.title}"',
+        target_type='task',
+        target_id=task.id,
+        area_id=task.area_id
+    )
     
     return jsonify({
         'success': True,
@@ -1332,6 +1354,17 @@ def edit_user(user_id):
                 user.areas.append(area)
         
         db.session.commit()
+        
+        # Log activity
+        log_activity(
+            user=current_user,
+            action='user_edited',
+            description=f'editó el usuario "{user.full_name}"',
+            target_type='user',
+            target_id=user.id,
+            area_id=user.areas[0].id if user.areas else None
+        )
+        
         flash(f'Usuario "{user.username}" actualizado.', 'success')
         return redirect(url_for('admin.manage_users'))
     
@@ -2352,6 +2385,16 @@ def manage_templates():
         db.session.add(template)
         db.session.commit()
         
+        # Log activity
+        log_activity(
+            user=current_user,
+            action='template_created',
+            description=f'creó la plantilla "{template.name}"',
+            target_type='template',
+            target_id=template.id,
+            area_id=template.area_id
+        )
+        
         flash(f'Plantilla "{name}" creada exitosamente.', 'success')
         return redirect(url_for('main.manage_templates'))
     
@@ -2385,6 +2428,16 @@ def delete_template(template_id):
     name = template.name
     db.session.delete(template)
     db.session.commit()
+    
+    # Log activity
+    log_activity(
+        user=current_user,
+        action='template_deleted',
+        description=f'eliminó la plantilla "{name}"',
+        target_type='template',
+        target_id=template_id,
+        area_id=template.area_id
+    )
     
     flash(f'Plantilla "{name}" eliminada.', 'success')
     return redirect(url_for('main.manage_templates'))
@@ -3053,6 +3106,17 @@ def edit_recurring_task(rt_id):
                 rt.tags.append(tag)
         
         db.session.commit()
+        
+        # Log activity
+        log_activity(
+            user=current_user,
+            action='recurring_edited',
+            description=f'editó la tarea recurrente "{rt.title}"',
+            target_type='recurring_task',
+            target_id=rt.id,
+            area_id=rt.area_id
+        )
+        
         flash('Tarea recurrente actualizada.', 'success')
         return redirect(url_for('main.manage_recurring_tasks'))
     
@@ -3081,6 +3145,18 @@ def toggle_recurring_task(rt_id):
     rt.is_active = not rt.is_active
     db.session.commit()
     
+    # Log activity
+    action = 'recurring_activated' if rt.is_active else 'recurring_paused'
+    description = f'activó la tarea recurrente "{rt.title}"' if rt.is_active else f'pausó la tarea recurrente "{rt.title}"'
+    log_activity(
+        user=current_user,
+        action=action,
+        description=description,
+        target_type='recurring_task',
+        target_id=rt.id,
+        area_id=rt.area_id
+    )
+    
     status = 'activada' if rt.is_active else 'pausada'
     return jsonify({
         'success': True,
@@ -3100,6 +3176,16 @@ def delete_recurring_task(rt_id):
     title = rt.title
     db.session.delete(rt)
     db.session.commit()
+    
+    # Log activity
+    log_activity(
+        user=current_user,
+        action='recurring_deleted',
+        description=f'eliminó la tarea recurrente "{title}"',
+        target_type='recurring_task',
+        target_id=rt_id,
+        area_id=rt.area_id
+    )
     
     return jsonify({'success': True, 'message': f'Tarea recurrente "{title}" eliminada'})
 

@@ -694,6 +694,74 @@ def calendar():
     
     event_dates = [d[0].strftime('%Y-%m-%d') for d in event_dates_query.distinct().all() if d[0]]
     
+    # --- CALENDAR GRID GENERATION ---
+    import calendar as cal
+    
+    # Get month/year from query params or use current month
+    view_year = int(request.args.get('year', today.year))
+    view_month = int(request.args.get('month', today.month))
+    
+    # Calculate previous and next month for navigation
+    if view_month == 1:
+        prev_month, prev_year = 12, view_year - 1
+    else:
+        prev_month, prev_year = view_month - 1, view_year
+    
+    if view_month == 12:
+        next_month, next_year = 1, view_year + 1
+    else:
+        next_month, next_year = view_month + 1, view_year
+    
+    # Generate calendar weeks (list of 7-day lists)
+    cal_obj = cal.Calendar(firstweekday=0)  # Monday = 0
+    month_days = cal_obj.monthdatescalendar(view_year, view_month)
+    
+    # Get tasks for the visible calendar range (includes prev/next month day spillover)
+    if month_days:
+        cal_start = month_days[0][0]
+        cal_end = month_days[-1][-1]
+        
+        # Query tasks within calendar view range
+        cal_tasks_query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(
+            Task.enabled == True,
+            Task.status != 'Anulado',
+            db.func.date(Task.due_date) >= cal_start,
+            db.func.date(Task.due_date) <= cal_end
+        )
+        
+        # Apply same visibility filters
+        if current_user.can_only_see_own_tasks():
+            if user_area_ids:
+                cal_tasks_query = cal_tasks_query.filter(
+                    db.or_(
+                        Task.assignees.any(id=current_user.id),
+                        Task.creator_id == current_user.id
+                    )
+                ).filter(Task.area_id.in_(user_area_ids))
+            else:
+                cal_tasks_query = cal_tasks_query.filter(Task.area_id == -1)
+        elif not current_user.can_see_all_areas():
+            if user_area_ids:
+                cal_tasks_query = cal_tasks_query.filter(Task.area_id.in_(user_area_ids))
+            else:
+                cal_tasks_query = cal_tasks_query.filter(Task.area_id == -1)
+        
+        cal_tasks = cal_tasks_query.all()
+    else:
+        cal_tasks = []
+    
+    # Group tasks by date
+    tasks_by_date = {}
+    for task in cal_tasks:
+        date_key = task.due_date.date().isoformat()
+        if date_key not in tasks_by_date:
+            tasks_by_date[date_key] = []
+        tasks_by_date[date_key].append(task)
+    
+    # Month names in Spanish
+    month_names = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+    
     return render_template('calendar.html', 
                           tasks=tasks, 
                           current_period=period, 
@@ -701,7 +769,17 @@ def calendar():
                           users=users, 
                           event_dates=event_dates,
                           all_areas=available_areas,
-                          show_area_filter=show_area_filter)
+                          show_area_filter=show_area_filter,
+                          # New calendar grid data
+                          calendar_weeks=month_days,
+                          view_month=view_month,
+                          view_year=view_year,
+                          month_name=month_names[view_month],
+                          prev_month=prev_month,
+                          prev_year=prev_year,
+                          next_month=next_month,
+                          next_year=next_year,
+                          tasks_by_date=tasks_by_date)
 
 
 @main_bp.route('/task/<int:task_id>/toggle', methods=['POST'])
@@ -2396,6 +2474,63 @@ def expiration_calendar():
     ).distinct().all()
     event_dates = [d[0].strftime('%Y-%m-%d') for d in event_dates_query if d[0]]
     
+    # --- CALENDAR GRID GENERATION ---
+    import calendar as cal
+    
+    # Get month/year from query params or use current month
+    view_year = int(request.args.get('year', today.year))
+    view_month = int(request.args.get('month', today.month))
+    
+    # Calculate previous and next month for navigation
+    if view_month == 1:
+        prev_month, prev_year = 12, view_year - 1
+    else:
+        prev_month, prev_year = view_month - 1, view_year
+    
+    if view_month == 12:
+        next_month, next_year = 1, view_year + 1
+    else:
+        next_month, next_year = view_month + 1, view_year
+    
+    # Generate calendar weeks (list of 7-day lists)
+    cal_obj = cal.Calendar(firstweekday=0)  # Monday = 0
+    month_days = cal_obj.monthdatescalendar(view_year, view_month)
+    
+    # Get expirations for the visible calendar range
+    if month_days:
+        cal_start = month_days[0][0]
+        cal_end = month_days[-1][-1]
+        
+        # Query expirations within calendar view range
+        cal_exp_query = Expiration.query.options(joinedload(Expiration.tags)).filter(
+            db.func.date(Expiration.due_date) >= cal_start,
+            db.func.date(Expiration.due_date) <= cal_end
+        )
+        
+        # Apply same visibility filters
+        if not current_user.is_admin:
+            user_area_ids = [a.id for a in current_user.areas]
+            if user_area_ids:
+                cal_exp_query = cal_exp_query.filter(Expiration.area_id.in_(user_area_ids))
+            else:
+                cal_exp_query = cal_exp_query.filter(Expiration.area_id == -1)
+        
+        cal_expirations = cal_exp_query.all()
+    else:
+        cal_expirations = []
+    
+    # Group expirations by date
+    expirations_by_date = {}
+    for exp in cal_expirations:
+        date_key = exp.due_date.date().isoformat()
+        if date_key not in expirations_by_date:
+            expirations_by_date[date_key] = []
+        expirations_by_date[date_key].append(exp)
+    
+    # Month names in Spanish
+    month_names = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+    
     return render_template('expiration_calendar.html', 
                           expirations=expirations, 
                           current_period=period, 
@@ -2403,7 +2538,17 @@ def expiration_calendar():
                           available_tags=available_tags,
                           event_dates=event_dates,
                           all_areas=available_areas,
-                          show_area_filter=show_area_filter)
+                          show_area_filter=show_area_filter,
+                          # New calendar grid data
+                          calendar_weeks=month_days,
+                          view_month=view_month,
+                          view_year=view_year,
+                          month_name=month_names[view_month],
+                          prev_month=prev_month,
+                          prev_year=prev_year,
+                          next_month=next_month,
+                          next_year=next_year,
+                          expirations_by_date=expirations_by_date)
 
 
 @main_bp.route('/expirations/create', methods=['POST'])

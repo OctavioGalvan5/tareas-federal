@@ -476,7 +476,7 @@ def edit_task(task_id):
     # Verify user has access to this task (either creator or assignee)
     # Ideally only creator or admin should edit, or maybe assignees too?
     # For now let's allow creator and assignees to edit
-    if task.creator_id != current_user.id and current_user not in task.assignees and not current_user.is_admin:
+    if task.creator_id != current_user.id and current_user not in task.assignees and not current_user.is_admin and current_user.role != 'supervisor':
         flash('No tienes permiso para editar esta tarea.', 'danger')
         return redirect(url_for('main.dashboard'))
 
@@ -518,8 +518,8 @@ def edit_task(task_id):
         if new_status:  # Only update if a value was provided (prevents None)
             task.status = new_status
         
-        # Update priority, dates and times - ONLY if user is admin
-        if current_user.is_admin:
+        # Update priority and due_date - Admin and Supervisors
+        if current_user.is_admin or current_user.role == 'supervisor':
             task.priority = request.form.get('priority')
             
             # Parse start date and time
@@ -566,8 +566,8 @@ def edit_task(task_id):
                 elif task.planned_start_date <= now and task.status == 'Scheduled':
                     task.status = 'Pending'
         
-        # Update time_spent - ONLY if user is admin
-        if current_user.is_admin:
+        # Update time_spent - Admin and Supervisors
+        if current_user.is_admin or current_user.role == 'supervisor':
             time_spent_str = request.form.get('time_spent')
             if time_spent_str and time_spent_str.strip():
                 try:

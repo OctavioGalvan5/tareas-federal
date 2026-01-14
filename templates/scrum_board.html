@@ -1,0 +1,464 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .scrum-container {
+        display: flex;
+        gap: 1rem;
+        min-height: calc(100vh - 200px);
+        overflow-x: auto;
+        padding-bottom: 1rem;
+    }
+
+    .scrum-column {
+        flex: 1;
+        min-width: 280px;
+        max-width: 350px;
+        background: #f8fafc;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .column-header {
+        padding: 1rem;
+        font-weight: 700;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-radius: 12px 12px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .column-header .count {
+        background: rgba(255, 255, 255, 0.3);
+        padding: 0.2rem 0.6rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+    }
+
+    .column-pending .column-header {
+        background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+        color: white;
+    }
+
+    .column-in-progress .column-header {
+        background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+        color: white;
+    }
+
+    .column-in-review .column-header {
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        color: white;
+    }
+
+    .column-completed .column-header {
+        background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+        color: white;
+    }
+
+    .column-tasks {
+        flex: 1;
+        padding: 0.75rem;
+        overflow-y: auto;
+        min-height: 200px;
+    }
+
+    .column-tasks.drag-over {
+        background: #e0f2fe;
+        border: 2px dashed #3b82f6;
+    }
+
+    .task-card {
+        background: white;
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        cursor: grab;
+        transition: all 0.2s;
+        border-left: 4px solid #e5e7eb;
+    }
+
+    .task-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+    }
+
+    .task-card.dragging {
+        opacity: 0.5;
+        transform: rotate(3deg);
+    }
+
+    .task-card.priority-urgente {
+        border-left-color: #ef4444;
+    }
+
+    .task-card.priority-media {
+        border-left-color: #f59e0b;
+    }
+
+    .task-card.priority-normal {
+        border-left-color: #10b981;
+    }
+
+    .task-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.5rem;
+    }
+
+    .task-id {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        font-weight: 600;
+    }
+
+    .priority-star {
+        color: #fbbf24;
+        font-size: 0.9rem;
+    }
+
+    .task-title {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: #1e293b;
+        margin-bottom: 0.5rem;
+        line-height: 1.3;
+    }
+
+    .task-title a {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .task-title a:hover {
+        color: #3b82f6;
+    }
+
+    .task-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+
+    .task-assignees {
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    .assignee-dot {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #6366f1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 0.65rem;
+        font-weight: 700;
+    }
+
+    .task-due {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .task-due.overdue {
+        color: #ef4444;
+        font-weight: 600;
+    }
+
+    .task-due.today {
+        color: #f59e0b;
+        font-weight: 600;
+    }
+
+    .filters-bar {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .filters-bar select {
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        font-size: 0.9rem;
+        min-width: 180px;
+    }
+
+    .board-title {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .board-title h2 {
+        margin: 0;
+    }
+
+    .area-badge {
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .empty-column {
+        padding: 2rem;
+        text-align: center;
+        color: #94a3b8;
+        font-style: italic;
+    }
+</style>
+
+<div class="card" style="max-width: 100%; padding: 1.5rem;">
+    <div class="board-title">
+        <h2><i class="fas fa-columns"></i> Tablero Scrum</h2>
+        {% if current_user.areas %}
+        <span class="area-badge"
+            style="background: {{ current_user.areas[0].color }}20; color: {{ current_user.areas[0].color }};">
+            {{ current_user.areas[0].name }}
+        </span>
+        {% endif %}
+    </div>
+
+    <div class="filters-bar">
+        <!-- Period Filter -->
+        <select id="periodFilter" onchange="onPeriodChange()" style="min-width: 140px;">
+            <option value="today" {% if filter_period=='today' %}selected{% endif %}>Hoy</option>
+            <option value="week" {% if filter_period=='week' %}selected{% endif %}>Esta Semana</option>
+            <option value="month" {% if filter_period=='month' %}selected{% endif %}>Este Mes</option>
+            <option value="custom" {% if filter_period=='custom' %}selected{% endif %}>Personalizado</option>
+            <option value="all" {% if filter_period=='all' %}selected{% endif %}>Todas</option>
+        </select>
+
+        <!-- Custom Date Range (visible when 'custom' is selected) -->
+        <div id="customDateRange"
+            style="display: {% if filter_period == 'custom' %}flex{% else %}none{% endif %}; align-items: center; gap: 0.5rem;">
+            <label style="font-weight: 600; color: #64748b; font-size: 0.85rem;">Desde:</label>
+            <input type="date" id="dateFrom" value="{{ filter_date_from or '' }}"
+                style="padding: 0.4rem; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 0.85rem;">
+            <label style="font-weight: 600; color: #64748b; font-size: 0.85rem;">Hasta:</label>
+            <input type="date" id="dateTo" value="{{ filter_date_to or '' }}"
+                style="padding: 0.4rem; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 0.85rem;">
+            <button onclick="applyFilters()" class="button-secondary"
+                style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                <i class="fas fa-search"></i> Filtrar
+            </button>
+        </div>
+
+        {% if show_area_filter %}
+        <select id="areaFilter" onchange="applyFilters()">
+            <option value="">Todas las áreas</option>
+            {% for area in all_areas %}
+            <option value="{{ area.id }}" {% if filter_area|string==area.id|string %}selected{% endif %}>{{ area.name }}
+            </option>
+            {% endfor %}
+        </select>
+        {% endif %}
+
+        <select id="assigneeFilter" onchange="applyFilters()">
+            <option value="">Todos los usuarios</option>
+            {% for user in users %}
+            <option value="{{ user.id }}" {% if filter_assignee|string==user.id|string %}selected{% endif %}>{{
+                user.full_name }}</option>
+            {% endfor %}
+        </select>
+
+        <a href="{{ url_for('main.dashboard') }}" class="button-secondary" style="padding: 0.5rem 1rem;">
+            <i class="fas fa-list"></i> Ver lista
+        </a>
+    </div>
+
+    <div class="scrum-container">
+        <!-- Pendiente Column (includes Scheduled tasks with badge) -->
+        <div class="scrum-column column-pending">
+            <div class="column-header">
+                <span><i class="fas fa-inbox"></i> Pendiente</span>
+                <span class="count">{{ tasks_by_status['Pending']|length }}</span>
+            </div>
+            <div class="column-tasks" data-status="Pending" ondrop="drop(event)" ondragover="allowDrop(event)"
+                ondragleave="dragLeave(event)">
+                {% for task in tasks_by_status['Pending'] %}
+                {% include 'scrum_task_card.html' %}
+                {% else %}
+                <div class="empty-column">Sin tareas pendientes</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- En Proceso Column -->
+        <div class="scrum-column column-in-progress">
+            <div class="column-header">
+                <span><i class="fas fa-spinner"></i> En Proceso</span>
+                <span class="count">{{ tasks_by_status['In Progress']|length }}</span>
+            </div>
+            <div class="column-tasks" data-status="In Progress" ondrop="drop(event)" ondragover="allowDrop(event)"
+                ondragleave="dragLeave(event)">
+                {% for task in tasks_by_status['In Progress'] %}
+                {% include 'scrum_task_card.html' %}
+                {% else %}
+                <div class="empty-column">Sin tareas en proceso</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- En Revisión Column -->
+        <div class="scrum-column column-in-review">
+            <div class="column-header">
+                <span><i class="fas fa-eye"></i> En Revisión</span>
+                <span class="count">{{ tasks_by_status['In Review']|length }}</span>
+            </div>
+            <div class="column-tasks" data-status="In Review" ondrop="drop(event)" ondragover="allowDrop(event)"
+                ondragleave="dragLeave(event)">
+                {% for task in tasks_by_status['In Review'] %}
+                {% include 'scrum_task_card.html' %}
+                {% else %}
+                <div class="empty-column">Sin tareas en revisión</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Completado Column -->
+        <div class="scrum-column column-completed">
+            <div class="column-header">
+                <span><i class="fas fa-check-circle"></i> Completado</span>
+                <span class="count">{{ tasks_by_status['Completed']|length }}</span>
+            </div>
+            <div class="column-tasks" data-status="Completed" ondrop="drop(event)" ondragover="allowDrop(event)"
+                ondragleave="dragLeave(event)">
+                {% for task in tasks_by_status['Completed'] %}
+                {% include 'scrum_task_card.html' %}
+                {% else %}
+                <div class="empty-column">Sin tareas completadas</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let draggedTask = null;
+
+    function allowDrop(event) {
+        event.preventDefault();
+        event.currentTarget.classList.add('drag-over');
+    }
+
+    function dragLeave(event) {
+        event.currentTarget.classList.remove('drag-over');
+    }
+
+    function drag(event, taskId) {
+        draggedTask = taskId;
+        event.target.classList.add('dragging');
+    }
+
+    function dragEnd(event) {
+        event.target.classList.remove('dragging');
+        document.querySelectorAll('.column-tasks').forEach(col => col.classList.remove('drag-over'));
+    }
+
+    function drop(event) {
+        event.preventDefault();
+        event.currentTarget.classList.remove('drag-over');
+
+        const newStatus = event.currentTarget.dataset.status;
+
+        if (draggedTask) {
+            updateTaskStatus(draggedTask, newStatus);
+        }
+    }
+
+    function updateTaskStatus(taskId, newStatus) {
+        let statusLabel = newStatus;
+        if (newStatus === 'In Progress') statusLabel = 'En Proceso';
+        else if (newStatus === 'In Review') statusLabel = 'En Revisión';
+        else if (newStatus === 'Completed') statusLabel = 'Completado';
+        else if (newStatus === 'Pending') statusLabel = 'Pendiente';
+
+        Swal.fire({
+            title: `Cambiar a ${statusLabel}`,
+            text: "¿Deseas agregar un comentario?",
+            input: 'textarea',
+            inputPlaceholder: 'Comentario opcional...',
+            showCancelButton: true,
+            confirmButtonText: 'Confirmar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const comment = result.value;
+
+                fetch(`/task/${taskId}/status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        status: newStatus,
+                        comment: comment
+                    })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            window.location.reload();
+                        } else {
+                            Swal.fire('Error', data.error || 'No se pudo actualizar', 'error');
+                            // Optional: Revert drag if possible, but reload handles it
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire('Error', 'Error de conexión', 'error');
+                    });
+            } else {
+                // If cancelled over drag and drop, we should probably reload to revert visual change
+                window.location.reload();
+            }
+        });
+    }
+
+    function applyFilters() {
+        const period = document.getElementById('periodFilter')?.value || 'today';
+        const dateFrom = document.getElementById('dateFrom')?.value || '';
+        const dateTo = document.getElementById('dateTo')?.value || '';
+        const area = document.getElementById('areaFilter')?.value || '';
+        const assignee = document.getElementById('assigneeFilter')?.value || '';
+
+        let url = '/scrum-board?';
+        url += `period=${period}&`;
+        if (period === 'custom' && dateFrom) url += `date_from=${dateFrom}&`;
+        if (period === 'custom' && dateTo) url += `date_to=${dateTo}&`;
+        if (area) url += `area=${area}&`;
+        if (assignee) url += `assignee=${assignee}&`;
+
+        window.location.href = url;
+    }
+
+    function onPeriodChange() {
+        const period = document.getElementById('periodFilter').value;
+        const customRange = document.getElementById('customDateRange');
+
+        if (period === 'custom') {
+            customRange.style.display = 'flex';
+        } else {
+            customRange.style.display = 'none';
+            applyFilters();
+        }
+    }
+</script>
+{% endblock %}

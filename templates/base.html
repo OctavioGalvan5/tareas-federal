@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='calendar_widget.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     {% block head %}{% endblock %}
 </head>
 
@@ -71,6 +72,10 @@
                 <a href="{{ url_for('main.task_tree') }}" class="nav-link" data-tooltip="Árbol">
                     <i class="fas fa-sitemap"></i>
                     <span>Árbol</span>
+                </a>
+                <a href="{{ url_for('main.scrum_board') }}" class="nav-link" data-tooltip="Tablero Scrum">
+                    <i class="fas fa-columns"></i>
+                    <span>Tablero Scrum</span>
                 </a>
             </div>
 

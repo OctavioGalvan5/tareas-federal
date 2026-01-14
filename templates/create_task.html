@@ -2,7 +2,27 @@
 
 {% block content %}
 <div class="card" style="max-width: 900px; margin: 0 auto;">
+    {% if parent_task %}
+    <div
+        style="background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%); padding: 1rem; border-radius: 10px; border: 1px solid #c4b5fd; margin-bottom: 1.5rem;">
+        <h3 style="margin: 0; color: #6d28d9; font-size: 1rem;">
+            <i class="fas fa-plus-circle"></i> Nueva Subtarea de:
+        </h3>
+        <a href="{{ url_for('main.task_details', task_id=parent_task.id) }}"
+            style="color: #7c3aed; font-weight: 600; text-decoration: none;">
+            <i class="fas fa-link"></i> #{{ parent_task.id }} - {{ parent_task.title }}
+        </a>
+        <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #8b5cf6;">
+            <i class="fas fa-info-circle"></i> Esta subtarea heredará el área y la prioridad del padre.
+            {% if parent_task.status != 'Completed' %}
+            <br><i class="fas fa-lock"></i> <strong>Iniciará bloqueada</strong> hasta que la tarea padre se complete.
+            {% endif %}
+        </p>
+    </div>
+    <h2><i class="fas fa-tasks"></i> Nueva Subtarea</h2>
+    {% else %}
     <h2><i class="fas fa-plus-square"></i> Nueva Tarea</h2>
+    {% endif %}
 
     <!-- Template Selector - REQUIRED for non-admins -->
     {% if templates %}
@@ -61,6 +81,9 @@
     <form method="POST" id="taskForm">
         <!-- Hidden field to track if template was used -->
         <input type="hidden" id="template_used" name="template_used" value="">
+        {% if parent_task %}
+        <input type="hidden" name="parent_id" value="{{ parent_task.id }}">
+        {% endif %}
 
         <div class="form-group">
             <label for="title"><i class="fas fa-heading"></i> Título</label>
@@ -88,10 +111,36 @@
                 {% endif %}
             </div>
 
+            <div></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem;">
             <div class="form-group">
-                <label for="due_date"><i class="fas fa-calendar-day"></i> Fecha de Vencimiento</label>
+                <label for="start_date"><i class="fas fa-calendar-plus"></i> Fecha Inicio <span
+                        style="color: #dc2626;">*</span></label>
+                <input type="date" id="start_date" name="start_date" required {% if not current_user.can_create_tasks()
+                    %}readonly{% endif %}>
+            </div>
+
+            <div class="form-group">
+                <label for="start_time"><i class="fas fa-clock"></i> Hora Inicio <span
+                        style="color: #dc2626;">*</span></label>
+                <input type="time" id="start_time" name="start_time" value="08:00" required {% if not
+                    current_user.can_create_tasks() %}readonly{% endif %}>
+            </div>
+
+            <div class="form-group">
+                <label for="due_date"><i class="fas fa-calendar-check"></i> Fecha Vencimiento <span
+                        style="color: #dc2626;">*</span></label>
                 <input type="date" id="due_date" name="due_date" required {% if not current_user.can_create_tasks()
                     %}readonly{% endif %}>
+            </div>
+
+            <div class="form-group">
+                <label for="due_time"><i class="fas fa-clock"></i> Hora Vencimiento <span
+                        style="color: #dc2626;">*</span></label>
+                <input type="time" id="due_time" name="due_time" value="14:00" required {% if not
+                    current_user.can_create_tasks() %}readonly{% endif %}>
             </div>
         </div>
 
@@ -200,6 +249,29 @@
             </button>
         </div>
 
+        <!-- 🔹 Subtareas Inline (solo si no es subtarea) -->
+        {% if not parent_task %}
+        <div class="form-group"
+            style="background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); padding: 1.25rem; border-radius: 12px; border: 1px solid #ddd6fe;">
+            <label style="color: #7c3aed; font-size: 1.1rem;">
+                <i class="fas fa-tasks"></i> Subtareas (opcional)
+            </label>
+            <p style="font-size: 0.85rem; color: #8b5cf6; margin-bottom: 1rem;">
+                <i class="fas fa-info-circle"></i> Agrega subtareas que se crearán junto con esta tarea padre. Heredarán
+                área y prioridad.
+            </p>
+
+            <div id="subtasksContainer">
+                <!-- Subtareas dinámicas se agregan aquí -->
+            </div>
+
+            <button type="button" onclick="addSubtask()" class="button-secondary"
+                style="width: 100%; background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%); color: white; border: none;">
+                <i class="fas fa-plus-circle"></i> Agregar Subtarea
+            </button>
+        </div>
+        {% endif %}
+
         <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
             <a href="{{ url_for('main.dashboard') }}"
                 style="padding: 0.9rem 2rem; text-decoration: none; color: var(--text-light); font-weight: 600; border-radius: 10px; border: 2px solid var(--border-color); transition: var(--transition);">
@@ -214,6 +286,105 @@
 </div>
 
 <script>
+    let subtaskCounter = 0;
+
+    function addSubtask() {
+        subtaskCounter++;
+        const container = document.getElementById('subtasksContainer');
+        const subtaskDiv = document.createElement('div');
+        subtaskDiv.className = 'subtask-item';
+        subtaskDiv.id = `subtask_${subtaskCounter}`;
+        subtaskDiv.style.cssText = 'background: white; padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; border: 1px solid #ddd6fe;';
+
+        // Get parent values to pre-fill
+        const parentPriority = document.getElementById('priority')?.value || 'Normal';
+        const parentDueDate = document.getElementById('due_date')?.value || '';
+        const parentDueTime = document.getElementById('due_time')?.value || '17:00';
+
+        subtaskDiv.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <span style="font-weight: 600; color: #7c3aed; font-size: 1rem;">
+                    <i class="fas fa-tasks"></i> Subtarea ${subtaskCounter}
+                </span>
+                <button type="button" onclick="removeSubtask(${subtaskCounter})" 
+                    style="background: #fee2e2; color: #dc2626; border: none; border-radius: 6px; padding: 0.4rem 0.6rem; cursor: pointer;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div style="display: grid; gap: 0.75rem;">
+                <!-- Título -->
+                <div>
+                    <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                        <i class="fas fa-heading"></i> Título *
+                    </label>
+                    <input type="text" name="subtask_title[]" placeholder="Título de la subtarea" required
+                        style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                </div>
+                
+                <!-- Descripción (opcional) -->
+                <div>
+                    <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                        <i class="fas fa-align-left"></i> Descripción (opcional)
+                    </label>
+                    <textarea name="subtask_description[]" rows="2" placeholder="Descripción de la subtarea..."
+                        style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%; resize: vertical;"></textarea>
+                </div>
+                
+                <!-- Fila: Prioridad + Asignado -->
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 150px;">
+                        <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-flag"></i> Prioridad
+                        </label>
+                        <select name="subtask_priority[]" style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                            <option value="Normal" ${parentPriority === 'Normal' ? 'selected' : ''}>Normal</option>
+                            <option value="Media" ${parentPriority === 'Media' ? 'selected' : ''}>Media</option>
+                            <option value="Urgente" ${parentPriority === 'Urgente' ? 'selected' : ''}>Urgente</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1; min-width: 150px;">
+                        <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-user"></i> Asignar a
+                        </label>
+                        <select name="subtask_assignee[]" style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                            <option value="">Sin asignar</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Fila: Fecha y Hora de vencimiento -->
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 150px;">
+                        <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-calendar"></i> Fecha vencimiento
+                        </label>
+                        <input type="date" name="subtask_due_date[]" value="${parentDueDate}"
+                            style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                    </div>
+                    <div style="min-width: 100px;">
+                        <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-clock"></i> Hora
+                        </label>
+                        <input type="time" name="subtask_due_time[]" value="${parentDueTime}"
+                            style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.appendChild(subtaskDiv);
+    }
+
+    function removeSubtask(id) {
+        const subtaskDiv = document.getElementById(`subtask_${id}`);
+        if (subtaskDiv) {
+            subtaskDiv.remove();
+        }
+    }
+
     function setTimeSpent(minutes) {
         document.getElementById('time_spent').value = minutes;
     }
@@ -293,6 +464,25 @@
                 alert('Error al cargar la plantilla');
             });
     }
+
+    // Validate dates before form submission
+    document.getElementById('taskForm').addEventListener('submit', function (e) {
+        const startDate = document.getElementById('start_date').value;
+        const startTime = document.getElementById('start_time').value || '08:00';
+        const dueDate = document.getElementById('due_date').value;
+        const dueTime = document.getElementById('due_time').value || '14:00';
+
+        if (startDate && dueDate) {
+            const startDateTime = new Date(startDate + 'T' + startTime);
+            const dueDateTime = new Date(dueDate + 'T' + dueTime);
+
+            if (startDateTime >= dueDateTime) {
+                e.preventDefault();
+                alert('Error: La fecha/hora de inicio debe ser anterior a la fecha/hora de vencimiento.');
+                return false;
+            }
+        }
+    });
 </script>
 
 {% include 'task_selector_modal.html' %}

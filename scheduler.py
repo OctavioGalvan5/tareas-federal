@@ -140,7 +140,47 @@ def init_scheduler(app):
         replace_existing=True
     )
     
+    # Run daily at 00:10 to activate scheduled tasks whose start date has arrived
+    trigger_activate = CronTrigger(hour=0, minute=10, timezone=BUENOS_AIRES_TZ)
+    scheduler.add_job(
+        activate_scheduled_tasks,
+        trigger=trigger_activate,
+        args=[app],
+        id='activate_scheduled_tasks',
+        name='Activate Scheduled Tasks',
+        replace_existing=True
+    )
+    
     scheduler.start()
-    print(f"[Scheduler] Started - Daily task generation scheduled at 00:05 Buenos Aires time")
+    print(f"[Scheduler] Started - Daily task generation at 00:05, scheduled task activation at 00:10 (Buenos Aires)")
     
     return scheduler
+
+
+def activate_scheduled_tasks(app):
+    """
+    Activate tasks whose planned_start_date has arrived.
+    Changes status from 'Scheduled' to 'Pending'.
+    """
+    with app.app_context():
+        from models import Task
+        from extensions import db
+        
+        today = date.today()
+        
+        # Find scheduled tasks whose planned_start_date <= today
+        scheduled_tasks = Task.query.filter(
+            Task.status == 'Scheduled',
+            db.func.date(Task.planned_start_date) <= today
+        ).all()
+        
+        activated_count = 0
+        for task in scheduled_tasks:
+            task.status = 'Pending'
+            activated_count += 1
+        
+        db.session.commit()
+        
+        now = datetime.now(BUENOS_AIRES_TZ)
+        print(f"[Scheduler] {now.strftime('%Y-%m-%d %H:%M:%S')} - Activated {activated_count} scheduled tasks")
+

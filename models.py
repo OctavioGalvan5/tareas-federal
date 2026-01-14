@@ -94,14 +94,25 @@ class Task(db.Model):
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     priority = db.Column(db.String(20), nullable=False, default='Normal') # Normal, Media, Urgente
-    status = db.Column(db.String(20), nullable=False, default='Pending') # Pending, Completed
-    due_date = db.Column(db.DateTime, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='Pending') # Pending, In Progress, In Review, Completed, Anulado
+    planned_start_date = db.Column(db.DateTime, nullable=True)  # Planned start date/time (default 8:00 AM)
+    due_date = db.Column(db.DateTime, nullable=False)  # Due date/time (default 2:00 PM)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     
     # Area assignment - nullable for backward compatibility during migration
     area_id = db.Column(db.Integer, db.ForeignKey('area.id'), nullable=True)
     area = db.relationship('Area', backref=db.backref('tasks', lazy='dynamic'))
+    
+    # Tracking "In Progress" status
+    started_at = db.Column(db.DateTime, nullable=True)  # When moved to "In Progress"
+    started_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    started_by = db.relationship('User', foreign_keys=[started_by_id])
+    
+    # Tracking "In Review" status
+    in_review_at = db.Column(db.DateTime, nullable=True)  # When moved to "In Review"
+    in_review_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    in_review_by = db.relationship('User', foreign_keys=[in_review_by_id])
     
     # Tracking completion
     completed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
@@ -307,9 +318,39 @@ class ActivityLog(db.Model):
     # Área asociada (para filtrado de supervisores)
     area_id = db.Column(db.Integer, db.ForeignKey('area.id'), nullable=True)
     area = db.relationship('Area', backref=db.backref('activity_logs', lazy='dynamic'))
+
+    # Detalles adicionales (JSON format)
+    details = db.Column(db.Text, nullable=True)
     
     # Timestamp (se convierte a hora de Buenos Aires en la vista)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
         return f'<ActivityLog {self.action} by {self.user_id}>'
+
+
+class StatusTransition(db.Model):
+    """Registro de transiciones de estado de tareas"""
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('task.id'), nullable=False)
+    
+    # Estados: from -> to
+    from_status = db.Column(db.String(50), nullable=False)
+    to_status = db.Column(db.String(50), nullable=False)
+    
+    # Usuario que realizó el cambio
+    changed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    changed_by = db.relationship('User', backref='status_transitions')
+    
+    # Optional comment
+    comment = db.Column(db.Text)
+    
+    # Timestamp
+    changed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relación con la tarea
+    # Relación con la tarea
+    task = db.relationship('Task', backref=db.backref('status_history', order_by='StatusTransition.changed_at'))
+    
+    def __repr__(self):
+        return f'<StatusTransition {self.from_status} -> {self.to_status}>'

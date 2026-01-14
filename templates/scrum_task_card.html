@@ -1,0 +1,51 @@
+<!-- Task card partial for Scrum board -->
+<div class="task-card priority-{{ task.priority|lower }}" draggable="true" ondragstart="drag(event, {{ task.id }})"
+    ondragend="dragEnd(event)" data-task-id="{{ task.id }}">
+
+    <div class="task-card-header">
+        <span class="task-id">#{{ task.id }}</span>
+        {% if task.status == 'Scheduled' %}
+        <span
+            style="background: linear-gradient(135deg, #a78bfa, #8b5cf6); color: white; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.65rem; font-weight: 600;">
+            <i class="fas fa-calendar-alt"></i> Programada
+        </span>
+        {% endif %}
+        {% if task.priority == 'Urgente' %}
+        <span class="priority-star"><i class="fas fa-star"></i></span>
+        {% elif task.priority == 'Media' %}
+        <span class="priority-star" style="color: #f59e0b;"><i class="fas fa-star-half-alt"></i></span>
+        {% endif %}
+    </div>
+
+    <div class="task-title">
+        <a href="{{ url_for('main.task_details', task_id=task.id) }}">{{ task.title }}</a>
+    </div>
+
+    {% if task.status_history and task.status_history[-1].comment %}
+    <div class="task-comment"
+        style="margin-top: 0.5rem; font-size: 0.8rem; color: #475569; background: #f1f5f9; padding: 0.3rem 0.5rem; border-radius: 4px; border-left: 2px solid #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        <i class="fas fa-comment-dots" style="color: #94a3b8; margin-right: 0.2rem;"></i> {{
+        task.status_history[-1].comment }}
+    </div>
+    {% endif %}
+
+    <div class="task-meta">
+        <div class="task-assignees">
+            {% for user in task.assignees[:3] %}
+            <span class="assignee-dot" title="{{ user.full_name }}"
+                style="background: hsl({{ (user.id * 47) % 360 }}, 60%, 50%);">
+                {{ user.full_name[:2]|upper }}
+            </span>
+            {% endfor %}
+            {% if task.assignees|length > 3 %}
+            <span class="assignee-dot" style="background: #94a3b8;">+{{ task.assignees|length - 3 }}</span>
+            {% endif %}
+        </div>
+
+        <div
+            class="task-due {% if task.due_date.date() < today %}overdue{% elif task.due_date.date() == today %}today{% endif %}">
+            <i class="fas fa-calendar"></i>
+            {{ task.due_date.strftime('%d/%m') }}
+        </div>
+    </div>
+</div>

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="card" style="max-width: 900px; margin: 0 auto;">
     <h2><i class="fas fa-edit"></i> Editar Tarea</h2>
-    <form method="POST">
+    <form method="POST" id="editTaskForm">
         <div class="form-group">
             <label for="title"><i class="fas fa-heading"></i> Título</label>
             <input type="text" id="title" name="title" required placeholder="Título de la tarea"
@@ -15,6 +15,33 @@
             <textarea id="description" name="description" rows="4"
                 placeholder="Descripción detallada de la tarea">{{ task.description }}</textarea>
         </div>
+
+        <!-- Fecha y hora de inicio (solo admin) -->
+        {% if current_user.is_admin %}
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="start_date"><i class="fas fa-calendar-plus"></i> Fecha de Inicio</label>
+                <input type="date" id="start_date" name="start_date"
+                    value="{% if task.planned_start_date %}{{ task.planned_start_date.strftime('%Y-%m-%d') }}{% endif %}">
+            </div>
+            <div class="form-group">
+                <label for="start_time"><i class="fas fa-clock"></i> Hora de Inicio</label>
+                <input type="time" id="start_time" name="start_time"
+                    value="{% if task.planned_start_date %}{{ task.planned_start_date.strftime('%H:%M') }}{% else %}08:00{% endif %}">
+            </div>
+        </div>
+        {% else %}
+        {% if task.planned_start_date %}
+        <div class="form-group">
+            <label><i class="fas fa-calendar-plus"></i> Fecha/Hora de Inicio</label>
+            <p style="padding: 0.5rem; background: #f1f5f9; border-radius: 6px; color: #64748b; margin: 0;">
+                {{ task.planned_start_date.strftime('%d/%m/%Y %H:%M') }}
+                <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem;">(Solo
+                    administradores pueden editar)</span>
+            </p>
+        </div>
+        {% endif %}
+        {% endif %}
 
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
             <div class="form-group">
@@ -39,6 +66,9 @@
                 {% if current_user.is_admin %}
                 <select id="status" name="status" required>
                     <option value="Pending" {% if task.status=='Pending' %}selected{% endif %}>Pendiente</option>
+                    <option value="In Progress" {% if task.status=='In Progress' %}selected{% endif %}>En Proceso
+                    </option>
+                    <option value="In Review" {% if task.status=='In Review' %}selected{% endif %}>En Revisión</option>
                     <option value="Completed" {% if task.status=='Completed' %}selected{% endif %}>Completado</option>
                 </select>
                 {% else %}
@@ -58,11 +88,15 @@
             <div class="form-group">
                 <label for="due_date"><i class="fas fa-calendar-day"></i> Fecha de Vencimiento</label>
                 {% if current_user.is_admin %}
-                <input type="date" id="due_date" name="due_date" required
-                    value="{{ task.due_date.strftime('%Y-%m-%d') }}">
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="date" id="due_date" name="due_date" required
+                        value="{{ task.due_date.strftime('%Y-%m-%d') }}" style="flex: 1;">
+                    <input type="time" id="due_time" name="due_time" value="{{ task.due_date.strftime('%H:%M') }}"
+                        style="width: 120px;">
+                </div>
                 {% else %}
                 <p style="padding: 0.5rem; background: #f1f5f9; border-radius: 6px; color: #64748b; margin: 0;">
-                    {{ task.due_date.strftime('%d/%m/%Y') }}
+                    {{ task.due_date.strftime('%d/%m/%Y %H:%M') }}
                     <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem;">(Solo
                         administradores pueden editar)</span>
                 </p>
@@ -103,6 +137,19 @@
             </p>
         </div>
         {% endif %}
+        {% endif %}
+
+        <!-- Completion Comment - visible when task is Completed -->
+        {% if task.status == 'Completed' or task.completion_comment %}
+        <div class="form-group"
+            style="background: linear-gradient(135deg, #dcfce7, #bbf7d0); padding: 1rem; border-radius: 12px; border-left: 4px solid #10b981;">
+            <label for="completion_comment" style="color: #166534;">
+                <i class="fas fa-comment-check"></i> Comentario de Finalización
+            </label>
+            <textarea id="completion_comment" name="completion_comment" rows="3"
+                placeholder="Agregar observaciones sobre la finalización de esta tarea..."
+                style="background: white; border: 1px solid #86efac;">{{ task.completion_comment or '' }}</textarea>
+        </div>
         {% endif %}
 
         {% if current_user.is_admin %}
@@ -258,6 +305,12 @@
             </button>
         </div>
 
+        <div class="form-group" style="margin-top: 1.5rem; border-top: 1px dashed #e2e8f0; padding-top: 1.5rem;">
+            <label for="edit_comment"><i class="fas fa-comment-alt"></i> Comentario de Edición (Opcional)</label>
+            <textarea id="edit_comment" name="edit_comment" rows="2"
+                placeholder="Explica brevemente qué cambiaste y por qué..."></textarea>
+        </div>
+
         <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
             <a href="{{ url_for('main.dashboard') }}"
                 style="padding: 0.9rem 2rem; text-decoration: none; color: var(--text-light); font-weight: 600; border-radius: 10px; border: 2px solid var(--border-color); transition: var(--transition);">
@@ -293,6 +346,33 @@
                 display.appendChild(tagEl);
             });
         }
+    }
+
+    // Validate dates before form submission - only for admins who can edit dates
+    const editForm = document.getElementById('editTaskForm');
+    if (editForm) {
+        editForm.addEventListener('submit', function (e) {
+            const startDateField = document.getElementById('start_date');
+            const startTimeField = document.getElementById('start_time');
+            const dueDateField = document.getElementById('due_date');
+            const dueTimeField = document.getElementById('due_time');
+
+            if (startDateField && dueDateField && startDateField.value && dueDateField.value) {
+                const startDate = startDateField.value;
+                const startTime = startTimeField ? (startTimeField.value || '08:00') : '08:00';
+                const dueDate = dueDateField.value;
+                const dueTime = dueTimeField ? (dueTimeField.value || '14:00') : '14:00';
+
+                const startDateTime = new Date(startDate + 'T' + startTime);
+                const dueDateTime = new Date(dueDate + 'T' + dueTime);
+
+                if (startDateTime >= dueDateTime) {
+                    e.preventDefault();
+                    alert('Error: La fecha/hora de inicio debe ser anterior a la fecha/hora de vencimiento.');
+                    return false;
+                }
+            }
+        });
     }
 </script>
 

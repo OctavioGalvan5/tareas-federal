@@ -18,7 +18,7 @@ def now_utc():
     return datetime.utcnow()
 
 
-def log_activity(user, action, description, target_type=None, target_id=None, area_id=None):
+def log_activity(user, action, description, target_type=None, target_id=None, area_id=None, details=None):
     """
     Registra una actividad en el log de auditoría.
     
@@ -29,6 +29,7 @@ def log_activity(user, action, description, target_type=None, target_id=None, ar
         target_type: Tipo de objeto afectado ('task', 'expiration', etc.)
         target_id: ID del objeto afectado
         area_id: ID del área asociada (para filtrado de supervisores)
+        details: JSON string con detalles adicionales (difs, comentarios)
     """
     try:
         log = ActivityLog(
@@ -38,6 +39,7 @@ def log_activity(user, action, description, target_type=None, target_id=None, ar
             target_type=target_type,
             target_id=target_id,
             area_id=area_id,
+            details=details,
             created_at=datetime.utcnow()
         )
         db.session.add(log)
@@ -158,7 +160,7 @@ def dashboard():
                 Task.status == 'Pending',
                 db.func.date(Task.due_date) < today_date
             )
-        elif filter_status in ['Pending', 'Completed', 'Anulado']:
+        elif filter_status in ['Pending', 'In Progress', 'In Review', 'Completed', 'Anulado', 'Scheduled']:
             tasks_query = tasks_query.filter(Task.status == filter_status)
     else:
         tasks_query = tasks_query.filter(Task.status != 'Anulado')
@@ -176,10 +178,13 @@ def dashboard():
         )
         
     # Sort by status first, then by due_date
+    # Priority: In Progress > In Review > Pending > Completed (active work first)
     status_order = db.case(
-        (Task.status == 'Pending', 0),
-        (Task.status == 'Completed', 1),
-        else_=2
+        (Task.status == 'In Progress', 0),
+        (Task.status == 'In Review', 1),
+        (Task.status == 'Pending', 2),
+        (Task.status == 'Completed', 3),
+        else_=4
     )
     
     if sort_order == 'desc':
@@ -188,6 +193,7 @@ def dashboard():
         tasks = tasks_query.order_by(status_order, Task.due_date.asc()).all()
     
     today = date.today()
+    now = datetime.now()  # Current datetime for time-based overdue checking
     
     # Filter users by area for non-admins
     if current_user.is_admin or current_user.can_see_all_areas():
@@ -207,7 +213,8 @@ def dashboard():
     
     return render_template('dashboard.html', 
         tasks=tasks, 
-        today=today, 
+        today=today,
+        now=now,  # NEW: Pass current datetime for time-based overdue checking
         users=users, 
         all_tags=all_tags, 
         sort_order=sort_order,
@@ -225,6 +232,15 @@ def create_task():
     if not current_user.can_create_tasks():
         flash('No tienes permiso para crear tareas. Usa el calendario de vencimientos para crear recordatorios.', 'danger')
         return redirect(url_for('main.dashboard'))
+    
+    # Check if creating a subtask (parent_id passed via query param)
+    parent_task = None
+    parent_id_param = request.args.get('parent_id')
+    if parent_id_param:
+        try:
+            parent_task = Task.query.get(int(parent_id_param))
+        except (ValueError, TypeError):
+            parent_task = None
     
     # Load available areas based on user role
     # Admins see all, others see only their area(s)
@@ -253,11 +269,35 @@ def create_task():
         title = request.form.get('title')
         description = request.form.get('description')
         priority = request.form.get('priority')
+        
+        # Parse dates and times
+        start_date_str = request.form.get('start_date')
+        start_time_str = request.form.get('start_time', '08:00')
         due_date_str = request.form.get('due_date')
+        due_time_str = request.form.get('due_time', '14:00')
+        
         time_spent_str = request.form.get('time_spent')
         area_id_str = request.form.get('area_id')  # NEW: Get area from form
         
+        # Combine due_date + due_time into datetime
         due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+        if due_time_str:
+            try:
+                due_time = datetime.strptime(due_time_str, '%H:%M').time()
+                due_date = datetime.combine(due_date.date(), due_time)
+            except ValueError:
+                due_date = datetime.combine(due_date.date(), datetime.strptime('14:00', '%H:%M').time())
+        
+        # Combine start_date + start_time into datetime (optional)
+        planned_start_date = None
+        if start_date_str:
+            planned_start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            if start_time_str:
+                try:
+                    start_time = datetime.strptime(start_time_str, '%H:%M').time()
+                    planned_start_date = datetime.combine(planned_start_date.date(), start_time)
+                except ValueError:
+                    planned_start_date = datetime.combine(planned_start_date.date(), datetime.strptime('08:00', '%H:%M').time())
         
         # Parse time_spent (in minutes)
         time_spent = None
@@ -279,13 +319,28 @@ def create_task():
         if area_id is None and len(available_areas) == 1:
             area_id = available_areas[0].id
         
+        # Validate: planned_start_date must be before due_date
+        if planned_start_date and planned_start_date >= due_date:
+            flash('La fecha/hora de inicio debe ser anterior a la fecha/hora de vencimiento.', 'danger')
+            return redirect(url_for('main.create_task'))
+        
         # Process task creation
         assignee_ids = request.form.getlist('assignees')
+        
+        # Determine initial status based on planned_start_date
+        # If start datetime is in the future, the task is "Scheduled" (Programada)
+        initial_status = 'Pending'
+        if planned_start_date:
+            now = datetime.now()
+            if planned_start_date > now:
+                initial_status = 'Scheduled'
         
         new_task = Task(
             title=title,
             description=description,
             priority=priority,
+            status=initial_status,
+            planned_start_date=planned_start_date,
             due_date=due_date,
             creator_id=current_user.id,
             time_spent=time_spent,
@@ -328,20 +383,88 @@ def create_task():
         db.session.add(new_task)
         db.session.commit()
         
+        # Process inline subtasks (if any)
+        subtask_titles = request.form.getlist('subtask_title[]')
+        subtask_descriptions = request.form.getlist('subtask_description[]')
+        subtask_priorities = request.form.getlist('subtask_priority[]')
+        subtask_assignees = request.form.getlist('subtask_assignee[]')
+        subtask_due_dates = request.form.getlist('subtask_due_date[]')
+        subtask_due_times = request.form.getlist('subtask_due_time[]')
+        
+        subtasks_created = 0
+        for i, title in enumerate(subtask_titles):
+            if title.strip():  # Only create if title is not empty
+                # Get description (or default)
+                description = ''
+                if i < len(subtask_descriptions) and subtask_descriptions[i]:
+                    description = subtask_descriptions[i].strip()
+                else:
+                    description = f'Subtarea de: {new_task.title}'
+                
+                # Get priority (or inherit from parent)
+                priority = new_task.priority
+                if i < len(subtask_priorities) and subtask_priorities[i]:
+                    priority = subtask_priorities[i]
+                
+                # Get due_date and due_time (or inherit from parent)
+                subtask_due_date = due_date  # Default to parent's due_date
+                if i < len(subtask_due_dates) and subtask_due_dates[i]:
+                    try:
+                        subtask_date_str = subtask_due_dates[i]
+                        subtask_time_str = subtask_due_times[i] if i < len(subtask_due_times) and subtask_due_times[i] else '17:00'
+                        subtask_due_date = datetime.strptime(f"{subtask_date_str} {subtask_time_str}", "%Y-%m-%d %H:%M")
+                    except ValueError:
+                        subtask_due_date = due_date  # Fallback to parent's
+                
+                subtask = Task(
+                    title=title.strip(),
+                    description=description,
+                    priority=priority,
+                    due_date=subtask_due_date,
+                    status='Pending',  # Subtasks start as Pending but disabled
+                    creator_id=current_user.id,
+                    area_id=new_task.area_id,  # Inherit area
+                    parent_id=new_task.id,  # Link to parent
+                    enabled=False,  # Start disabled (blocked by parent)
+                    planned_start_date=new_task.planned_start_date  # Inherit start date if any
+                )
+                
+                # Assign user if specified
+                if i < len(subtask_assignees) and subtask_assignees[i]:
+                    try:
+                        assignee = User.query.get(int(subtask_assignees[i]))
+                        if assignee:
+                            subtask.assignees.append(assignee)
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Inherit tags from parent
+                for tag in new_task.tags:
+                    subtask.tags.append(tag)
+                
+                db.session.add(subtask)
+                subtasks_created += 1
+        
+        if subtasks_created > 0:
+            db.session.commit()
+        
         # Log activity
         log_activity(
             user=current_user,
             action='task_created',
-            description=f'creó la tarea "{new_task.title}"',
+            description=f'creó la tarea "{new_task.title}"' + (f' con {subtasks_created} subtarea(s)' if subtasks_created > 0 else ''),
             target_type='task',
             target_id=new_task.id,
             area_id=new_task.area_id
         )
         
-        flash('Tarea creada exitosamente.', 'success')
+        if subtasks_created > 0:
+            flash(f'Tarea creada con {subtasks_created} subtarea(s).', 'success')
+        else:
+            flash('Tarea creada exitosamente.', 'success')
         return redirect(url_for('main.dashboard'))
         
-    return render_template('create_task.html', users=users, available_tags=available_tags, templates=templates, available_areas=available_areas)
+    return render_template('create_task.html', users=users, available_tags=available_tags, templates=templates, available_areas=available_areas, parent_task=parent_task)
 
 @main_bp.route('/task/<int:task_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -376,6 +499,17 @@ def edit_task(task_id):
         available_areas = current_user.areas
 
     if request.method == 'POST':
+        # Snapshot state before changes for diff
+        old_state = {
+            'title': task.title,
+            'description': task.description,
+            'priority': task.priority,
+            'status': task.status,
+            'due_date': task.due_date,
+            'area_id': task.area_id,
+            'planned_start_date': task.planned_start_date
+        }
+
         task.title = request.form.get('title')
         task.description = request.form.get('description')
         
@@ -384,12 +518,53 @@ def edit_task(task_id):
         if new_status:  # Only update if a value was provided (prevents None)
             task.status = new_status
         
-        # Update priority and due_date - ONLY if user is admin
+        # Update priority, dates and times - ONLY if user is admin
         if current_user.is_admin:
             task.priority = request.form.get('priority')
+            
+            # Parse start date and time
+            start_date_str = request.form.get('start_date')
+            start_time_str = request.form.get('start_time', '08:00')
+            
+            # Update planned_start_date with time
+            if start_date_str:
+                planned_start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                if start_time_str:
+                    try:
+                        start_time = datetime.strptime(start_time_str, '%H:%M').time()
+                        planned_start_date = datetime.combine(planned_start_date.date(), start_time)
+                    except ValueError:
+                        planned_start_date = datetime.combine(planned_start_date.date(), datetime.strptime('08:00', '%H:%M').time())
+                task.planned_start_date = planned_start_date
+            else:
+                task.planned_start_date = None
+            
+            # Parse due date and time
             due_date_str = request.form.get('due_date')
+            due_time_str = request.form.get('due_time', '14:00')
+            
             if due_date_str:
-                task.due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+                due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+                if due_time_str:
+                    try:
+                        due_time = datetime.strptime(due_time_str, '%H:%M').time()
+                        due_date = datetime.combine(due_date.date(), due_time)
+                    except ValueError:
+                        due_date = datetime.combine(due_date.date(), datetime.strptime('14:00', '%H:%M').time())
+                task.due_date = due_date
+            
+            # Validate: planned_start_date must be before due_date
+            if task.planned_start_date and task.due_date and task.planned_start_date >= task.due_date:
+                flash('La fecha/hora de inicio debe ser anterior a la fecha/hora de vencimiento.', 'danger')
+                return redirect(url_for('main.edit_task', task_id=task.id))
+            
+            # Auto-update status to Scheduled if start date is in the future
+            if task.planned_start_date:
+                now = datetime.now()
+                if task.planned_start_date > now and task.status in ['Pending', 'Scheduled']:
+                    task.status = 'Scheduled'
+                elif task.planned_start_date <= now and task.status == 'Scheduled':
+                    task.status = 'Pending'
         
         # Update time_spent - ONLY if user is admin
         if current_user.is_admin:
@@ -453,6 +628,15 @@ def edit_task(task_id):
         elif task.status == 'Pending':
              task.completed_by_id = None
              task.completed_at = None
+             task.completion_comment = None  # Clear comment when reverting to Pending
+        
+        # Update completion comment (editable for completed tasks)
+        completion_comment = request.form.get('completion_comment', '').strip()
+        if completion_comment:
+            task.completion_comment = completion_comment
+        elif task.status != 'Completed':
+            # Only clear comment if task is not completed
+            task.completion_comment = None
 
         # Track edit history
         task.last_edited_by_id = current_user.id
@@ -489,17 +673,44 @@ def edit_task(task_id):
         db.session.commit()
         
         # Log activity
+        # Log activity with diff
+        import json
+        changes = []
+        
+        if old_state['title'] != task.title:
+            changes.append(f'Título modificado')
+        if old_state['description'] != task.description:
+            changes.append(f'Descripción modificada')
+        if old_state['priority'] != task.priority:
+            changes.append(f'Prioridad: {old_state["priority"]} -> {task.priority}')
+        if old_state['status'] != task.status:
+            changes.append(f'Estado: {old_state["status"]} -> {task.status}')
+        
+        # Helper to format date for comparison
+        def fmt_date(d): return d.strftime('%Y-%m-%d %H:%M') if d else 'None'
+        
+        if fmt_date(old_state['due_date']) != fmt_date(task.due_date):
+            changes.append(f'Vencimiento: {fmt_date(old_state["due_date"])} -> {fmt_date(task.due_date)}')
+            
+        edit_comment = request.form.get('edit_comment')
+        
+        details = {
+            'changes': changes,
+            'comment': edit_comment
+        }
+        
         log_activity(
             user=current_user,
             action='task_edited',
             description=f'editó la tarea "{task.title}"',
             target_type='task',
             target_id=task.id,
-            area_id=task.area_id
+            area_id=task.area_id,
+            details=json.dumps(details)
         )
         
         flash('Tarea actualizada exitosamente.', 'success')
-        return redirect(url_for('main.dashboard'))
+        return redirect(url_for('main.task_details', task_id=task.id))
         
         return redirect(url_for('main.dashboard'))
         
@@ -509,7 +720,75 @@ def edit_task(task_id):
 @login_required
 def task_details(task_id):
     task = Task.query.get_or_404(task_id)
-    return render_template('task_details.html', task=task)
+    
+    # Build unified timeline
+    timeline_events = []
+    
+    # Add Status Transitions
+    # Add Status Transitions
+    for transition in task.status_history:
+        # Determine icon based on status
+        icon = 'fa-circle'
+        if transition.to_status == 'In Progress':
+            icon = 'fa-play'
+        elif transition.to_status == 'In Review':
+            icon = 'fa-eye'
+        elif transition.to_status == 'Completed':
+            icon = 'fa-check-circle'
+        elif transition.to_status == 'Pending':
+            icon = 'fa-pause'
+
+        timeline_events.append({
+            'type': 'status',
+            'timestamp': transition.changed_at,
+            'user': transition.changed_by,
+            'label': f"{transition.from_status} → {transition.to_status}",
+            'status_label': transition.to_status, # For color coding
+            'comment': transition.comment,
+            'icon': icon
+        })
+        
+    # Add Edit Logs
+    # Fetch logs where target_id is this task and action is 'task_edited'
+    from models import ActivityLog
+    edit_logs = ActivityLog.query.filter_by(
+        target_id=task.id, 
+        target_type='task', 
+        action='task_edited'
+    ).all()
+    
+    import json
+    for log in edit_logs:
+        details = {}
+        if log.details:
+            try:
+                details = json.loads(log.details)
+            except:
+                pass
+        
+        timeline_events.append({
+            'type': 'edit',
+            'timestamp': log.created_at,
+            'user': log.user,
+            'label': 'Tarea Editada',
+            'changes': details.get('changes', []),
+            'comment': details.get('comment'),
+            'icon': 'fa-pen'
+        })
+        
+    # Add Creation Event (optional, but good for completeness)
+    timeline_events.append({
+        'type': 'creation',
+        'timestamp': task.created_at,
+        'user': task.creator,
+        'label': 'Tarea Creada',
+        'icon': 'fa-plus'
+    })
+
+    # Sort by timestamp
+    timeline_events.sort(key=lambda x: x['timestamp'])
+
+    return render_template('task_details.html', task=task, timeline_events=timeline_events)
 
 @main_bp.route('/task-tree')
 @login_required
@@ -871,7 +1150,7 @@ def toggle_task_status(task_id):
     completion_comment = data.get('comment', '').strip() if data else ''
     
     # Toggle status and track completion
-    if task.status == 'Pending':
+    if task.status != 'Completed':
         task.status = 'Completed'
         task.completed_by_id = current_user.id
         task.completed_at = now_utc()
@@ -956,6 +1235,277 @@ def anular_task(task_id):
         'task_id': task.id,
         'new_status': 'Anulado'
     })
+
+
+# Valid status values and transitions
+VALID_STATUSES = ['Pending', 'In Progress', 'In Review', 'Completed', 'Anulado', 'Scheduled']
+STATUS_LABELS = {
+    'Pending': 'Pendiente',
+    'In Progress': 'En Proceso',
+    'In Review': 'En Revisión',
+    'Completed': 'Completado',
+    'Anulado': 'Anulado',
+    'Scheduled': 'Programada'
+}
+
+
+def can_change_task_status(user, task, new_status):
+    """
+    Check if user can change task status based on role and task ownership.
+    
+    Returns: (bool, str) - (allowed, error_message)
+    """
+    # Admin can do anything
+    if user.is_admin:
+        return True, None
+    
+    # Supervisor can change any task in their area
+    if user.role == 'supervisor':
+        user_area_ids = [a.id for a in user.areas]
+        if task.area_id in user_area_ids:
+            return True, None
+        return False, "Solo puedes modificar tareas de tu área"
+    
+    # Usuario+ can do forward transitions on their own tasks and complete
+    if user.role == 'usuario_plus':
+        if user in task.assignees or task.creator_id == user.id:
+            # Can move forward in workflow
+            if task.status == 'Pending' and new_status == 'In Progress':
+                return True, None
+            if task.status == 'In Progress' and new_status == 'In Review':
+                return True, None
+            if task.status == 'In Review' and new_status == 'Completed':
+                return True, None
+            return False, "Solo puedes avanzar tareas en el flujo"
+        return False, "Solo puedes modificar tareas asignadas a ti"
+    
+    # Usuario can only do Pending->In Progress->In Review on their own tasks
+    if user.role == 'usuario':
+        if user in task.assignees or task.creator_id == user.id:
+            if task.status == 'Pending' and new_status == 'In Progress':
+                return True, None
+            if task.status == 'In Progress' and new_status == 'In Review':
+                return True, None
+            if task.status == 'In Review' and new_status == 'Completed':
+                return True, None
+            return False, "Solo puedes avanzar tareas en el flujo"
+        return False, "Solo puedes modificar tareas asignadas a ti"
+    
+    return False, "No tienes permiso para cambiar el estado"
+
+
+@main_bp.route('/task/<int:task_id>/status', methods=['POST'])
+@login_required
+def update_task_status(task_id):
+    """
+    Update task status for Scrum board.
+    Expects JSON: { "status": "In Progress" }
+    """
+    task = Task.query.get_or_404(task_id)
+    data = request.get_json() or {}
+    new_status = data.get('status')
+    
+    if not new_status or new_status not in VALID_STATUSES:
+        return jsonify({
+            'success': False, 
+            'error': f'Estado invalido. Valores validos: {", ".join(VALID_STATUSES)}'
+        }), 400
+    
+    # Check permission
+    allowed, error_msg = can_change_task_status(current_user, task, new_status)
+    if not allowed:
+        return jsonify({'success': False, 'error': error_msg}), 403
+    
+    old_status = task.status
+    
+    # Update status and tracking fields
+    task.status = new_status
+    
+    if new_status == 'In Progress' and not task.started_at:
+        task.started_at = now_utc()
+        task.started_by_id = current_user.id
+    elif new_status == 'In Review' and not task.in_review_at:
+        task.in_review_at = now_utc()
+        task.in_review_by_id = current_user.id
+    elif new_status == 'Completed' and not task.completed_at:
+        task.completed_at = now_utc()
+        task.completed_by_id = current_user.id
+        if data.get('comment'):
+            task.completion_comment = data.get('comment')
+        # Enable child tasks when parent is completed
+        for child in task.children:
+            if not child.enabled:
+                child.enabled = True
+                child.enabled_at = now_utc()
+                child.enabled_by_task_id = task.id
+                if child.due_date.date() < date.today():
+                    child.original_due_date = child.due_date
+                    child.due_date = now_utc()
+    elif new_status == 'Pending':
+        # Reset all tracking when moving back to Pending
+        task.started_at = None
+        task.started_by_id = None
+        task.in_review_at = None
+        task.in_review_by_id = None
+        task.completed_at = None
+        task.completed_by_id = None
+    
+    task.last_edited_by_id = current_user.id
+    task.last_edited_at = now_utc()
+    
+    # Record status change
+    from models import StatusTransition
+    new_transition = StatusTransition(
+        task_id=task.id,
+        from_status=old_status,
+        to_status=new_status,
+        changed_by_id=current_user.id,
+        comment=data.get('comment')
+    )
+    db.session.add(new_transition)
+    
+    db.session.commit()
+    
+    # Log activity
+    log_activity(
+        user=current_user,
+        action='task_status_changed',
+        description=f'cambió estado de "{STATUS_LABELS.get(old_status, old_status)}" a "{STATUS_LABELS.get(new_status, new_status)}" en tarea "{task.title}"',
+        target_type='task',
+        target_id=task.id,
+        area_id=task.area_id
+    )
+    
+    return jsonify({
+        'success': True,
+        'task_id': task.id,
+        'old_status': old_status,
+        'new_status': new_status
+    })
+
+
+@main_bp.route('/scrum-board')
+@login_required
+def scrum_board():
+    """Scrum/Kanban board view with 4 status columns"""
+    from models import Area
+    
+    # Get filter parameters
+    filter_area = request.args.get('area')
+    filter_assignee = request.args.get('assignee')
+    filter_period = request.args.get('period', 'today')  # Period filter: today, week, month, custom, all
+    filter_date_from = request.args.get('date_from')  # Custom range start
+    filter_date_to = request.args.get('date_to')  # Custom range end
+    
+    # Base query - only enabled tasks, exclude Anulado
+    query = Task.query.options(
+        joinedload(Task.assignees),
+        joinedload(Task.tags),
+        joinedload(Task.area)
+    ).filter(Task.enabled == True, Task.status != 'Anulado')
+    
+    # Apply date/period filter
+    today = date.today()
+    if filter_period == 'today':
+        query = query.filter(db.func.date(Task.due_date) == today)
+    elif filter_period == 'week':
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+        query = query.filter(db.func.date(Task.due_date) >= week_start, db.func.date(Task.due_date) <= week_end)
+    elif filter_period == 'month':
+        month_start = today.replace(day=1)
+        if today.month == 12:
+            month_end = today.replace(day=31)
+        else:
+            month_end = (today.replace(month=today.month + 1, day=1) - timedelta(days=1))
+        query = query.filter(db.func.date(Task.due_date) >= month_start, db.func.date(Task.due_date) <= month_end)
+    elif filter_period == 'custom':
+        # Custom date range
+        if filter_date_from:
+            try:
+                date_from_obj = datetime.strptime(filter_date_from, '%Y-%m-%d').date()
+                query = query.filter(db.func.date(Task.due_date) >= date_from_obj)
+            except ValueError:
+                pass
+        if filter_date_to:
+            try:
+                date_to_obj = datetime.strptime(filter_date_to, '%Y-%m-%d').date()
+                query = query.filter(db.func.date(Task.due_date) <= date_to_obj)
+            except ValueError:
+                pass
+    # if filter_period == 'all', no date filter is applied
+    
+    # Role-based visibility
+    user_area_ids = [a.id for a in current_user.areas]
+    
+    if current_user.can_only_see_own_tasks():
+        # Usuario/Usuario+ see only their tasks
+        if user_area_ids:
+            query = query.filter(
+                db.or_(
+                    Task.assignees.any(id=current_user.id),
+                    Task.creator_id == current_user.id
+                )
+            ).filter(Task.area_id.in_(user_area_ids))
+        else:
+            query = query.filter(Task.area_id == -1)
+        available_areas = current_user.areas
+        show_area_filter = False
+    elif current_user.can_see_all_areas():
+        # Admin sees all
+        if filter_area:
+            query = query.filter(Task.area_id == int(filter_area))
+        available_areas = Area.query.order_by(Area.name).all()
+        show_area_filter = True
+    else:
+        # Supervisor sees their area
+        if user_area_ids:
+            query = query.filter(Task.area_id.in_(user_area_ids))
+        else:
+            query = query.filter(Task.area_id == -1)
+        available_areas = current_user.areas
+        show_area_filter = False
+    
+    # Filter by assignee if specified
+    if filter_assignee:
+        query = query.filter(Task.assignees.any(id=int(filter_assignee)))
+    
+    # Get all matching tasks
+    all_tasks = query.order_by(Task.due_date.asc()).all()
+    
+    # Group by status (Scheduled tasks go into Pending with a flag)
+    tasks_by_status = {
+        'Pending': [],
+        'In Progress': [],
+        'In Review': [],
+        'Completed': []
+    }
+    
+    for task in all_tasks:
+        if task.status == 'Scheduled':
+            # Scheduled tasks appear in Pending column with a badge
+            tasks_by_status['Pending'].append(task)
+        elif task.status in tasks_by_status:
+            tasks_by_status[task.status].append(task)
+    
+    # Get users for filter
+    if current_user.can_see_all_areas():
+        users = User.query.order_by(User.full_name).all()
+    else:
+        users = [u for u in User.query.all() if any(a in u.areas for a in current_user.areas)]
+    
+    return render_template('scrum_board.html',
+                           tasks_by_status=tasks_by_status,
+                           all_areas=available_areas,
+                           show_area_filter=show_area_filter,
+                           users=users,
+                           filter_area=filter_area,
+                           filter_assignee=filter_assignee,
+                           filter_period=filter_period,
+                           filter_date_from=filter_date_from,
+                           filter_date_to=filter_date_to,
+                           status_labels=STATUS_LABELS,
+                           today=today)
 
 @main_bp.route('/export_pdf')
 @login_required
@@ -1397,17 +1947,18 @@ def api_tasks_due_soon():
     if not current_user.notifications_enabled:
         return jsonify({'tasks': [], 'expirations': [], 'overdue_tasks': [], 'overdue_expirations': []})
     
-    # Get all pending AND enabled tasks assigned to current user (exclude blocked tasks)
-    pending_tasks = Task.query.filter(
+    # Get all pending/active AND enabled tasks assigned to current user (exclude blocked tasks)
+    # Include 'Scheduled' to show reminders for future tasks based on due_date
+    active_tasks = Task.query.filter(
         Task.assignees.any(id=current_user.id),
-        Task.status == 'Pending',
+        Task.status.in_(['Pending', 'In Progress', 'In Review', 'Scheduled']),
         Task.enabled == True  # Only show enabled tasks (not blocked by parent)
     ).all()
     
     # Separate tasks into due soon and overdue
     due_soon_tasks = []
     overdue_tasks = []
-    for task in pending_tasks:
+    for task in active_tasks:
         business_days = calculate_business_days_until(task.due_date)
         task_data = {
             'id': task.id,

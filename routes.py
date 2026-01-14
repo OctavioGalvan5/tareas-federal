@@ -867,7 +867,7 @@ def toggle_task_status(task_id):
         return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
     
     # Get optional completion comment from request body
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     completion_comment = data.get('comment', '').strip() if data else ''
     
     # Toggle status and track completion

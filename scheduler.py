@@ -98,11 +98,29 @@ def generate_daily_tasks(app):
                     task_description = template.description
                     task_priority = template.priority
                     task_area_id = template.area_id or rt.area_id
+                    
+                    # Calculate start date from template config
+                    if template.start_days_offset is not None or template.start_time is not None:
+                        # Base date is Today (generation date) + start_days_offset
+                        start_offset = template.start_days_offset or 0
+                        start_date = today + timedelta(days=start_offset)
+                        
+                        # Time: template start_time or default 8:00
+                        start_time_val = template.start_time or time(8, 0)
+                        
+                        planned_start_date = datetime.combine(start_date, start_time_val)
+                    else:
+                        # Default behavior: Start today at 8:00
+                        planned_start_date = datetime.combine(today, time(8, 0))
+                        
                 else:
                     task_title = rt.title
                     task_description = rt.description
                     task_priority = rt.priority
                     task_area_id = rt.area_id
+                    
+                    # Default for non-template tasks
+                    planned_start_date = datetime.combine(today, time(8, 0))
                 
                 # Create new task
                 task = Task(
@@ -110,6 +128,7 @@ def generate_daily_tasks(app):
                     description=task_description,
                     priority=task_priority,
                     due_date=due_datetime,
+                    planned_start_date=planned_start_date,
                     creator_id=rt.creator_id,
                     area_id=task_area_id,
                     time_spent=rt.time_spent,

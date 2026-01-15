@@ -19,7 +19,23 @@
         <label style="display: block; margin-bottom: 0.75rem; color: var(--text-color); font-weight: 600;"><i
                 class="fas fa-bolt"></i> Acciones</label>
         <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0;">
-            {% if task.status != 'Anulado' %}
+            {% if not task.enabled %}
+            <!-- Blocked Task Warning -->
+            <div
+                style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); color: white; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem;">
+                <i class="fas fa-lock" style="font-size: 1.2rem;"></i>
+                <div>
+                    <strong>Tarea Bloqueada</strong>
+                    {% if task.parent %}
+                    <div style="font-size: 0.85rem; opacity: 0.9;">
+                        Esperando a que se complete la tarea
+                        <a href="{{ url_for('main.task_details', task_id=task.parent.id) }}"
+                            style="color: white; font-weight: 600;">#{{ task.parent.id }} - {{ task.parent.title }}</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% elif task.status != 'Anulado' %}
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
 
                 <!-- Status Actions -->
@@ -287,6 +303,12 @@
                 <strong>{{ task.completed_by.full_name }}</strong> el {{
                 (task.completed_at|to_buenos_aires).strftime('%d/%m/%Y a las %H:%M') }}
             </p>
+            {% if task.approved_by %}
+            <p style="margin: 0.2rem 0; color: #0369a1;"><i class="fas fa-user-check"></i> Aprobado por
+                <strong>{{ task.approved_by.full_name }}</strong> el {{
+                (task.approved_at|to_buenos_aires).strftime('%d/%m/%Y a las %H:%M') }}
+            </p>
+            {% endif %}
             {% if task.completion_comment %}
             <div
                 style="margin: 0.75rem 0; padding: 0.75rem 1rem; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 6px;">

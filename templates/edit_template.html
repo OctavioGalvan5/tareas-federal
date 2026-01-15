@@ -47,6 +47,24 @@
             </div>
         </div>
 
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label for="start_days_offset"><i class="fas fa-calendar-alt"></i> Inicio: Días desde creación</label>
+                <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.25rem;">0 = Empieza el mismo día (Hoy)
+                </div>
+                <input type="number" id="start_days_offset" name="start_days_offset" min="0"
+                    value="{{ template.start_days_offset or 0 }}">
+            </div>
+
+            <div class="form-group">
+                <label for="start_time"><i class="fas fa-clock"></i> Hora de Inicio (Opcional)</label>
+                <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.25rem;">Vacío = Sin hora específica
+                </div>
+                <input type="time" id="start_time" name="start_time"
+                    value="{{ template.start_time.strftime('%H:%M') if template.start_time else '' }}">
+            </div>
+        </div>
+
         <div class="form-group">
             <label for="time_spent"><i class="fas fa-clock"></i> Tiempo Estimado (minutos)</label>
             <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
@@ -130,6 +148,8 @@
         const description = prefill ? prefill.description : '';
         const priority = prefill ? prefill.priority : 'Normal';
         const daysOffset = prefill ? prefill.days_offset : 0;
+        const startDaysOffset = prefill ? prefill.start_days_offset : 0;
+        const startTime = prefill ? prefill.start_time : '';
 
         div.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
@@ -170,11 +190,29 @@
                     </div>
                     <div style="min-width: 100px;">
                         <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
-                            <i class="fas fa-calendar-plus"></i> + Días
+                            <i class="fas fa-hourglass-end"></i> Vence (+ Días)
                         </label>
                         <input type="number" name="subtask_days_offset[]" min="0" value="${daysOffset}" 
                             style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;"
-                            title="Días adicionales desde la tarea padre">
+                            title="Días para vencimiento (desde tarea padre)">
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; background: #f8fafc; padding: 0.5rem; border-radius: 6px;">
+                    <div style="flex: 1; min-width: 120px;">
+                        <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-calendar-alt"></i> Inicio (+ Días)
+                        </label>
+                        <input type="number" name="subtask_start_days_offset[]" min="0" value="${startDaysOffset}" 
+                            style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;"
+                            title="Días adicionales para el inicio (desde creación o fecha padre)">
+                    </div>
+                    <div style="flex: 1; min-width: 120px;">
+                        <label style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-clock"></i> Hora Inicio
+                        </label>
+                        <input type="time" name="subtask_start_time[]" value="${startTime}" 
+                            style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
                     </div>
                 </div>
             </div>
@@ -237,7 +275,12 @@
                     title: st.title,
                     description: st.description || '',
                     priority: st.priority,
-                    days_offset: st.days_offset
+                    title: st.title,
+                    description: st.description || '',
+                    priority: st.priority,
+                    days_offset: st.days_offset,
+                    start_days_offset: st.start_days_offset,
+                    start_time: st.start_time
                 });
                 idToPath[st.id] = div.dataset.path;
             }

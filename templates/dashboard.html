@@ -152,6 +152,36 @@
             </div>
             {% endif %}
 
+            <div style="flex: 1; min-width: 140px;">
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Período</label>
+                <select name="period" id="periodFilter"
+                    onchange="if(this.value!='custom') this.form.submit(); else document.getElementById('customDatesContainer').style.display='flex';"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    <option value="today" {% if filter_period=='today' %}selected{% endif %}>Hoy (+Vencidas)</option>
+                    <option value="week" {% if filter_period=='week' %}selected{% endif %}>Esta Semana</option>
+                    <option value="month" {% if filter_period=='month' %}selected{% endif %}>Este Mes</option>
+                    <option value="custom" {% if filter_period=='custom' %}selected{% endif %}>Personalizado</option>
+                    <option value="all" {% if filter_period=='all' %}selected{% endif %}>Todas</option>
+                </select>
+            </div>
+
+            <div id="customDatesContainer"
+                style="display: {% if filter_period == 'custom' %}flex{% else %}none{% endif %}; gap: 0.5rem; align-items: center;">
+                <div>
+                    <label
+                        style="display: block; font-size: 0.7rem; color: var(--text-light); margin-bottom: 0.1rem;">Desde</label>
+                    <input type="date" name="date_from" value="{{ filter_date_from or '' }}"
+                        style="padding: 0.4rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 130px;">
+                </div>
+                <div>
+                    <label
+                        style="display: block; font-size: 0.7rem; color: var(--text-light); margin-bottom: 0.1rem;">Hasta</label>
+                    <input type="date" name="date_to" value="{{ filter_date_to or '' }}"
+                        style="padding: 0.4rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 130px;">
+                </div>
+            </div>
+
             <div style="flex: 0 0 auto; min-width: 140px;">
                 <label
                     style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Ordenar</label>
@@ -197,10 +227,23 @@
     {% if tasks %}
     {% for task in tasks %}
     <div
-        class="task-card {% if task.status == 'Completed' %}completed{% elif task.status == 'Anulado' %}anulado{% elif task.status == 'Scheduled' %}scheduled{% elif task.status == 'In Progress' %}in-progress{% elif task.status == 'In Review' %}in-review{% elif task.due_date < now %}overdue{% elif task.due_date.date() == today %}due-today{% endif %}">
+        class="task-card {% if task.status == 'Anulado' %}anulado{% elif not task.enabled %}blocked{% elif task.status == 'Completed' %}completed{% elif task.status == 'Scheduled' %}scheduled{% elif task.status == 'In Progress' %}in-progress{% elif task.status == 'In Review' %}in-review{% elif task.due_date < now %}overdue{% elif task.due_date.date() == today %}due-today{% endif %}">
         <div class="task-card-header">
+            <!-- 🚫 Anulado Banner (Absolute priority) -->
+            {% if task.status == 'Anulado' %}
+            <div class="status-banner anulado" style="background: #9ca3af;">
+                <i class="fas fa-ban"></i> Anulada
+            </div>
+            <!-- 🔒 Blocked Banner (second priority) -->
+            {% elif not task.enabled %}
+            <div class="status-banner blocked">
+                <i class="fas fa-lock"></i> Bloqueada
+                {% if task.parent %}
+                <span style="font-weight: 400; margin-left: 0.5rem;">| Esperando #{{ task.parent.id }}</span>
+                {% endif %}
+            </div>
             <!-- 🚨 Alert Banners -->
-            {% if task.status == 'Pending' %}
+            {% elif task.status == 'Pending' %}
             {% if task.due_date < now %} <div class="status-banner overdue">
                 <i class="fas fa-exclamation-triangle"></i> ¡Vencida!
         </div>
@@ -321,6 +364,16 @@
                 </span>
             </div>
 
+            {% if task.children|length > 0 %}
+            {% set completed_subtasks = task.children|selectattr('status', 'equalto', 'Completed')|list|length %}
+            {% set total_subtasks = task.children|length %}
+            <div class="meta-item subtasks" title="{{ completed_subtasks }}/{{ total_subtasks }} subtareas completadas"
+                style="display: flex; align-items: center; gap: 0.3rem; {% if completed_subtasks == total_subtasks %}color: #10b981;{% elif completed_subtasks > 0 %}color: #f59e0b;{% else %}color: #94a3b8;{% endif %}">
+                <i class="fas fa-tasks"></i>
+                <span style="font-weight: 600;">{{ completed_subtasks }}/{{ total_subtasks }}</span>
+            </div>
+            {% endif %}
+
             <div
                 class="meta-item date {% if task.due_date.date() < today and task.status == 'Pending' %}text-danger{% elif task.due_date.date() == today and task.status == 'Pending' %}text-warning{% endif %}">
                 <i class="far fa-calendar-alt"></i>
@@ -331,6 +384,9 @@
         {% if task.status == 'Completed' %}
         <div class="completion-info">
             Completado por {{ task.completed_by.full_name.split()[0] }}
+            {% if task.approved_by %}
+            <span style="color: #0369a1;"> | Aprobado por {{ task.approved_by.full_name.split()[0] }}</span>
+            {% endif %}
         </div>
         {% endif %}
     </div>
@@ -1393,6 +1449,47 @@
     .task-card.in-review:has(.overdue-badge) {
         border: 2px solid #dc2626 !important;
         box-shadow: 0 0 8px rgba(220, 38, 38, 0.3);
+    }
+
+    /* Blocked Task Styles */
+    .task-card.blocked {
+        opacity: 0.7;
+        background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+        border: 1px dashed #94a3b8;
+    }
+
+    /* Anulated Task Styles */
+    .task-card.anulado {
+        opacity: 0.6;
+        background: #f3f4f6;
+        border: 1px solid #d1d5db;
+        filter: grayscale(100%);
+    }
+
+    .task-card.anulado .status-banner.anulado {
+        background: #6b7280 !important;
+    }
+
+    .task-card.blocked:hover {
+        transform: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .status-banner.blocked {
+        background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+        color: white;
+    }
+
+    .task-card.blocked .action-buttons {
+        display: none !important;
+    }
+
+    .task-card.blocked .task-title {
+        color: #64748b;
+    }
+
+    .task-card.blocked .task-description {
+        color: #94a3b8;
     }
 </style>
 

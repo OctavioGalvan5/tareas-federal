@@ -1,14 +1,26 @@
 <!-- Task card partial for Scrum board -->
-<div class="task-card priority-{{ task.priority|lower }}" draggable="true" ondragstart="drag(event, {{ task.id }})"
-    ondragend="dragEnd(event)" data-task-id="{{ task.id }}">
+<div class="task-card priority-{{ task.priority|lower }} {% if task.status == 'Anulado' %}anulado{% elif not task.enabled %}blocked{% endif %}"
+    {% if task.enabled and task.status !='Anulado' %}draggable="true" ondragstart="drag(event, {{ task.id }})"
+    ondragend="dragEnd(event)" {% endif %} data-task-id="{{ task.id }}">
 
     <div class="task-card-header">
-        <span class="task-id">#{{ task.id }}</span>
-        {% if task.status == 'Scheduled' %}
+        {% if task.status == 'Anulado' %}
+        <span
+            style="background: linear-gradient(135deg, #9ca3af, #6b7280); color: white; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.65rem; font-weight: 600;">
+            <i class="fas fa-ban"></i> Anulada
+        </span>
+        {% elif not task.enabled %}
+        <span
+            style="background: linear-gradient(135deg, #6b7280, #4b5563); color: white; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.65rem; font-weight: 600;">
+            <i class="fas fa-lock"></i> Bloqueada
+        </span>
+        {% elif task.status == 'Scheduled' %}
         <span
             style="background: linear-gradient(135deg, #a78bfa, #8b5cf6); color: white; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.65rem; font-weight: 600;">
             <i class="fas fa-calendar-alt"></i> Programada
         </span>
+        {% else %}
+        <span class="task-id">#{{ task.id }}</span>
         {% endif %}
         {% if task.priority == 'Urgente' %}
         <span class="priority-star"><i class="fas fa-star"></i></span>

@@ -118,12 +118,19 @@ class Task(db.Model):
     completed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
     
+    # Tracking approval (when completed from "In Review" by supervisor)
+    approved_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    
     # Tracking edits
     last_edited_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     last_edited_at = db.Column(db.DateTime, nullable=True)
     
     # Relationship for completed_by
     completed_by = db.relationship('User', foreign_keys=[completed_by_id])
+    
+    # Relationship for approved_by
+    approved_by = db.relationship('User', foreign_keys=[approved_by_id])
     
     # Relationship for last_edited_by
     last_edited_by = db.relationship('User', foreign_keys=[last_edited_by_id])
@@ -185,6 +192,8 @@ class TaskTemplate(db.Model):
     description = db.Column(db.Text, nullable=True)  # Default description
     priority = db.Column(db.String(20), nullable=False, default='Normal')  # Normal, Media, Urgente
     default_days = db.Column(db.Integer, nullable=False, default=0)  # Days from today for due date (0 = today)
+    start_time = db.Column(db.Time, nullable=True)  # New: Start time
+    start_days_offset = db.Column(db.Integer, default=0)  # New: Start days offset
     created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     time_spent = db.Column(db.Integer, nullable=True, default=0)  # Default time spent in minutes
@@ -221,6 +230,8 @@ class SubtaskTemplate(db.Model):
     description = db.Column(db.Text, nullable=True)
     priority = db.Column(db.String(20), default='Normal')
     days_offset = db.Column(db.Integer, default=0)  # Días desde tarea padre para due_date
+    start_time = db.Column(db.Time, nullable=True)  # New: Start time
+    start_days_offset = db.Column(db.Integer, default=0)  # New: Start days offset from parent start
     order = db.Column(db.Integer, default=0)  # Orden de visualización
     
     def __repr__(self):
@@ -384,3 +395,24 @@ class StatusTransition(db.Model):
     
     def __repr__(self):
         return f'<StatusTransition {self.from_status} -> {self.to_status}>'
+
+# Event Listener for Cascading Annulment
+from sqlalchemy import event
+
+@event.listens_for(Task.status, 'set')
+def receive_set_status(target, value, oldvalue, initiator):
+    """
+    Cascada automática para anulación de tareas.
+    Si una tarea se marca como 'Anulado', todas sus subtareas (cargadas o no)
+    se marcan también como 'Anulado' y 'disabled'.
+    """
+    if value == 'Anulado' and oldvalue != 'Anulado':
+        target.enabled = False
+        
+        # Nota importante: Al acceder a target.children, SQLAlchemy ejecutará una query
+        # si la relación no está cargada. Esto es deseable para propagar el cambio.
+        # Iteramos sobre una copia para evitar problemas de concurrencia en la lista si cambiara.
+        for child in list(target.children):
+            if child.status != 'Anulado':
+                child.status = 'Anulado'
+                # Al asignar status, se dispara recursivamente este mismo listener

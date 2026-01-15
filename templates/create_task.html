@@ -359,6 +359,23 @@
                     </div>
                 </div>
                 
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; background: #f8fafc; padding: 0.5rem; border-radius: 6px;">
+                    <div style="flex: 1; min-width: 130px;">
+                        <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-calendar-alt"></i> Fecha Inicio
+                        </label>
+                        <input type="date" name="subtask_start_date[]" value="${document.getElementById('start_date')?.value || ''}"
+                            style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                    </div>
+                    <div style="min-width: 100px;">
+                        <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-clock"></i> Hora Inicio
+                        </label>
+                        <input type="time" name="subtask_start_time[]" value="${document.getElementById('start_time')?.value || '08:00'}"
+                            style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                    </div>
+                </div>
+
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                     <div style="flex: 1; min-width: 130px;">
                         <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
@@ -437,7 +454,26 @@
                 document.getElementById('title').value = data.title;
                 document.getElementById('description').value = data.description;
                 document.getElementById('priority').value = data.priority;
-                document.getElementById('due_date').value = data.due_date;
+                document.getElementById('priority').value = data.priority;
+
+                // Calculate Dates
+                const today = new Date();
+
+                // Start Date
+                const startOffset = data.start_days_offset || 0;
+                const startDate = new Date();
+                startDate.setDate(today.getDate() + startOffset);
+                document.getElementById('start_date').value = startDate.toISOString().split('T')[0];
+
+                if (data.start_time) {
+                    document.getElementById('start_time').value = data.start_time;
+                }
+
+                // Due Date (default_days is offset from Today)
+                const dueOffset = data.default_days || 0;
+                const dueDate = new Date();
+                dueDate.setDate(today.getDate() + dueOffset);
+                document.getElementById('due_date').value = dueDate.toISOString().split('T')[0];
 
                 // Update hidden priority field for non-admins
                 const priorityHidden = document.getElementById('priority_hidden');
@@ -591,6 +627,28 @@
                     </div>
                 </div>
                 
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; background: #f8fafc; padding: 0.5rem; border-radius: 6px;">
+                    <div style="flex: 1; min-width: 130px;">
+                        <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-calendar-alt"></i> Fecha Inicio
+                        </label>
+                        <input type="date" name="subtask_start_date[]" value="${(() => {
+                const today = new Date();
+                const offset = data.start_days_offset || 0;
+                const d = new Date(); d.setDate(today.getDate() + offset);
+                return d.toISOString().split('T')[0];
+            })()}"
+                            style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                    </div>
+                    <div style="min-width: 100px;">
+                        <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-clock"></i> Hora Inicio
+                        </label>
+                        <input type="time" name="subtask_start_time[]" value="${data.start_time || '08:00'}"
+                            style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                    </div>
+                </div>
+
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                     <div style="flex: 1; min-width: 130px;">
                         <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">

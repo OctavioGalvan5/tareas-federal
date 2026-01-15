@@ -165,14 +165,24 @@ def dashboard():
     filter_status = request.args.get('status')
     filter_tag = request.args.get('tag_filter')
     filter_area = request.args.get('area')  # NEW: Area filter
+    show_blocked = request.args.get('show_blocked', 'true')  # NEW: Show blocked tasks (default: true)
     sort_order = request.args.get('sort', 'asc')
 
     # Base query: Eager load assignees, tags, and area
     tasks_query = Task.query.options(
         joinedload(Task.assignees), 
         joinedload(Task.tags),
-        joinedload(Task.area)  # NEW: Load area relationship
-    ).filter(Task.enabled == True)
+        joinedload(Task.area),  # NEW: Load area relationship
+        joinedload(Task.parent)  # Load parent for blocked tasks
+    )
+    
+    # Filter by enabled status (show blocked tasks if filter is on)
+    if show_blocked == 'true':
+        # Show all tasks (both enabled and disabled)
+        pass  # No filter on enabled status
+    else:
+        # Only show enabled tasks
+        tasks_query = tasks_query.filter(Task.enabled == True)
     
     # NEW: Role-based visibility filtering
     # - usuario/usuario_plus: only see tasks assigned to them OR created by them (within their areas)
@@ -238,6 +248,78 @@ def dashboard():
         
     # Sort by status first, then by due_date
     # Priority: In Progress > In Review > Pending > Completed (active work first)
+    
+    # NEW: Date/Period Filter Implementation (Matching Scrum Board Logic)
+    filter_period = request.args.get('period', 'week') # Default to week as requested
+    filter_date_from = request.args.get('date_from')
+    filter_date_to = request.args.get('date_to')
+    
+    today = date.today()
+    
+    # Overdue condition: Pending/InProgress/Review tasks past due date
+    # These should ALWAYS be shown regardless of date filter (unless completed)
+    overdue_condition = db.and_(
+        db.func.date(Task.due_date) < today,
+        Task.status.in_(['Pending', 'In Progress', 'In Review'])
+    )
+    
+    if filter_period == 'today':
+        tasks_query = tasks_query.filter(
+            db.or_(
+                db.func.date(Task.due_date) == today,
+                db.func.date(Task.planned_start_date) == today,
+                Task.status.in_(['In Progress', 'In Review']), # Always show active work
+                overdue_condition
+            )
+        )
+    elif filter_period == 'week':
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+        tasks_query = tasks_query.filter(
+            db.or_(
+                db.and_(db.func.date(Task.due_date) >= week_start, db.func.date(Task.due_date) <= week_end),
+                db.and_(db.func.date(Task.planned_start_date) >= week_start, db.func.date(Task.planned_start_date) <= week_end),
+                Task.status.in_(['In Progress', 'In Review']),
+                overdue_condition
+            )
+        )
+    elif filter_period == 'month':
+        month_start = today.replace(day=1)
+        if today.month == 12:
+            month_end = today.replace(day=31)
+        else:
+            month_end = (today.replace(month=today.month + 1, day=1) - timedelta(days=1))
+        tasks_query = tasks_query.filter(
+            db.or_(
+                db.and_(db.func.date(Task.due_date) >= month_start, db.func.date(Task.due_date) <= month_end),
+                db.and_(db.func.date(Task.planned_start_date) >= month_start, db.func.date(Task.planned_start_date) <= month_end),
+                Task.status.in_(['In Progress', 'In Review']),
+                overdue_condition
+            )
+        )
+    elif filter_period == 'custom':
+        custom_conditions = [overdue_condition]
+        if filter_date_from:
+            try:
+                date_from_obj = datetime.strptime(filter_date_from, '%Y-%m-%d').date()
+                custom_conditions.append(db.func.date(Task.due_date) >= date_from_obj)
+            except ValueError:
+                pass
+        if filter_date_to:
+            try:
+                date_to_obj = datetime.strptime(filter_date_to, '%Y-%m-%d').date()
+                custom_conditions.append(db.func.date(Task.due_date) <= date_to_obj)
+            except ValueError:
+                pass
+        
+        # Combine conditions: (Overdue) OR (Range Match)
+        if len(custom_conditions) > 1:
+            # We have at least one valid range condition plus overdue
+            range_condition = db.and_(*custom_conditions[1:])
+            tasks_query = tasks_query.filter(db.or_(overdue_condition, range_condition))
+        else:
+            # Only overdue condition remains if dates were invalid
+            tasks_query = tasks_query.filter(overdue_condition)
     status_order = db.case(
         (Task.status == 'In Progress', 0),
         (Task.status == 'In Review', 1),
@@ -278,7 +360,16 @@ def dashboard():
         all_tags=all_tags, 
         sort_order=sort_order,
         all_areas=all_areas,  # NEW: Pass areas to template
-        current_user_is_gerente=current_user.can_see_all_areas()  # NEW
+        current_user_is_gerente=current_user.can_see_all_areas(),  # NEW
+        show_blocked=show_blocked,  # NEW: Pass blocked filter state
+        filter_period=filter_period,
+        filter_date_from=filter_date_from,
+        filter_date_to=filter_date_to,
+        filter_status=filter_status, # Also pass other filters back to maintain state
+        filter_tag=filter_tag,
+        filter_assignee=filter_assignee,
+        filter_area=filter_area,
+        filter_creator=filter_creator,
     )
 
 @main_bp.route('/task/new', methods=['GET', 'POST'])
@@ -447,8 +538,11 @@ def create_task():
         subtask_descriptions = request.form.getlist('subtask_description[]')
         subtask_priorities = request.form.getlist('subtask_priority[]')
         subtask_assignees = request.form.getlist('subtask_assignee[]')
+        subtask_assignees = request.form.getlist('subtask_assignee[]')
         subtask_due_dates = request.form.getlist('subtask_due_date[]')
         subtask_due_times = request.form.getlist('subtask_due_time[]')
+        subtask_start_dates = request.form.getlist('subtask_start_date[]')
+        subtask_start_times = request.form.getlist('subtask_start_time[]')
         subtask_parent_paths = request.form.getlist('subtask_parent_path[]')
         
         # First pass: create all subtasks and store by index
@@ -479,6 +573,16 @@ def create_task():
                     except ValueError:
                         subtask_due_date = due_date  # Fallback to parent's
                 
+                # Get planned_start_date (or inherit from parent)
+                subtask_planned_start = new_task.planned_start_date # Default inheretance
+                if i < len(subtask_start_dates) and subtask_start_dates[i]:
+                    try:
+                        subtask_sdate_str = subtask_start_dates[i]
+                        subtask_stime_str = subtask_start_times[i] if i < len(subtask_start_times) and subtask_start_times[i] else '08:00'
+                        subtask_planned_start = datetime.strptime(f"{subtask_sdate_str} {subtask_stime_str}", "%Y-%m-%d %H:%M")
+                    except ValueError:
+                        pass # Keep default inheritance
+
                 # Get parent path to determine if this is a child of another subtask
                 parent_path = subtask_parent_paths[i] if i < len(subtask_parent_paths) else ''
                 
@@ -493,7 +597,7 @@ def create_task():
                     area_id=new_task.area_id,  # Inherit area
                     parent_id=new_task.id,  # Default to main task (may be changed)
                     enabled=False,  # Start disabled (blocked by parent)
-                    planned_start_date=new_task.planned_start_date  # Inherit start date if any
+                    planned_start_date=subtask_planned_start  # Use calculated or inherited start date
                 )
                 
                 # Assign user if specified
@@ -1426,6 +1530,14 @@ def update_task_status(task_id):
             'error': f'Estado invalido. Valores validos: {", ".join(VALID_STATUSES)}'
         }), 400
     
+    # Check if task is blocked (disabled)
+    if not task.enabled:
+        parent_info = f" (Esperando tarea #{task.parent.id})" if task.parent else ""
+        return jsonify({
+            'success': False, 
+            'error': f'Esta tarea está bloqueada y no puede cambiar de estado{parent_info}'
+        }), 403
+    
     # Check permission
     allowed, error_msg = can_change_task_status(current_user, task, new_status)
     if not allowed:
@@ -1444,7 +1556,19 @@ def update_task_status(task_id):
         task.in_review_by_id = current_user.id
     elif new_status == 'Completed' and not task.completed_at:
         task.completed_at = now_utc()
-        task.completed_by_id = current_user.id
+        
+        # If completing from "In Review", credit goes to the person who did the work
+        # and the current user (supervisor) is tracked as the approver
+        if old_status == 'In Review' and task.in_review_by_id:
+            # The person who sent to review did the work
+            task.completed_by_id = task.in_review_by_id
+            # The current user (supervisor) approved it
+            task.approved_by_id = current_user.id
+            task.approved_at = now_utc()
+        else:
+            # Direct completion (not from review) - current user gets credit
+            task.completed_by_id = current_user.id
+        
         if data.get('comment'):
             task.completion_comment = data.get('comment')
         # Enable child tasks when parent is completed
@@ -1464,6 +1588,45 @@ def update_task_status(task_id):
         task.in_review_by_id = None
         task.completed_at = None
         task.completed_by_id = None
+        task.approved_at = None
+        task.approved_by_id = None
+    elif new_status == 'Anulado':
+        # 1. Update current task first
+        task.status = 'Anulado'
+        task.enabled = False
+        task.completed_at = now_utc()
+        task.completed_by_id = current_user.id
+        task.last_edited_by_id = current_user.id
+        task.last_edited_at = now_utc()
+        
+        # 2. Robust Cascade: Propagate to all descendants iteratively
+        # We use flush() to make sure the DB sees the parent's generic state
+        db.session.flush()
+        
+        from sqlalchemy.orm import aliased
+        Parent = aliased(Task)
+        
+        # Safety limit to prevent infinite loops (max depth 100)
+        for _ in range(100):
+            # Find any task that is NOT annulled, but whose parent IS annulled
+            orphans = Task.query.join(Parent, Task.parent)\
+                .filter(Task.status != 'Anulado')\
+                .filter(Parent.status == 'Anulado')\
+                .all()
+            
+            if not orphans:
+                break
+                
+            for child in orphans:
+                child.status = 'Anulado'
+                child.enabled = False
+                child.completed_at = now_utc()
+                child.completed_by_id = current_user.id
+                child.last_edited_by_id = current_user.id
+                child.last_edited_at = now_utc()
+            
+            # Flush changes so next iteration sees these as annulled parents
+            db.session.flush()
     
     task.last_edited_by_id = current_user.id
     task.last_edited_at = now_utc()
@@ -1508,46 +1671,89 @@ def scrum_board():
     # Get filter parameters
     filter_area = request.args.get('area')
     filter_assignee = request.args.get('assignee')
-    filter_period = request.args.get('period', 'today')  # Period filter: today, week, month, custom, all
+    filter_period = request.args.get('period', 'week')  # Period filter: today, week, month, custom, all
     filter_date_from = request.args.get('date_from')  # Custom range start
     filter_date_to = request.args.get('date_to')  # Custom range end
+    show_blocked = request.args.get('show_blocked', 'true')  # Show blocked tasks (default: true)
     
-    # Base query - only enabled tasks, exclude Anulado
+    # Base query - exclude Anulado, optionally include disabled tasks
     query = Task.query.options(
         joinedload(Task.assignees),
         joinedload(Task.tags),
-        joinedload(Task.area)
-    ).filter(Task.enabled == True, Task.status != 'Anulado')
+        joinedload(Task.area),
+        joinedload(Task.parent)  # Load parent for blocked tasks
+    ).filter(Task.status != 'Anulado')
+    
+    # Filter by enabled status
+    if show_blocked != 'true':
+        query = query.filter(Task.enabled == True)
     
     # Apply date/period filter
+    # ALWAYS include overdue tasks (past due date, not completed)
     today = date.today()
+    overdue_condition = db.and_(
+        db.func.date(Task.due_date) < today,
+        Task.status.in_(['Pending', 'In Progress', 'In Review'])
+    )
+    
     if filter_period == 'today':
-        query = query.filter(db.func.date(Task.due_date) == today)
+        # Show tasks that: start today OR due today OR in progress/review OR overdue
+        query = query.filter(
+            db.or_(
+                db.func.date(Task.due_date) == today,
+                db.func.date(Task.planned_start_date) == today,
+                Task.status.in_(['In Progress', 'In Review']),
+                overdue_condition  # Always show overdue
+            )
+        )
     elif filter_period == 'week':
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
-        query = query.filter(db.func.date(Task.due_date) >= week_start, db.func.date(Task.due_date) <= week_end)
+        # Show tasks in this week OR in progress/review OR overdue
+        query = query.filter(
+            db.or_(
+                db.and_(db.func.date(Task.due_date) >= week_start, db.func.date(Task.due_date) <= week_end),
+                db.and_(db.func.date(Task.planned_start_date) >= week_start, db.func.date(Task.planned_start_date) <= week_end),
+                Task.status.in_(['In Progress', 'In Review']),
+                overdue_condition  # Always show overdue
+            )
+        )
     elif filter_period == 'month':
         month_start = today.replace(day=1)
         if today.month == 12:
             month_end = today.replace(day=31)
         else:
             month_end = (today.replace(month=today.month + 1, day=1) - timedelta(days=1))
-        query = query.filter(db.func.date(Task.due_date) >= month_start, db.func.date(Task.due_date) <= month_end)
+        # Show tasks in this month OR in progress/review OR overdue
+        query = query.filter(
+            db.or_(
+                db.and_(db.func.date(Task.due_date) >= month_start, db.func.date(Task.due_date) <= month_end),
+                db.and_(db.func.date(Task.planned_start_date) >= month_start, db.func.date(Task.planned_start_date) <= month_end),
+                Task.status.in_(['In Progress', 'In Review']),
+                overdue_condition  # Always show overdue
+            )
+        )
     elif filter_period == 'custom':
-        # Custom date range
+        # Custom date range - filter by due date or planned start date, plus overdue
+        custom_conditions = [overdue_condition]  # Always include overdue
+        
         if filter_date_from:
             try:
                 date_from_obj = datetime.strptime(filter_date_from, '%Y-%m-%d').date()
-                query = query.filter(db.func.date(Task.due_date) >= date_from_obj)
+                custom_conditions.append(db.func.date(Task.due_date) >= date_from_obj)
+                custom_conditions.append(db.func.date(Task.planned_start_date) >= date_from_obj)
             except ValueError:
                 pass
         if filter_date_to:
             try:
                 date_to_obj = datetime.strptime(filter_date_to, '%Y-%m-%d').date()
-                query = query.filter(db.func.date(Task.due_date) <= date_to_obj)
+                custom_conditions.append(db.func.date(Task.due_date) <= date_to_obj)
+                custom_conditions.append(db.func.date(Task.planned_start_date) <= date_to_obj)
             except ValueError:
                 pass
+        
+        if custom_conditions:
+            query = query.filter(db.or_(*custom_conditions))
     # if filter_period == 'all', no date filter is applied
     
     # Role-based visibility
@@ -3035,6 +3241,16 @@ def manage_templates():
             time_spent = int(time_spent_str) if time_spent_str else 0
         except ValueError:
             time_spent = 0
+            
+        # Parse start config
+        start_days_offset = int(request.form.get('start_days_offset', 0))
+        start_time_str = request.form.get('start_time')
+        start_time = None
+        if start_time_str:
+            try:
+                start_time = datetime.strptime(start_time_str, '%H:%M').time()
+            except ValueError:
+                pass
         
         # Check if template name already exists
         if TaskTemplate.query.filter_by(name=name).first():
@@ -3054,7 +3270,9 @@ def manage_templates():
             default_days=default_days,
             created_by_id=current_user.id,
             time_spent=time_spent,
-            area_id=area_id
+            area_id=area_id,
+            start_days_offset=start_days_offset,
+            start_time=start_time
         )
         
         # Add tags
@@ -3070,7 +3288,10 @@ def manage_templates():
         subtask_titles = request.form.getlist('subtask_title[]')
         subtask_descriptions = request.form.getlist('subtask_description[]')
         subtask_priorities = request.form.getlist('subtask_priority[]')
+        subtask_priorities = request.form.getlist('subtask_priority[]')
         subtask_days_offsets = request.form.getlist('subtask_days_offset[]')
+        subtask_start_days_offsets = request.form.getlist('subtask_start_days_offset[]')
+        subtask_start_times = request.form.getlist('subtask_start_time[]')
         subtask_parent_paths = request.form.getlist('subtask_parent_path[]')
         
         # First pass: create all subtasks and store by path
@@ -3088,6 +3309,20 @@ def manage_templates():
                     except ValueError:
                         st_days_offset = 0
                 
+                st_start_days_offset = 0
+                if i < len(subtask_start_days_offsets) and subtask_start_days_offsets[i]:
+                    try:
+                        st_start_days_offset = int(subtask_start_days_offsets[i])
+                    except ValueError:
+                        st_start_days_offset = 0
+                
+                st_start_time = None
+                if i < len(subtask_start_times) and subtask_start_times[i]:
+                    try:
+                        st_start_time = datetime.strptime(subtask_start_times[i], '%H:%M').time()
+                    except ValueError:
+                        st_start_time = None
+                
                 # Get parent path (empty string = top-level, "0" = child of path 0, etc.)
                 parent_path = subtask_parent_paths[i] if i < len(subtask_parent_paths) else ''
                 
@@ -3097,6 +3332,8 @@ def manage_templates():
                     description=st_description,
                     priority=st_priority,
                     days_offset=st_days_offset,
+                    start_days_offset=st_start_days_offset,
+                    start_time=st_start_time,
                     order=i,
                     parent_id=None  # Will be set in second pass
                 )
@@ -3211,6 +3448,17 @@ def edit_template(template_id):
         template.description = request.form.get('description', '')
         template.priority = request.form.get('priority', 'Normal')
         template.default_days = int(request.form.get('default_days', 1))
+        template.start_days_offset = int(request.form.get('start_days_offset', 0))
+        
+        start_time_str = request.form.get('start_time')
+        if start_time_str:
+            try:
+                template.start_time = datetime.strptime(start_time_str, '%H:%M').time()
+            except ValueError:
+                template.start_time = None
+        else:
+            template.start_time = None
+            
         template.time_spent = int(request.form.get('time_spent', 0)) if request.form.get('time_spent') else None
         
         # Update tags
@@ -3230,6 +3478,8 @@ def edit_template(template_id):
         subtask_descriptions = request.form.getlist('subtask_description[]')
         subtask_priorities = request.form.getlist('subtask_priority[]')
         subtask_days_offsets = request.form.getlist('subtask_days_offset[]')
+        subtask_start_days_offsets = request.form.getlist('subtask_start_days_offset[]')
+        subtask_start_times = request.form.getlist('subtask_start_time[]')
         subtask_parent_paths = request.form.getlist('subtask_parent_path[]')
         
         path_to_subtask = {}
@@ -3246,6 +3496,20 @@ def edit_template(template_id):
                     except ValueError:
                         st_days_offset = 0
                 
+                st_start_days_offset = 0
+                if i < len(subtask_start_days_offsets) and subtask_start_days_offsets[i]:
+                    try:
+                        st_start_days_offset = int(subtask_start_days_offsets[i])
+                    except ValueError:
+                        st_start_days_offset = 0
+                
+                st_start_time = None
+                if i < len(subtask_start_times) and subtask_start_times[i]:
+                    try:
+                        st_start_time = datetime.strptime(subtask_start_times[i], '%H:%M').time()
+                    except ValueError:
+                        st_start_time = None
+                
                 parent_path = subtask_parent_paths[i] if i < len(subtask_parent_paths) else ''
                 
                 subtask_template = SubtaskTemplate(
@@ -3254,6 +3518,8 @@ def edit_template(template_id):
                     description=st_description,
                     priority=st_priority,
                     days_offset=st_days_offset,
+                    start_days_offset=st_start_days_offset,
+                    start_time=st_start_time,
                     order=i,
                     parent_id=None
                 )
@@ -3296,7 +3562,22 @@ def edit_template(template_id):
         return redirect(url_for('main.manage_templates'))
     
     # Get existing subtask templates for display
-    subtask_templates = SubtaskTemplate.query.filter_by(template_id=template.id).order_by(SubtaskTemplate.order).all()
+    subtask_templates_obj = SubtaskTemplate.query.filter_by(template_id=template.id).order_by(SubtaskTemplate.order).all()
+    
+    # Convert to list of dicts for JSON serialization (handling start_time objects)
+    subtask_templates = []
+    for st in subtask_templates_obj:
+        subtask_templates.append({
+            'id': st.id,
+            'title': st.title,
+            'description': st.description or '',
+            'priority': st.priority,
+            'days_offset': st.days_offset,
+            'start_days_offset': st.start_days_offset,
+            'start_time': st.start_time.strftime('%H:%M') if st.start_time else '',
+            'parent_id': st.parent_id,
+            'order': st.order
+        })
     
     return render_template('edit_template.html', 
                           template=template, 
@@ -3324,6 +3605,8 @@ def get_template_data(template_id):
             'description': st.description or '',
             'priority': st.priority,
             'days_offset': st.days_offset,
+            'start_days_offset': st.start_days_offset,
+            'start_time': st.start_time.strftime('%H:%M') if st.start_time else None,
             'parent_id': st.parent_id
         })
     
@@ -3331,6 +3614,8 @@ def get_template_data(template_id):
         'title': template.title,
         'description': template.description or '',
         'priority': template.priority,
+        'start_days_offset': template.start_days_offset,
+        'start_time': template.start_time.strftime('%H:%M') if template.start_time else None,
         'due_date': due_date.strftime('%Y-%m-%d'),
         'tag_ids': [tag.id for tag in template.tags],
         'time_spent': template.time_spent or 0,
@@ -4233,4 +4518,91 @@ def activity_log():
                           current_filter_action=filter_action,
                           current_filter_area=filter_area,
                           today=today)
+
+
+# --- Helper for Template Subtasks (Appended) ---
+def create_subtasks_from_template(template, parent_task, assignees=None, creator=None, area_id=None):
+    """
+    Creates subtasks based on a template, handling hierarchy and start times.
+    Appended to ensure latest version is used.
+    """
+    from models import Task, SubtaskTemplate, User
+    from extensions import db
+    from datetime import datetime, timedelta
+    
+    # Get subtask templates
+    st_templates = SubtaskTemplate.query.filter_by(template_id=template.id).order_by(SubtaskTemplate.order).all()
+    
+    # Map for hierarchy
+    id_to_task = {}
+    
+    # 1. Create all subtasks
+    for st in st_templates:
+        # Determine start datetime
+        subtask_start_date = None
+        if parent_task.planned_start_date:
+            # Base date: Parent Start Date + Offset
+            offset = st.start_days_offset or 0
+            base_date = parent_task.planned_start_date + timedelta(days=offset)
+            
+            # Determine time
+            if st.start_time:
+                # Use specific time
+                subtask_start_date = datetime.combine(base_date.date(), st.start_time)
+            else:
+                # Inherit time from parent
+                subtask_start_date = datetime.combine(base_date.date(), parent_task.planned_start_date.time())
+        else:
+            # Fallback if parent has no start date
+            pass
+            
+        # Determine due date (based on existing logic for days_offset)
+        subtask_due_date = parent_task.due_date
+        if st.days_offset is not None and parent_task.due_date:
+             try:
+                subtask_due_date = parent_task.due_date + timedelta(days=st.days_offset)
+             except:
+                pass
+        
+        # Create Task
+        subtask = Task(
+             title=st.title,
+             description=st.description,
+             priority=st.priority,
+             status='Pending',
+             creator_id=creator.id if creator else parent_task.creator_id,
+             area_id=area_id or parent_task.area_id,
+             parent_id=parent_task.id, # Temp, will be updated in pass 2
+             planned_start_date=subtask_start_date,
+             due_date=subtask_due_date,
+             enabled=False # Initially blocked
+        )
+        
+        # Tags
+        for tag in parent_task.tags:
+             subtask.tags.append(tag)
+        
+        # Assignees (from arg)
+        if assignees:
+             for assignee in assignees:
+                 subtask.assignees.append(assignee)
+                 
+        db.session.add(subtask)
+        db.session.flush()
+        id_to_task[st.id] = subtask
+        
+    # 2. Link parents and Enabled status
+    for st in st_templates:
+        child = id_to_task[st.id]
+        if st.parent_id and st.parent_id in id_to_task:
+            parent = id_to_task[st.parent_id]
+            child.parent_id = parent.id
+            # Child blocked by subtask parent
+            child.enabled = False 
+        else:
+            child.parent_id = parent_task.id
+            # Top level subtask - enable if parent is enabled/pending
+            child.enabled = parent_task.enabled if parent_task.enabled else True
+            
+    db.session.commit()
 

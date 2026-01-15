@@ -221,6 +221,37 @@
         color: #94a3b8;
         font-style: italic;
     }
+
+    /* Blocked Task Styles */
+    .task-card.blocked {
+        opacity: 0.65;
+        background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+        border: 1px dashed #94a3b8;
+        cursor: not-allowed;
+    }
+
+    .task-card.blocked:hover {
+        transform: none;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .task-card.blocked .task-title {
+        color: #64748b;
+    }
+
+    /* Anulated Task Styles */
+    .task-card.anulado {
+        opacity: 0.6;
+        background: #f3f4f6;
+        border: 1px solid #d1d5db;
+        filter: grayscale(100%);
+        cursor: not-allowed;
+    }
+
+    .task-card.anulado .task-title {
+        color: #6b7280;
+        text-decoration: line-through;
+    }
 </style>
 
 <div class="card" style="max-width: 100%; padding: 1.5rem;">
@@ -234,52 +265,98 @@
         {% endif %}
     </div>
 
-    <div class="filters-bar">
-        <!-- Period Filter -->
-        <select id="periodFilter" onchange="onPeriodChange()" style="min-width: 140px;">
-            <option value="today" {% if filter_period=='today' %}selected{% endif %}>Hoy</option>
-            <option value="week" {% if filter_period=='week' %}selected{% endif %}>Esta Semana</option>
-            <option value="month" {% if filter_period=='month' %}selected{% endif %}>Este Mes</option>
-            <option value="custom" {% if filter_period=='custom' %}selected{% endif %}>Personalizado</option>
-            <option value="all" {% if filter_period=='all' %}selected{% endif %}>Todas</option>
-        </select>
+    <!-- Improved Filters Section -->
+    <div class="filters-section"
+        style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); padding: 1rem 1.25rem; border-radius: 12px; margin-bottom: 1.5rem; border: 1px solid #e2e8f0;">
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+            <!-- Period Filter -->
+            <div class="filter-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                <label style="font-size: 0.8rem; color: #64748b; font-weight: 600;">
+                    <i class="fas fa-calendar-alt" style="color: #3b82f6;"></i> Período
+                </label>
+                <select id="periodFilter" onchange="onPeriodChange()"
+                    style="padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #e5e7eb; font-size: 0.9rem; min-width: 140px; background: white;">
+                    <option value="today" {% if filter_period=='today' %}selected{% endif %}>Hoy</option>
+                    <option value="week" {% if filter_period=='week' %}selected{% endif %}>Esta Semana</option>
+                    <option value="month" {% if filter_period=='month' %}selected{% endif %}>Este Mes</option>
+                    <option value="custom" {% if filter_period=='custom' %}selected{% endif %}>Personalizado</option>
+                    <option value="all" {% if filter_period=='all' %}selected{% endif %}>Todas</option>
+                </select>
+            </div>
 
-        <!-- Custom Date Range (visible when 'custom' is selected) -->
-        <div id="customDateRange"
-            style="display: {% if filter_period == 'custom' %}flex{% else %}none{% endif %}; align-items: center; gap: 0.5rem;">
-            <label style="font-weight: 600; color: #64748b; font-size: 0.85rem;">Desde:</label>
-            <input type="date" id="dateFrom" value="{{ filter_date_from or '' }}"
-                style="padding: 0.4rem; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 0.85rem;">
-            <label style="font-weight: 600; color: #64748b; font-size: 0.85rem;">Hasta:</label>
-            <input type="date" id="dateTo" value="{{ filter_date_to or '' }}"
-                style="padding: 0.4rem; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 0.85rem;">
-            <button onclick="applyFilters()" class="button-secondary"
-                style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">
-                <i class="fas fa-search"></i> Filtrar
-            </button>
+            <!-- Custom Date Range (visible when 'custom' is selected) -->
+            <div id="customDateRange"
+                style="display: {% if filter_period == 'custom' %}flex{% else %}none{% endif %}; align-items: center; gap: 0.5rem; background: #fff; padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid #e5e7eb;">
+                <label style="font-weight: 600; color: #64748b; font-size: 0.8rem;">Desde:</label>
+                <input type="date" id="dateFrom" value="{{ filter_date_from or '' }}"
+                    style="padding: 0.4rem; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 0.85rem;">
+                <label style="font-weight: 600; color: #64748b; font-size: 0.8rem;">Hasta:</label>
+                <input type="date" id="dateTo" value="{{ filter_date_to or '' }}"
+                    style="padding: 0.4rem; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 0.85rem;">
+                <button onclick="applyFilters()" class="button-secondary"
+                    style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+
+            {% if show_area_filter %}
+            <!-- Area Filter -->
+            <div class="filter-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                <label style="font-size: 0.8rem; color: #64748b; font-weight: 600;">
+                    <i class="fas fa-building" style="color: #8b5cf6;"></i> Área
+                </label>
+                <select id="areaFilter" onchange="applyFilters()"
+                    style="padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #e5e7eb; font-size: 0.9rem; min-width: 150px; background: white;">
+                    <option value="">Todas las áreas</option>
+                    {% for area in all_areas %}
+                    <option value="{{ area.id }}" {% if filter_area|string==area.id|string %}selected{% endif %}>{{
+                        area.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <!-- Assignee Filter -->
+            <div class="filter-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                <label style="font-size: 0.8rem; color: #64748b; font-weight: 600;">
+                    <i class="fas fa-user" style="color: #10b981;"></i> Usuario
+                </label>
+                <select id="assigneeFilter" onchange="applyFilters()"
+                    style="padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #e5e7eb; font-size: 0.9rem; min-width: 180px; background: white;">
+                    <option value="">Todos los usuarios</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {% if filter_assignee|string==user.id|string %}selected{% endif %}>{{
+                        user.full_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Separator -->
+            <div style="flex-grow: 1;"></div>
+
+            <!-- Action Buttons -->
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <!-- Task Count -->
+                <span
+                    style="font-size: 0.85rem; color: #64748b; padding: 0.5rem 0.75rem; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
+                    <i class="fas fa-tasks"></i>
+                    {{ (tasks_by_status['Pending']|length) + (tasks_by_status['In Progress']|length) +
+                    (tasks_by_status['In Review']|length) + (tasks_by_status['Completed']|length) }} tareas
+                </span>
+
+                <!-- Clear Filters Button -->
+                <a href="{{ url_for('main.scrum_board') }}" class="button-secondary"
+                    style="padding: 0.5rem 0.75rem; color: #dc2626; border-color: #fecaca; background: #fef2f2;"
+                    title="Limpiar filtros">
+                    <i class="fas fa-times"></i> Limpiar
+                </a>
+
+                <!-- Toggle to List View -->
+                <a href="{{ url_for('main.dashboard') }}" class="button-secondary" style="padding: 0.5rem 1rem;">
+                    <i class="fas fa-list"></i> Ver lista
+                </a>
+            </div>
         </div>
-
-        {% if show_area_filter %}
-        <select id="areaFilter" onchange="applyFilters()">
-            <option value="">Todas las áreas</option>
-            {% for area in all_areas %}
-            <option value="{{ area.id }}" {% if filter_area|string==area.id|string %}selected{% endif %}>{{ area.name }}
-            </option>
-            {% endfor %}
-        </select>
-        {% endif %}
-
-        <select id="assigneeFilter" onchange="applyFilters()">
-            <option value="">Todos los usuarios</option>
-            {% for user in users %}
-            <option value="{{ user.id }}" {% if filter_assignee|string==user.id|string %}selected{% endif %}>{{
-                user.full_name }}</option>
-            {% endfor %}
-        </select>
-
-        <a href="{{ url_for('main.dashboard') }}" class="button-secondary" style="padding: 0.5rem 1rem;">
-            <i class="fas fa-list"></i> Ver lista
-        </a>
     </div>
 
     <div class="scrum-container">

@@ -135,9 +135,31 @@
         </div>
         <form method="POST" action="{{ url_for('main.create_recurring_task') }}">
             <div class="modal-body">
+                <!-- Template Selector (NEW) -->
+                <div class="form-group"
+                    style="background: #f0fdf4; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px dashed #22c55e;">
+                    <label for="template_id"><i class="fas fa-copy"></i> Usar Plantilla (Opcional)</label>
+                    <select id="template_id" name="template_id" onchange="onTemplateChange(this)">
+                        <option value="">-- Sin plantilla (definir manualmente) --</option>
+                        {% for template in templates %}
+                        <option value="{{ template.id }}" data-title="{{ template.title }}"
+                            data-description="{{ template.description or '' }}" data-priority="{{ template.priority }}"
+                            data-subtasks="{{ template.subtask_templates.count() }}">
+                            {{ template.name }} {% if template.subtask_templates.count() > 0 %}(+{{
+                            template.subtask_templates.count() }} subtareas){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <p style="font-size: 0.8rem; color: #15803d; margin-top: 0.5rem;">
+                        <i class="fas fa-info-circle"></i> Al seleccionar una plantilla, se usarán sus valores y
+                        subtareas.
+                    </p>
+                </div>
+
                 <div class="form-group">
-                    <label for="title"><i class="fas fa-heading"></i> Título</label>
-                    <input type="text" id="title" name="title" required placeholder="Ej: Revisión expedientes">
+                    <label for="title"><i class="fas fa-heading"></i> Título <span id="title-optional-note"
+                            style="display: none; color: #6b7280;">(opcional si usa plantilla)</span></label>
+                    <input type="text" id="title" name="title" placeholder="Ej: Revisión expedientes">
                 </div>
 
                 <div class="form-group">
@@ -678,6 +700,30 @@
 
     function closeModal() {
         document.getElementById('createModal').style.display = 'none';
+    }
+
+    function onTemplateChange(select) {
+        const option = select.options[select.selectedIndex];
+        const titleInput = document.getElementById('title');
+        const descInput = document.getElementById('description');
+        const prioritySelect = document.getElementById('priority');
+        const optionalNote = document.getElementById('title-optional-note');
+
+        if (option.value) {
+            // Template selected - pre-fill fields
+            titleInput.value = option.dataset.title || '';
+            descInput.value = option.dataset.description || '';
+            prioritySelect.value = option.dataset.priority || 'Normal';
+            titleInput.removeAttribute('required');
+            optionalNote.style.display = 'inline';
+        } else {
+            // No template - clear and make title required
+            titleInput.value = '';
+            descInput.value = '';
+            prioritySelect.value = 'Normal';
+            titleInput.setAttribute('required', 'required');
+            optionalNote.style.display = 'none';
+        }
     }
 
     function updateRecurrenceUI() {

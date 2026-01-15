@@ -24,65 +24,67 @@
     <h2><i class="fas fa-plus-square"></i> Nueva Tarea</h2>
     {% endif %}
 
-    <!-- Template Selector - REQUIRED for non-admins -->
-    {% if templates %}
-    <div
-        style="margin-bottom: 1.5rem; padding: 1rem; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 10px; border: 1px solid #bae6fd;">
-        <label style="display: block; font-size: 0.9rem; color: #0369a1; margin-bottom: 0.5rem; font-weight: 600;">
-            <i class="fas fa-magic"></i>
-            {% if current_user.is_admin %}
-            Usar Plantilla (opcional)
-            {% else %}
-            Seleccionar Plantilla <span style="color: #dc2626;">*</span>
-            {% endif %}
-        </label>
-        {% if not current_user.is_admin %}
-        <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">
-            <i class="fas fa-info-circle"></i> Debes seleccionar una plantilla para crear la tarea.
-        </p>
-        {% endif %}
-        <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <select id="templateSelector" onchange="applyTemplate()"
-                style="flex: 1; padding: 0.6rem; border: 1px solid #7dd3fc; border-radius: 6px; background: white;" {%
-                if not current_user.is_admin %}required{% endif %}>
-                <option value="">-- Seleccionar plantilla --</option>
-                {% for template in templates %}
-                <option value="{{ template.id }}">{{ template.name }}</option>
-                {% endfor %}
-            </select>
-            <a href="{{ url_for('main.manage_templates') }}" class="button-secondary"
-                style="padding: 0.6rem 0.8rem; white-space: nowrap;" title="Gestionar plantillas">
-                <i class="fas fa-cog"></i>
-            </a>
-        </div>
-    </div>
-    {% else %}
-    {% if current_user.is_admin or current_user.role == 'supervisor' %}
-    <div style="margin-bottom: 1.5rem; text-align: center;">
-        <div
-            style="margin-bottom: 1rem; color: #b45309; background: #fffbeb; padding: 1rem; border-radius: 8px; border: 1px solid #fcd34d;">
-            <i class="fas fa-info-circle"></i> No hay plantillas disponibles para esta área.
-        </div>
-        <a href="{{ url_for('main.manage_templates') }}" class="button-secondary" style="text-decoration: none;">
-            <i class="fas fa-copy"></i> Crear Primera Plantilla
-        </a>
-    </div>
-    {% else %}
-    <div
-        style="margin-bottom: 1.5rem; padding: 1.5rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; text-align: center;">
-        <i class="fas fa-exclamation-triangle" style="font-size: 2rem; color: #dc2626; margin-bottom: 0.5rem;"></i>
-        <p style="color: #991b1b; font-weight: 600; margin-bottom: 0.5rem;">No hay plantillas disponibles</p>
-        <p style="color: #7f1d1d; font-size: 0.9rem;">Contacta a un supervisor o administrador para crear plantillas.
-        </p>
-    </div>
-    {% endif %}
-    {% endif %}
-
     <form method="POST" id="taskForm">
-        <!-- Hidden field to track if template was used -->
+        <!-- Hidden fields -->
         <input type="hidden" id="template_used" name="template_used" value="">
         {% if parent_task %}
         <input type="hidden" name="parent_id" value="{{ parent_task.id }}">
+        {% endif %}
+
+        <!-- Template Selector - REQUIRED for non-admins -->
+        {% if templates %}
+        <div
+            style="margin-bottom: 1.5rem; padding: 1rem; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 10px; border: 1px solid #bae6fd;">
+            <label style="display: block; font-size: 0.9rem; color: #0369a1; margin-bottom: 0.5rem; font-weight: 600;">
+                <i class="fas fa-magic"></i>
+                {% if current_user.is_admin %}
+                Usar Plantilla (opcional)
+                {% else %}
+                Seleccionar Plantilla <span style="color: #dc2626;">*</span>
+                {% endif %}
+            </label>
+            {% if not current_user.is_admin %}
+            <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">
+                <i class="fas fa-info-circle"></i> Debes seleccionar una plantilla para crear la tarea.
+            </p>
+            {% endif %}
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <select id="templateSelector" name="template_id" onchange="applyTemplate()"
+                    style="flex: 1; padding: 0.6rem; border: 1px solid #7dd3fc; border-radius: 6px; background: white;"
+                    {% if not current_user.is_admin %}required{% endif %}>
+                    <option value="">-- Seleccionar plantilla --</option>
+                    {% for template in templates %}
+                    <option value="{{ template.id }}">{{ template.name }} {% if template.subtask_templates.count() > 0
+                        %}({{ template.subtask_templates.count() }} subtareas){% endif %}</option>
+                    {% endfor %}
+                </select>
+                <a href="{{ url_for('main.manage_templates') }}" class="button-secondary"
+                    style="padding: 0.6rem 0.8rem; white-space: nowrap;" title="Gestionar plantillas">
+                    <i class="fas fa-cog"></i>
+                </a>
+            </div>
+        </div>
+        {% else %}
+        {% if current_user.is_admin or current_user.role == 'supervisor' %}
+        <div style="margin-bottom: 1.5rem; text-align: center;">
+            <div
+                style="margin-bottom: 1rem; color: #b45309; background: #fffbeb; padding: 1rem; border-radius: 8px; border: 1px solid #fcd34d;">
+                <i class="fas fa-info-circle"></i> No hay plantillas disponibles para esta área.
+            </div>
+            <a href="{{ url_for('main.manage_templates') }}" class="button-secondary" style="text-decoration: none;">
+                <i class="fas fa-copy"></i> Crear Primera Plantilla
+            </a>
+        </div>
+        {% else %}
+        <div
+            style="margin-bottom: 1.5rem; padding: 1.5rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; text-align: center;">
+            <i class="fas fa-exclamation-triangle" style="font-size: 2rem; color: #dc2626; margin-bottom: 0.5rem;"></i>
+            <p style="color: #991b1b; font-weight: 600; margin-bottom: 0.5rem;">No hay plantillas disponibles</p>
+            <p style="color: #7f1d1d; font-size: 0.9rem;">Contacta a un supervisor o administrador para crear
+                plantillas.
+            </p>
+        </div>
+        {% endif %}
         {% endif %}
 
         <div class="form-group">
@@ -254,18 +256,18 @@
         <div class="form-group"
             style="background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); padding: 1.25rem; border-radius: 12px; border: 1px solid #ddd6fe;">
             <label style="color: #7c3aed; font-size: 1.1rem;">
-                <i class="fas fa-tasks"></i> Subtareas (opcional)
+                <i class="fas fa-project-diagram"></i> Subtareas (opcional)
             </label>
             <p style="font-size: 0.85rem; color: #8b5cf6; margin-bottom: 1rem;">
-                <i class="fas fa-info-circle"></i> Agrega subtareas que se crearán junto con esta tarea padre. Heredarán
-                área y prioridad.
+                <i class="fas fa-info-circle"></i> Agrega subtareas que se crearán junto con esta tarea padre. Puedes
+                anidar subtareas dentro de otras.
             </p>
 
             <div id="subtasksContainer">
                 <!-- Subtareas dinámicas se agregan aquí -->
             </div>
 
-            <button type="button" onclick="addSubtask()" class="button-secondary"
+            <button type="button" onclick="addSubtask(null)" class="button-secondary"
                 style="width: 100%; background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%); color: white; border: none;">
                 <i class="fas fa-plus-circle"></i> Agregar Subtarea
             </button>
@@ -288,13 +290,18 @@
 <script>
     let subtaskCounter = 0;
 
-    function addSubtask() {
+    function addSubtask(parentContainer, parentPath = '') {
         subtaskCounter++;
-        const container = document.getElementById('subtasksContainer');
+        const container = parentContainer || document.getElementById('subtasksContainer');
+        const currentPath = parentPath ? `${parentPath}.${subtaskCounter}` : `${subtaskCounter}`;
+        const depth = currentPath.split('.').length - 1;
+        const marginLeft = depth * 20;
+
         const subtaskDiv = document.createElement('div');
         subtaskDiv.className = 'subtask-item';
         subtaskDiv.id = `subtask_${subtaskCounter}`;
-        subtaskDiv.style.cssText = 'background: white; padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; border: 1px solid #ddd6fe;';
+        subtaskDiv.dataset.path = currentPath;
+        subtaskDiv.style.cssText = `background: white; padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; margin-left: ${marginLeft}px; border: 1px solid #ddd6fe; border-left: 3px solid ${depth === 0 ? '#8b5cf6' : '#a78bfa'};`;
 
         // Get parent values to pre-fill
         const parentPriority = document.getElementById('priority')?.value || 'Normal';
@@ -303,16 +310,15 @@
 
         subtaskDiv.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                <span style="font-weight: 600; color: #7c3aed; font-size: 1rem;">
-                    <i class="fas fa-tasks"></i> Subtarea ${subtaskCounter}
+                <span style="font-weight: 600; color: #7c3aed; font-size: 0.95rem;">
+                    <i class="fas fa-tasks"></i> Subtarea ${depth > 0 ? '(nivel ' + (depth + 1) + ')' : ''}
                 </span>
-                <button type="button" onclick="removeSubtask(${subtaskCounter})" 
+                <button type="button" onclick="removeSubtask(this)" 
                     style="background: #fee2e2; color: #dc2626; border: none; border-radius: 6px; padding: 0.4rem 0.6rem; cursor: pointer;">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div style="display: grid; gap: 0.75rem;">
-                <!-- Título -->
                 <div>
                     <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
                         <i class="fas fa-heading"></i> Título *
@@ -321,18 +327,16 @@
                         style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
                 </div>
                 
-                <!-- Descripción (opcional) -->
                 <div>
                     <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
                         <i class="fas fa-align-left"></i> Descripción (opcional)
                     </label>
-                    <textarea name="subtask_description[]" rows="2" placeholder="Descripción de la subtarea..."
+                    <textarea name="subtask_description[]" rows="2" placeholder="Descripción..."
                         style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%; resize: vertical;"></textarea>
                 </div>
                 
-                <!-- Fila: Prioridad + Asignado -->
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 150px;">
+                    <div style="flex: 1; min-width: 120px;">
                         <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
                             <i class="fas fa-flag"></i> Prioridad
                         </label>
@@ -342,7 +346,7 @@
                             <option value="Urgente" ${parentPriority === 'Urgente' ? 'selected' : ''}>Urgente</option>
                         </select>
                     </div>
-                    <div style="flex: 1; min-width: 150px;">
+                    <div style="flex: 1; min-width: 120px;">
                         <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
                             <i class="fas fa-user"></i> Asignar a
                         </label>
@@ -355,9 +359,8 @@
                     </div>
                 </div>
                 
-                <!-- Fila: Fecha y Hora de vencimiento -->
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 150px;">
+                    <div style="flex: 1; min-width: 130px;">
                         <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
                             <i class="fas fa-calendar"></i> Fecha vencimiento
                         </label>
@@ -373,13 +376,25 @@
                     </div>
                 </div>
             </div>
+            <input type="hidden" name="subtask_parent_path[]" value="${parentPath}">
+            <div class="subtask-children" data-parent="${currentPath}" style="margin-top: 0.5rem;"></div>
+            <button type="button" onclick="addChildSubtask(this, '${currentPath}')" class="button-secondary" 
+                style="padding: 0.4rem 0.7rem; font-size: 0.85rem; margin-top: 0.5rem; background: #f3e8ff; color: #7c3aed; border: 1px dashed #c4b5fd;">
+                <i class="fas fa-level-down-alt"></i> + Agregar Sub-subtarea
+            </button>
         `;
 
         container.appendChild(subtaskDiv);
     }
 
-    function removeSubtask(id) {
-        const subtaskDiv = document.getElementById(`subtask_${id}`);
+    function addChildSubtask(button, parentPath) {
+        const parentRow = button.closest('.subtask-item');
+        const childrenContainer = parentRow.querySelector('.subtask-children');
+        addSubtask(childrenContainer, parentPath);
+    }
+
+    function removeSubtask(button) {
+        const subtaskDiv = button.closest('.subtask-item');
         if (subtaskDiv) {
             subtaskDiv.remove();
         }
@@ -447,6 +462,11 @@
 
                 updateSelectedTags();
 
+                // Load subtasks from template
+                if (data.subtask_templates && data.subtask_templates.length > 0) {
+                    loadTemplateSubtasks(data.subtask_templates);
+                }
+
                 // Enable submit button for non-admin users
                 const submitBtn = document.getElementById('submitBtn');
                 if (submitBtn) {
@@ -463,6 +483,141 @@
                 console.error('Error loading template:', error);
                 alert('Error al cargar la plantilla');
             });
+    }
+
+    function loadTemplateSubtasks(subtaskTemplates) {
+        // Clear existing subtasks
+        const container = document.getElementById('subtasksContainer');
+        container.innerHTML = '';
+        subtaskCounter = 0;
+
+        // Add a label indicating these are from template
+        const templateLabel = document.createElement('div');
+        templateLabel.style.cssText = 'background: #dbeafe; color: #1e40af; padding: 0.5rem 0.75rem; border-radius: 6px; margin-bottom: 0.75rem; font-size: 0.85rem;';
+        templateLabel.innerHTML = '<i class="fas fa-magic"></i> Subtareas de la plantilla (puedes editarlas antes de crear):';
+        container.appendChild(templateLabel);
+
+        // Build a map of id to path for hierarchy
+        const idToPath = {};
+
+        // First, add top-level subtasks
+        const topLevel = subtaskTemplates.filter(st => st.parent_id === null);
+        topLevel.forEach(st => {
+            const div = addSubtaskWithData(null, '', st);
+            idToPath[st.id] = div.dataset.path;
+        });
+
+        // Then add children
+        subtaskTemplates.filter(st => st.parent_id !== null).forEach(st => {
+            const parentPath = idToPath[st.parent_id];
+            if (parentPath) {
+                const parentDiv = document.querySelector(`[data-path="${parentPath}"]`);
+                if (parentDiv) {
+                    const childrenContainer = parentDiv.querySelector('.subtask-children');
+                    const div = addSubtaskWithData(childrenContainer, parentPath, st);
+                    idToPath[st.id] = div.dataset.path;
+                }
+            }
+        });
+    }
+
+    function addSubtaskWithData(parentContainer, parentPath, data) {
+        subtaskCounter++;
+        const container = parentContainer || document.getElementById('subtasksContainer');
+        const currentPath = parentPath ? `${parentPath}.${subtaskCounter}` : `${subtaskCounter}`;
+        const depth = currentPath.split('.').length - 1;
+        const marginLeft = depth * 20;
+
+        const subtaskDiv = document.createElement('div');
+        subtaskDiv.className = 'subtask-item';
+        subtaskDiv.id = `subtask_${subtaskCounter}`;
+        subtaskDiv.dataset.path = currentPath;
+        subtaskDiv.style.cssText = `background: white; padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; margin-left: ${marginLeft}px; border: 1px solid #ddd6fe; border-left: 3px solid ${depth === 0 ? '#8b5cf6' : '#a78bfa'};`;
+
+        // Get parent values to pre-fill
+        const parentPriority = data.priority || 'Normal';
+        const parentDueDate = document.getElementById('due_date')?.value || '';
+        const parentDueTime = document.getElementById('due_time')?.value || '17:00';
+
+        subtaskDiv.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <span style="font-weight: 600; color: #7c3aed; font-size: 0.95rem;">
+                    <i class="fas fa-tasks"></i> Subtarea ${depth > 0 ? '(nivel ' + (depth + 1) + ')' : ''}
+                </span>
+                <button type="button" onclick="removeSubtask(this)" 
+                    style="background: #fee2e2; color: #dc2626; border: none; border-radius: 6px; padding: 0.4rem 0.6rem; cursor: pointer;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div style="display: grid; gap: 0.75rem;">
+                <div>
+                    <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                        <i class="fas fa-heading"></i> Título *
+                    </label>
+                    <input type="text" name="subtask_title[]" placeholder="Título de la subtarea" required
+                        value="${data.title || ''}"
+                        style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                </div>
+                
+                <div>
+                    <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                        <i class="fas fa-align-left"></i> Descripción (opcional)
+                    </label>
+                    <textarea name="subtask_description[]" rows="2" placeholder="Descripción..."
+                        style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%; resize: vertical;">${data.description || ''}</textarea>
+                </div>
+                
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 120px;">
+                        <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-flag"></i> Prioridad
+                        </label>
+                        <select name="subtask_priority[]" style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                            <option value="Normal" ${parentPriority === 'Normal' ? 'selected' : ''}>Normal</option>
+                            <option value="Media" ${parentPriority === 'Media' ? 'selected' : ''}>Media</option>
+                            <option value="Urgente" ${parentPriority === 'Urgente' ? 'selected' : ''}>Urgente</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1; min-width: 120px;">
+                        <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-user"></i> Asignar a
+                        </label>
+                        <select name="subtask_assignee[]" style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                            <option value="">Sin asignar</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 130px;">
+                        <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-calendar"></i> Fecha vencimiento
+                        </label>
+                        <input type="date" name="subtask_due_date[]" value="${parentDueDate}"
+                            style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                    </div>
+                    <div style="min-width: 100px;">
+                        <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
+                            <i class="fas fa-clock"></i> Hora
+                        </label>
+                        <input type="time" name="subtask_due_time[]" value="${parentDueTime}"
+                            style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" name="subtask_parent_path[]" value="${parentPath}">
+            <div class="subtask-children" data-parent="${currentPath}" style="margin-top: 0.5rem;"></div>
+            <button type="button" onclick="addChildSubtask(this, '${currentPath}')" class="button-secondary" 
+                style="padding: 0.4rem 0.7rem; font-size: 0.85rem; margin-top: 0.5rem; background: #f3e8ff; color: #7c3aed; border: 1px dashed #c4b5fd;">
+                <i class="fas fa-level-down-alt"></i> + Agregar Sub-subtarea
+            </button>
+        `;
+
+        container.appendChild(subtaskDiv);
+        return subtaskDiv;
     }
 
     // Validate dates before form submission

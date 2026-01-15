@@ -2,52 +2,47 @@
 
 {% block content %}
 <div class="card" style="max-width: 900px; margin: 0 auto;">
-    <h2><i class="fas fa-copy"></i> Nueva Plantilla</h2>
+    <h2><i class="fas fa-edit"></i> Editar Plantilla</h2>
 
     <form method="POST">
         <div class="form-group">
             <label for="name"><i class="fas fa-bookmark"></i> Nombre de la Plantilla <span
                     style="color: #dc2626;">*</span></label>
-            <input type="text" id="name" name="name" required
-                placeholder="Ej: Asistencia al público - este nombre identifica la plantilla">
-            <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.25rem;">
-                <i class="fas fa-info-circle"></i> Este nombre aparece en el selector de plantillas
-            </p>
+            <input type="text" id="name" name="name" required value="{{ template.name }}">
         </div>
 
         <div class="form-group">
             <label for="title"><i class="fas fa-heading"></i> Título de la Tarea <span
                     style="color: #dc2626;">*</span></label>
-            <input type="text" id="title" name="title" required placeholder="Título que tendrá la tarea al crearse">
+            <input type="text" id="title" name="title" required value="{{ template.title }}">
         </div>
 
         <div class="form-group">
             <label for="description"><i class="fas fa-align-left"></i> Descripción</label>
-            <textarea id="description" name="description" rows="3"
-                placeholder="Descripción predefinida para la tarea"></textarea>
+            <textarea id="description" name="description" rows="3">{{ template.description or '' }}</textarea>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div class="form-group">
                 <label for="priority"><i class="fas fa-exclamation-circle"></i> Prioridad</label>
                 <select id="priority" name="priority">
-                    <option value="Normal">Normal</option>
-                    <option value="Media">Media</option>
-                    <option value="Urgente">Urgente</option>
+                    <option value="Normal" {% if template.priority=='Normal' %}selected{% endif %}>Normal</option>
+                    <option value="Media" {% if template.priority=='Media' %}selected{% endif %}>Media</option>
+                    <option value="Urgente" {% if template.priority=='Urgente' %}selected{% endif %}>Urgente</option>
                 </select>
             </div>
 
             <div class="form-group">
                 <label for="default_days"><i class="fas fa-calendar-plus"></i> Días para vencimiento</label>
                 <select id="default_days" name="default_days">
-                    <option value="0">Hoy (0 días)</option>
-                    <option value="1">Mañana (1 día)</option>
-                    <option value="2">2 días</option>
-                    <option value="3">3 días</option>
-                    <option value="5">5 días</option>
-                    <option value="7">1 semana</option>
-                    <option value="14">2 semanas</option>
-                    <option value="30">1 mes</option>
+                    <option value="0" {% if template.default_days==0 %}selected{% endif %}>Hoy (0 días)</option>
+                    <option value="1" {% if template.default_days==1 %}selected{% endif %}>Mañana (1 día)</option>
+                    <option value="2" {% if template.default_days==2 %}selected{% endif %}>2 días</option>
+                    <option value="3" {% if template.default_days==3 %}selected{% endif %}>3 días</option>
+                    <option value="5" {% if template.default_days==5 %}selected{% endif %}>5 días</option>
+                    <option value="7" {% if template.default_days==7 %}selected{% endif %}>1 semana</option>
+                    <option value="14" {% if template.default_days==14 %}selected{% endif %}>2 semanas</option>
+                    <option value="30" {% if template.default_days==30 %}selected{% endif %}>1 mes</option>
                 </select>
             </div>
         </div>
@@ -55,8 +50,8 @@
         <div class="form-group">
             <label for="time_spent"><i class="fas fa-clock"></i> Tiempo Estimado (minutos)</label>
             <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                <input type="number" id="time_spent" name="time_spent" min="0" step="1" placeholder="Ej: 30"
-                    style="flex: 1; min-width: 80px; max-width: 120px;">
+                <input type="number" id="time_spent" name="time_spent" min="0" step="1"
+                    value="{{ template.time_spent or '' }}" style="flex: 1; min-width: 80px; max-width: 120px;">
                 <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
                     <button type="button" onclick="document.getElementById('time_spent').value=15"
                         class="time-preset-btn">15m</button>
@@ -77,7 +72,8 @@
             <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
                 {% for tag in available_tags %}
                 <label style="display: inline-flex; align-items: center; cursor: pointer;">
-                    <input type="checkbox" name="tags" value="{{ tag.id }}" style="width: auto; margin-right: 0.3rem;">
+                    <input type="checkbox" name="tags" value="{{ tag.id }}" {% if tag in template.tags %}checked{% endif
+                        %} style="width: auto; margin-right: 0.3rem;">
                     <span class="tag-chip" style="background: {{ tag.color }};">{{ tag.name }}</span>
                 </label>
                 {% endfor %}
@@ -94,7 +90,9 @@
                 <i class="fas fa-info-circle"></i> Define subtareas que se crearán automáticamente. Puedes anidar
                 subtareas dentro de otras.
             </p>
-            <div id="subtask-templates-container"></div>
+            <div id="subtask-templates-container">
+                <!-- Existing subtasks will be loaded here by JavaScript -->
+            </div>
             <button type="button" onclick="addSubtaskTemplate(null)" class="button-secondary"
                 style="width: 100%; background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%); color: white; border: none;">
                 <i class="fas fa-plus-circle"></i> Agregar Subtarea
@@ -102,84 +100,21 @@
         </div>
 
         <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
-            <a href="{{ url_for('main.dashboard') }}"
+            <a href="{{ url_for('main.manage_templates') }}"
                 style="padding: 0.9rem 2rem; text-decoration: none; color: var(--text-light); font-weight: 600; border-radius: 10px; border: 2px solid var(--border-color); transition: var(--transition);">
                 <i class="fas fa-times"></i> Cancelar
             </a>
             <button type="submit">
-                <i class="fas fa-check"></i> Crear Plantilla
+                <i class="fas fa-save"></i> Guardar Cambios
             </button>
         </div>
     </form>
 </div>
 
-<!-- Existing Templates Section -->
-<div class="card" style="max-width: 900px; margin: 2rem auto 0 auto;">
-    <h3><i class="fas fa-list"></i> Plantillas Existentes ({{ templates|length }})</h3>
-    {% if templates %}
-    <div style="display: flex; flex-direction: column; gap: 1rem;">
-        {% for template in templates %}
-        <div
-            style="padding: 1rem; background: #f9fafb; border-radius: 8px; border-left: 4px solid var(--primary-color);">
-            <div style="display: flex; justify-content: space-between; align-items: start;">
-                <div style="flex: 1;">
-                    <h4 style="margin: 0 0 0.25rem 0; color: var(--primary-color);">{{ template.name }}</h4>
-                    <p style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: var(--text-light);">
-                        <strong>Título:</strong> {{ template.title }}
-                    </p>
-                    {% if template.description %}
-                    <p style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: #6b7280;">
-                        {{ template.description[:100] }}{% if template.description|length > 100 %}...{% endif %}
-                    </p>
-                    {% endif %}
-                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-                        <span class="priority-badge priority-{{ template.priority|lower }}">{{ template.priority
-                            }}</span>
-                        <span style="font-size: 0.8rem; color: var(--text-light);">
-                            <i class="fas fa-calendar"></i> +{{ template.default_days }} días
-                        </span>
-                        {% if template.subtask_templates.count() > 0 %}
-                        <span
-                            style="font-size: 0.8rem; background: #ede9fe; color: #7c3aed; padding: 0.15rem 0.5rem; border-radius: 12px;">
-                            <i class="fas fa-project-diagram"></i> {{ template.subtask_templates.count() }} subtareas
-                        </span>
-                        {% endif %}
-                        {% for tag in template.tags %}
-                        <span class="tag-chip" style="background: {{ tag.color }}; font-size: 0.7rem;">{{ tag.name
-                            }}</span>
-                        {% endfor %}
-                    </div>
-                </div>
-                <div style="display: flex; gap: 0.5rem;">
-                    <a href="{{ url_for('main.edit_template', template_id=template.id) }}" class="button-secondary"
-                        style="padding: 0.4rem 0.6rem; color: #0369a1;" title="Editar plantilla">
-                        <i class="fas fa-edit"></i>
-                    </a>
-                    <form action="{{ url_for('main.delete_template', template_id=template.id) }}" method="POST"
-                        onsubmit="return confirm('¿Eliminar esta plantilla?');" style="margin: 0;">
-                        <button type="submit" class="button-secondary" style="padding: 0.4rem 0.6rem; color: #dc2626;"
-                            title="Eliminar plantilla">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div style="text-align: center; padding: 2rem; color: var(--text-light);">
-        <i class="fas fa-copy" style="font-size: 3rem; opacity: 0.3; margin-bottom: 1rem;"></i>
-        <p>No hay plantillas creadas.</p>
-        <p style="font-size: 0.9rem;">Crea tu primera plantilla usando el formulario de arriba.</p>
-    </div>
-    {% endif %}
-</div>
-
 <script>
     let subtaskTemplateCount = 0;
 
-    function addSubtaskTemplate(parentContainer, parentPath = '') {
+    function addSubtaskTemplate(parentContainer, parentPath = '', prefill = null) {
         const container = parentContainer || document.getElementById('subtask-templates-container');
         const index = subtaskTemplateCount++;
         const currentPath = parentPath ? `${parentPath}.${index}` : `${index}`;
@@ -190,6 +125,12 @@
         div.className = 'subtask-template-row';
         div.dataset.path = currentPath;
         div.style.cssText = `background: white; padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; margin-left: ${marginLeft}px; border: 1px solid #ddd6fe; border-left: 3px solid ${depth === 0 ? '#8b5cf6' : '#a78bfa'};`;
+
+        const title = prefill ? prefill.title : '';
+        const description = prefill ? prefill.description : '';
+        const priority = prefill ? prefill.priority : 'Normal';
+        const daysOffset = prefill ? prefill.days_offset : 0;
+
         div.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
                 <span style="font-weight: 600; color: #7c3aed; font-size: 0.9rem;">
@@ -206,6 +147,7 @@
                         <i class="fas fa-heading"></i> Título *
                     </label>
                     <input type="text" name="subtask_title[]" placeholder="Título de la subtarea" required
+                        value="${title}"
                         style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
                 </div>
                 <div>
@@ -213,7 +155,7 @@
                         <i class="fas fa-align-left"></i> Descripción (opcional)
                     </label>
                     <textarea name="subtask_description[]" rows="2" placeholder="Descripción..."
-                        style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%; resize: vertical;"></textarea>
+                        style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%; resize: vertical;">${description}</textarea>
                 </div>
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                     <div style="flex: 1; min-width: 120px;">
@@ -221,16 +163,16 @@
                             <i class="fas fa-flag"></i> Prioridad
                         </label>
                         <select name="subtask_priority[]" style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
-                            <option value="Normal">Normal</option>
-                            <option value="Media">Media</option>
-                            <option value="Urgente">Urgente</option>
+                            <option value="Normal" ${priority === 'Normal' ? 'selected' : ''}>Normal</option>
+                            <option value="Media" ${priority === 'Media' ? 'selected' : ''}>Media</option>
+                            <option value="Urgente" ${priority === 'Urgente' ? 'selected' : ''}>Urgente</option>
                         </select>
                     </div>
                     <div style="min-width: 100px;">
                         <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.25rem; display: block;">
                             <i class="fas fa-calendar-plus"></i> + Días
                         </label>
-                        <input type="number" name="subtask_days_offset[]" min="0" value="0" 
+                        <input type="number" name="subtask_days_offset[]" min="0" value="${daysOffset}" 
                             style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;"
                             title="Días adicionales desde la tarea padre">
                     </div>
@@ -244,6 +186,8 @@
             </button>
         `;
         container.appendChild(div);
+
+        return div;
     }
 
     function addChildSubtask(button, parentPath) {
@@ -256,5 +200,49 @@
         const row = button.closest('.subtask-template-row');
         row.remove();
     }
+
+    // Load existing subtasks on page load
+    document.addEventListener('DOMContentLoaded', function () {
+        const existingSubtasks = {{ subtask_templates | tojson | safe
+    }};
+
+    // Build a map of ID to subtask for easy lookup
+    const idToSubtask = {};
+    existingSubtasks.forEach(st => {
+        idToSubtask[st.id] = st;
+    });
+
+    // First, add all top-level subtasks
+    const topLevel = existingSubtasks.filter(st => st.parent_id === null);
+    const idToPath = {};
+
+    topLevel.forEach(st => {
+        const div = addSubtaskTemplate(null, '', {
+            title: st.title,
+            description: st.description || '',
+            priority: st.priority,
+            days_offset: st.days_offset
+        });
+        idToPath[st.id] = div.dataset.path;
+    });
+
+    // Then add children (simple one level for now)
+    existingSubtasks.filter(st => st.parent_id !== null).forEach(st => {
+        const parentPath = idToPath[st.parent_id];
+        if (parentPath) {
+            const parentDiv = document.querySelector(`[data-path="${parentPath}"]`);
+            if (parentDiv) {
+                const childrenContainer = parentDiv.querySelector('.subtask-children');
+                const div = addSubtaskTemplate(childrenContainer, parentPath, {
+                    title: st.title,
+                    description: st.description || '',
+                    priority: st.priority,
+                    days_offset: st.days_offset
+                });
+                idToPath[st.id] = div.dataset.path;
+            }
+        }
+    });
+    });
 </script>
 {% endblock %}

@@ -91,13 +91,27 @@ def generate_daily_tasks(app):
                 # Create the due datetime
                 due_datetime = datetime.combine(today, rt.due_time)
                 
+                # Determine task properties - use template if available, otherwise use inline values
+                if rt.template_id and rt.template:
+                    template = rt.template
+                    task_title = template.title
+                    task_description = template.description
+                    task_priority = template.priority
+                    task_area_id = template.area_id or rt.area_id
+                else:
+                    task_title = rt.title
+                    task_description = rt.description
+                    task_priority = rt.priority
+                    task_area_id = rt.area_id
+                
                 # Create new task
                 task = Task(
-                    title=rt.title,
-                    description=rt.description,
-                    priority=rt.priority,
+                    title=task_title,
+                    description=task_description,
+                    priority=task_priority,
                     due_date=due_datetime,
                     creator_id=rt.creator_id,
+                    area_id=task_area_id,
                     time_spent=rt.time_spent,
                     recurring_task_id=rt.id,
                     status='Pending',
@@ -108,11 +122,29 @@ def generate_daily_tasks(app):
                 for user in rt.assignees:
                     task.assignees.append(user)
                 
-                # Copy tags
-                for tag in rt.tags:
-                    task.tags.append(tag)
+                # Copy tags - from template if available, otherwise from recurring task
+                if rt.template_id and rt.template:
+                    for tag in rt.template.tags:
+                        task.tags.append(tag)
+                else:
+                    for tag in rt.tags:
+                        task.tags.append(tag)
                 
                 db.session.add(task)
+                db.session.flush()  # Get task ID for subtask creation
+                
+                # Create subtasks from template if template exists
+                if rt.template_id and rt.template:
+                    from routes import create_subtasks_from_template
+                    from models import User
+                    creator = User.query.get(rt.creator_id)
+                    create_subtasks_from_template(
+                        template=rt.template,
+                        parent_task=task,
+                        assignees=list(rt.assignees),
+                        creator=creator,
+                        area_id=task_area_id
+                    )
                 
                 # Update last generated date
                 rt.last_generated_date = today

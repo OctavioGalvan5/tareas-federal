@@ -200,6 +200,32 @@ class TaskTemplate(db.Model):
     def __repr__(self):
         return f'<TaskTemplate {self.name}>'
 
+
+class SubtaskTemplate(db.Model):
+    """
+    Subtareas de plantilla: define la jerarquía de subtareas dentro de una plantilla.
+    Soporta anidación infinita (subtareas de subtareas).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Pertenece a una plantilla principal
+    template_id = db.Column(db.Integer, db.ForeignKey('task_template.id', ondelete='CASCADE'), nullable=False)
+    template = db.relationship('TaskTemplate', backref=db.backref('subtask_templates', lazy='dynamic', cascade='all, delete-orphan'))
+    
+    # Jerarquía de subtareas (NULL = subtarea directa de la plantilla/tarea padre)
+    parent_id = db.Column(db.Integer, db.ForeignKey('subtask_template.id', ondelete='CASCADE'), nullable=True)
+    parent = db.relationship('SubtaskTemplate', remote_side=[id], backref=db.backref('children', lazy='dynamic'))
+    
+    # Datos de la subtarea
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    priority = db.Column(db.String(20), default='Normal')
+    days_offset = db.Column(db.Integer, default=0)  # Días desde tarea padre para due_date
+    order = db.Column(db.Integer, default=0)  # Orden de visualización
+    
+    def __repr__(self):
+        return f'<SubtaskTemplate {self.title}>'
+
 # Association table for Many-to-Many relationship between Expirations and Tags
 expiration_tags = db.Table('expiration_tags',
     db.Column('expiration_id', db.Integer, db.ForeignKey('expiration.id', ondelete='CASCADE'), primary_key=True),
@@ -287,6 +313,10 @@ class RecurringTask(db.Model):
                                 backref=db.backref('assigned_recurring_tasks', lazy='dynamic'))
     tags = db.relationship('Tag', secondary=recurring_task_tags,
                            backref=db.backref('recurring_tasks', lazy='dynamic'))
+    
+    # Optional: Use template instead of inline title/description
+    template_id = db.Column(db.Integer, db.ForeignKey('task_template.id'), nullable=True)
+    template = db.relationship('TaskTemplate', backref='recurring_tasks')
     
     def __repr__(self):
         return f'<RecurringTask {self.title}>'

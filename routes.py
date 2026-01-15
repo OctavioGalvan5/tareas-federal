@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, make_response
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
-from models import User, Task, Tag, TaskTemplate, Expiration, RecurringTask, ActivityLog
+from models import User, Task, Tag, TaskTemplate, SubtaskTemplate, Expiration, RecurringTask, ActivityLog
 from datetime import datetime, date, timedelta
 from pdf_utils import generate_task_pdf
 from excel_utils import generate_task_excel
@@ -16,6 +16,64 @@ BUENOS_AIRES_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
 def now_utc():
     """Get current datetime in UTC (consistent with other datetimes in the app)."""
     return datetime.utcnow()
+
+
+def create_subtasks_from_template(template, parent_task, assignees, creator, area_id):
+    """
+    Recursively create subtasks from a template's subtask hierarchy.
+    
+    Args:
+        template: TaskTemplate object
+        parent_task: The parent Task that was just created
+        assignees: List of User objects to assign to subtasks
+        creator: User who is creating the tasks
+        area_id: Area ID for the subtasks
+    """
+    from models import SubtaskTemplate
+    
+    def create_children(subtask_templates, parent_task_obj):
+        """Recursively create child tasks from subtask templates."""
+        for st in subtask_templates:
+            # Calculate due date based on parent + offset
+            subtask_due_date = parent_task_obj.due_date + timedelta(days=st.days_offset)
+            
+            # Create the subtask
+            subtask = Task(
+                title=st.title,
+                description=st.description or f'Subtarea de: {parent_task_obj.title}',
+                priority=st.priority,
+                status='Pending',
+                due_date=subtask_due_date,
+                created_at=now_utc(),
+                creator_id=creator.id,
+                area_id=area_id,
+                parent_id=parent_task_obj.id,
+                enabled=parent_task_obj.status == 'Completed'  # Blocked if parent not done
+            )
+            
+            # Assign users
+            for user in assignees:
+                subtask.assignees.append(user)
+            
+            db.session.add(subtask)
+            db.session.flush()  # Get ID for nested children
+            
+            # Recursively create children of this subtask
+            children = SubtaskTemplate.query.filter_by(
+                template_id=template.id,
+                parent_id=st.id
+            ).order_by(SubtaskTemplate.order).all()
+            
+            if children:
+                create_children(children, subtask)
+    
+    # Get top-level subtasks (no parent)
+    top_level = SubtaskTemplate.query.filter_by(
+        template_id=template.id,
+        parent_id=None
+    ).order_by(SubtaskTemplate.order).all()
+    
+    create_children(top_level, parent_task)
 
 
 def log_activity(user, action, description, target_type=None, target_id=None, area_id=None, details=None):
@@ -156,8 +214,9 @@ def dashboard():
     if filter_status:
         if filter_status == 'Overdue':
             today_date = date.today()
+            # Include Pending, In Progress, and In Review tasks that are overdue
             tasks_query = tasks_query.filter(
-                Task.status == 'Pending',
+                Task.status.in_(['Pending', 'In Progress', 'In Review']),
                 db.func.date(Task.due_date) < today_date
             )
         elif filter_status in ['Pending', 'In Progress', 'In Review', 'Completed', 'Anulado', 'Scheduled']:
@@ -383,15 +442,19 @@ def create_task():
         db.session.add(new_task)
         db.session.commit()
         
-        # Process inline subtasks (if any)
+        # Process inline subtasks (if any) - with hierarchy support
         subtask_titles = request.form.getlist('subtask_title[]')
         subtask_descriptions = request.form.getlist('subtask_description[]')
         subtask_priorities = request.form.getlist('subtask_priority[]')
         subtask_assignees = request.form.getlist('subtask_assignee[]')
         subtask_due_dates = request.form.getlist('subtask_due_date[]')
         subtask_due_times = request.form.getlist('subtask_due_time[]')
+        subtask_parent_paths = request.form.getlist('subtask_parent_path[]')
         
+        # First pass: create all subtasks and store by index
+        index_to_subtask = {}
         subtasks_created = 0
+        
         for i, title in enumerate(subtask_titles):
             if title.strip():  # Only create if title is not empty
                 # Get description (or default)
@@ -416,6 +479,10 @@ def create_task():
                     except ValueError:
                         subtask_due_date = due_date  # Fallback to parent's
                 
+                # Get parent path to determine if this is a child of another subtask
+                parent_path = subtask_parent_paths[i] if i < len(subtask_parent_paths) else ''
+                
+                # For first pass, set parent_id to main task (will be updated in second pass)
                 subtask = Task(
                     title=title.strip(),
                     description=description,
@@ -424,7 +491,7 @@ def create_task():
                     status='Pending',  # Subtasks start as Pending but disabled
                     creator_id=current_user.id,
                     area_id=new_task.area_id,  # Inherit area
-                    parent_id=new_task.id,  # Link to parent
+                    parent_id=new_task.id,  # Default to main task (may be changed)
                     enabled=False,  # Start disabled (blocked by parent)
                     planned_start_date=new_task.planned_start_date  # Inherit start date if any
                 )
@@ -443,10 +510,58 @@ def create_task():
                     subtask.tags.append(tag)
                 
                 db.session.add(subtask)
+                db.session.flush()  # Get ID for linking
+                
+                # Store subtask by its 1-based index from form (matching frontend counter)
+                # Extract the last number from the path to use as key
+                if parent_path:
+                    current_path = f"{parent_path}.{i+1}"
+                else:
+                    current_path = str(i+1)
+                index_to_subtask[current_path] = subtask
+                index_to_subtask[str(i+1)] = subtask  # Also store by simple index
                 subtasks_created += 1
+        
+        # Second pass: link child subtasks to their parent subtasks
+        for i, title in enumerate(subtask_titles):
+            if title.strip():
+                parent_path = subtask_parent_paths[i] if i < len(subtask_parent_paths) else ''
+                if parent_path:
+                    # This subtask has a parent subtask (not just the main task)
+                    # Find the parent subtask by path
+                    if parent_path in index_to_subtask:
+                        if parent_path:
+                            current_path = f"{parent_path}.{i+1}"
+                        else:
+                            current_path = str(i+1)
+                        
+                        if current_path in index_to_subtask:
+                            # Update the parent_id to point to the parent subtask
+                            index_to_subtask[current_path].parent_id = index_to_subtask[parent_path].id
         
         if subtasks_created > 0:
             db.session.commit()
+        
+        # Also create subtasks from template if a template was selected
+        template_id_str = request.form.get('template_id')
+        if template_id_str:
+            try:
+                template_id = int(template_id_str)
+                template = TaskTemplate.query.get(template_id)
+                if template and template.subtask_templates.count() > 0:
+                    # Get assignees for subtasks (same as main task)
+                    subtask_assignees_list = list(new_task.assignees)
+                    create_subtasks_from_template(
+                        template=template,
+                        parent_task=new_task,
+                        assignees=subtask_assignees_list,
+                        creator=current_user,
+                        area_id=new_task.area_id
+                    )
+                    db.session.commit()
+                    subtasks_created += template.subtask_templates.count()
+            except (ValueError, TypeError):
+                pass  # Invalid template_id, ignore
         
         # Log activity
         log_activity(
@@ -2951,11 +3066,75 @@ def manage_templates():
         db.session.add(template)
         db.session.commit()
         
+        # Process subtask templates (if any) - with hierarchy support
+        subtask_titles = request.form.getlist('subtask_title[]')
+        subtask_descriptions = request.form.getlist('subtask_description[]')
+        subtask_priorities = request.form.getlist('subtask_priority[]')
+        subtask_days_offsets = request.form.getlist('subtask_days_offset[]')
+        subtask_parent_paths = request.form.getlist('subtask_parent_path[]')
+        
+        # First pass: create all subtasks and store by path
+        path_to_subtask = {}
+        subtasks_created = 0
+        
+        for i, st_title in enumerate(subtask_titles):
+            if st_title.strip():
+                st_description = subtask_descriptions[i] if i < len(subtask_descriptions) else ''
+                st_priority = subtask_priorities[i] if i < len(subtask_priorities) else 'Normal'
+                st_days_offset = 0
+                if i < len(subtask_days_offsets) and subtask_days_offsets[i]:
+                    try:
+                        st_days_offset = int(subtask_days_offsets[i])
+                    except ValueError:
+                        st_days_offset = 0
+                
+                # Get parent path (empty string = top-level, "0" = child of path 0, etc.)
+                parent_path = subtask_parent_paths[i] if i < len(subtask_parent_paths) else ''
+                
+                subtask_template = SubtaskTemplate(
+                    template_id=template.id,
+                    title=st_title.strip(),
+                    description=st_description,
+                    priority=st_priority,
+                    days_offset=st_days_offset,
+                    order=i,
+                    parent_id=None  # Will be set in second pass
+                )
+                db.session.add(subtask_template)
+                db.session.flush()  # Get ID
+                
+                # Calculate this subtask's path for children to reference
+                # The path is based on the index in the form, matching frontend logic
+                if parent_path:
+                    current_path = f"{parent_path}.{i}"
+                else:
+                    current_path = str(i)
+                
+                path_to_subtask[current_path] = subtask_template
+                path_to_subtask[str(i)] = subtask_template  # Also store by simple index
+                subtasks_created += 1
+        
+        # Second pass: link children to parents
+        for i, st_title in enumerate(subtask_titles):
+            if st_title.strip():
+                parent_path = subtask_parent_paths[i] if i < len(subtask_parent_paths) else ''
+                if parent_path and parent_path in path_to_subtask:
+                    if parent_path:
+                        current_path = f"{parent_path}.{i}"
+                    else:
+                        current_path = str(i)
+                    
+                    if current_path in path_to_subtask:
+                        path_to_subtask[current_path].parent_id = path_to_subtask[parent_path].id
+        
+        if subtasks_created > 0:
+            db.session.commit()
+        
         # Log activity
         log_activity(
             user=current_user,
             action='template_created',
-            description=f'creó la plantilla "{template.name}"',
+            description=f'creó la plantilla "{template.name}"' + (f' con {subtasks_created} subtarea(s)' if subtasks_created > 0 else ''),
             target_type='template',
             target_id=template.id,
             area_id=template.area_id
@@ -3008,6 +3187,122 @@ def delete_template(template_id):
     flash(f'Plantilla "{name}" eliminada.', 'success')
     return redirect(url_for('main.manage_templates'))
 
+@main_bp.route('/templates/<int:template_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_template(template_id):
+    """Edit an existing task template"""
+    template = TaskTemplate.query.get_or_404(template_id)
+    
+    # Only creator or admin can edit
+    if template.created_by_id != current_user.id and not current_user.is_admin:
+        flash('No tienes permiso para editar esta plantilla.', 'danger')
+        return redirect(url_for('main.manage_templates'))
+    
+    # Get available tags
+    if current_user.is_admin:
+        available_tags = Tag.query.order_by(Tag.name).all()
+    else:
+        user_area_ids = [a.id for a in current_user.areas]
+        available_tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all() if user_area_ids else []
+    
+    if request.method == 'POST':
+        template.name = request.form.get('name', template.name)
+        template.title = request.form.get('title', template.title)
+        template.description = request.form.get('description', '')
+        template.priority = request.form.get('priority', 'Normal')
+        template.default_days = int(request.form.get('default_days', 1))
+        template.time_spent = int(request.form.get('time_spent', 0)) if request.form.get('time_spent') else None
+        
+        # Update tags
+        template.tags.clear()
+        tag_ids = request.form.getlist('tags')
+        for tag_id in tag_ids:
+            tag = Tag.query.get(int(tag_id))
+            if tag:
+                template.tags.append(tag)
+        
+        # Clear existing subtask templates
+        SubtaskTemplate.query.filter_by(template_id=template.id).delete()
+        db.session.flush()
+        
+        # Process new subtask templates (same logic as create)
+        subtask_titles = request.form.getlist('subtask_title[]')
+        subtask_descriptions = request.form.getlist('subtask_description[]')
+        subtask_priorities = request.form.getlist('subtask_priority[]')
+        subtask_days_offsets = request.form.getlist('subtask_days_offset[]')
+        subtask_parent_paths = request.form.getlist('subtask_parent_path[]')
+        
+        path_to_subtask = {}
+        subtasks_created = 0
+        
+        for i, st_title in enumerate(subtask_titles):
+            if st_title.strip():
+                st_description = subtask_descriptions[i] if i < len(subtask_descriptions) else ''
+                st_priority = subtask_priorities[i] if i < len(subtask_priorities) else 'Normal'
+                st_days_offset = 0
+                if i < len(subtask_days_offsets) and subtask_days_offsets[i]:
+                    try:
+                        st_days_offset = int(subtask_days_offsets[i])
+                    except ValueError:
+                        st_days_offset = 0
+                
+                parent_path = subtask_parent_paths[i] if i < len(subtask_parent_paths) else ''
+                
+                subtask_template = SubtaskTemplate(
+                    template_id=template.id,
+                    title=st_title.strip(),
+                    description=st_description,
+                    priority=st_priority,
+                    days_offset=st_days_offset,
+                    order=i,
+                    parent_id=None
+                )
+                db.session.add(subtask_template)
+                db.session.flush()
+                
+                if parent_path:
+                    current_path = f"{parent_path}.{i}"
+                else:
+                    current_path = str(i)
+                path_to_subtask[current_path] = subtask_template
+                path_to_subtask[str(i)] = subtask_template
+                subtasks_created += 1
+        
+        # Second pass: link children to parents
+        for i, st_title in enumerate(subtask_titles):
+            if st_title.strip():
+                parent_path = subtask_parent_paths[i] if i < len(subtask_parent_paths) else ''
+                if parent_path and parent_path in path_to_subtask:
+                    if parent_path:
+                        current_path = f"{parent_path}.{i}"
+                    else:
+                        current_path = str(i)
+                    
+                    if current_path in path_to_subtask:
+                        path_to_subtask[current_path].parent_id = path_to_subtask[parent_path].id
+        
+        db.session.commit()
+        
+        log_activity(
+            user=current_user,
+            action='template_edited',
+            description=f'editó la plantilla "{template.name}"',
+            target_type='template',
+            target_id=template.id,
+            area_id=template.area_id
+        )
+        
+        flash(f'Plantilla "{template.name}" actualizada.', 'success')
+        return redirect(url_for('main.manage_templates'))
+    
+    # Get existing subtask templates for display
+    subtask_templates = SubtaskTemplate.query.filter_by(template_id=template.id).order_by(SubtaskTemplate.order).all()
+    
+    return render_template('edit_template.html', 
+                          template=template, 
+                          available_tags=available_tags,
+                          subtask_templates=subtask_templates)
+
 @main_bp.route('/api/templates/<int:template_id>')
 @login_required
 def get_template_data(template_id):
@@ -3017,13 +3312,29 @@ def get_template_data(template_id):
     # Calculate due date based on default_days
     due_date = date.today() + timedelta(days=template.default_days)
     
+    # Get all subtask templates for this template
+    subtask_templates = SubtaskTemplate.query.filter_by(template_id=template_id).order_by(SubtaskTemplate.order).all()
+    
+    # Build subtask data with hierarchy info
+    subtasks_data = []
+    for st in subtask_templates:
+        subtasks_data.append({
+            'id': st.id,
+            'title': st.title,
+            'description': st.description or '',
+            'priority': st.priority,
+            'days_offset': st.days_offset,
+            'parent_id': st.parent_id
+        })
+    
     return jsonify({
         'title': template.title,
         'description': template.description or '',
         'priority': template.priority,
         'due_date': due_date.strftime('%Y-%m-%d'),
         'tag_ids': [tag.id for tag in template.tags],
-        'time_spent': template.time_spent or 0
+        'time_spent': template.time_spent or 0,
+        'subtask_templates': subtasks_data
     })
 
 
@@ -3449,6 +3760,7 @@ def manage_recurring_tasks():
         recurring_tasks = RecurringTask.query.order_by(RecurringTask.created_at.desc()).all()
         users = User.query.order_by(User.full_name).all()
         available_tags = Tag.query.order_by(Tag.name).all()
+        templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
     else:
         # Supervisor/usuario_plus: only see recurring tasks from their area
         user_area_ids = [a.id for a in current_user.areas]
@@ -3458,15 +3770,18 @@ def manage_recurring_tasks():
             # Only show users from their areas
             users = [u for u in User.query.order_by(User.full_name).all() if any(area in u.areas for area in current_user.areas)]
             available_tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all()
+            templates = TaskTemplate.query.filter(TaskTemplate.area_id.in_(user_area_ids)).order_by(TaskTemplate.name).all()
         else:
             recurring_tasks = []
             users = []
             available_tags = []
+            templates = []
     
     return render_template('manage_recurring_tasks.html',
                            recurring_tasks=recurring_tasks,
                            users=users,
-                           available_tags=available_tags)
+                           available_tags=available_tags,
+                           templates=templates)
 
 
 @main_bp.route('/recurring-tasks/create', methods=['POST'])
@@ -3491,9 +3806,24 @@ def create_recurring_task():
     assignee_ids = request.form.getlist('assignees')
     tag_ids = request.form.getlist('tags')
     
-    # Validations
-    if not title or not recurrence_type or not due_time_str or not start_date_str:
-        flash('Título, tipo de recurrencia, hora y fecha de inicio son requeridos.', 'danger')
+    # NEW: Optional template_id
+    template_id_str = request.form.get('template_id', '')
+    template_id = None
+    selected_template = None
+    if template_id_str:
+        try:
+            template_id = int(template_id_str)
+            selected_template = TaskTemplate.query.get(template_id)
+        except ValueError:
+            pass
+    
+    # Validations - title is optional if template is selected
+    if not selected_template and not title:
+        flash('Título es requerido si no se selecciona una plantilla.', 'danger')
+        return redirect(url_for('main.manage_recurring_tasks'))
+    
+    if not recurrence_type or not due_time_str or not start_date_str:
+        flash('Tipo de recurrencia, hora y fecha de inicio son requeridos.', 'danger')
         return redirect(url_for('main.manage_recurring_tasks'))
     
     if not assignee_ids:
@@ -3547,10 +3877,15 @@ def create_recurring_task():
             custom_dates = custom_dates_str  # Already JSON string from frontend
     
     # Create recurring task
+    # Use template values if template selected, otherwise use form values
+    final_title = title if title else (selected_template.title if selected_template else 'Sin título')
+    final_description = description if description else (selected_template.description if selected_template else '')
+    final_priority = priority if priority != 'Normal' else (selected_template.priority if selected_template else 'Normal')
+    
     new_recurring = RecurringTask(
-        title=title,
-        description=description,
-        priority=priority,
+        title=final_title,
+        description=final_description,
+        priority=final_priority,
         recurrence_type=recurrence_type,
         days_of_week=days_of_week if recurrence_type == 'weekly' else None,
         day_of_month=day_of_month,
@@ -3561,7 +3896,8 @@ def create_recurring_task():
         time_spent=time_spent,
         creator_id=current_user.id,
         is_active=True,
-        area_id=area_id
+        area_id=area_id,
+        template_id=template_id  # NEW: Link to template
     )
     
     # Add assignees

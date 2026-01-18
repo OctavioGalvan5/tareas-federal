@@ -213,6 +213,43 @@
         </div>
         {% endif %}
 
+        <!-- 📁 Process Selector - Link task to a process -->
+        {% if available_processes %}
+        <div class="form-group">
+            <label for="process_id"><i class="fas fa-folder-open"></i> Vincular a Proceso (opcional)</label>
+            <select id="process_id" name="process_id"
+                style="padding: 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
+                <option value="">-- Sin proceso --</option>
+                {% for process in available_processes %}
+                <option value="{{ process.id }}" {% if preselected_process and preselected_process.id==process.id
+                    %}selected{% endif %} style="color: {{ process.process_type.color }};">
+                    {{ process.name }} ({{ process.process_type.name }})
+                </option>
+                {% endfor %}
+            </select>
+            <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.3rem;">
+                <i class="fas fa-info-circle"></i> Si vinculas esta tarea a un proceso, formará parte del flujo de
+                trabajo
+            </p>
+        </div>
+        {% elif preselected_process %}
+        <!-- Process was preselected from process details page -->
+        <div class="form-group">
+            <label><i class="fas fa-folder-open"></i> Proceso</label>
+            <div
+                style="padding: 0.75rem 1rem; background: {{ preselected_process.process_type.color }}15; border: 2px solid {{ preselected_process.process_type.color }}50; border-radius: 8px; display: inline-flex; align-items: center; gap: 0.5rem;">
+                <i class="fas {{ preselected_process.process_type.icon }}"
+                    style="color: {{ preselected_process.process_type.color }};"></i>
+                <span style="font-weight: 600; color: {{ preselected_process.process_type.color }};">{{
+                    preselected_process.name }}</span>
+            </div>
+            <input type="hidden" name="process_id" value="{{ preselected_process.id }}">
+            <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.3rem;">
+                <i class="fas fa-info-circle"></i> Esta tarea se añadirá al proceso seleccionado
+            </p>
+        </div>
+        {% endif %}
+
         <!-- 🔹 Selector de Etiquetas -->
         <div class="form-group">
             <label><i class="fas fa-tags"></i> Etiquetas (opcional)</label>

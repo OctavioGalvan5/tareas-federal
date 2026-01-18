@@ -1,13 +1,13 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, make_response
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
-from models import User, Task, Tag, TaskTemplate, SubtaskTemplate, Expiration, RecurringTask, ActivityLog
+from models import User, Task, Tag, TaskTemplate, SubtaskTemplate, Expiration, RecurringTask, ActivityLog, ProcessType, Process, StatusTransition
 from datetime import datetime, date, timedelta
 from pdf_utils import generate_task_pdf
 from excel_utils import generate_task_excel
 from io import BytesIO
 from utils import calculate_business_days_until
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, subqueryload
 import pytz
 
 # Buenos Aires timezone (for reference, conversion is done in templates)
@@ -115,7 +115,7 @@ admin_bp = Blueprint('admin', __name__)
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
+        return redirect(url_for('main.scrum_board'))
     
     if request.method == 'POST':
         username = request.form.get('username')
@@ -139,7 +139,7 @@ def login():
                     area_id=user.areas[0].id if user.areas else None
                 )
                 
-                return redirect(url_for('main.dashboard'))
+                return redirect(url_for('main.scrum_board'))
         
         print("DEBUG: Login failed")
         flash('Usuario o contraseña incorrectos.', 'danger')
@@ -153,7 +153,13 @@ def logout():
     return redirect(url_for('auth.login'))
 
 # --- Main Routes ---
+# --- Main Routes ---
 @main_bp.route('/')
+@login_required
+def index():
+    return redirect(url_for('main.scrum_board'))
+
+@main_bp.route('/dashboard')
 @login_required
 def dashboard():
     # Import Area model
@@ -392,6 +398,15 @@ def create_task():
         except (ValueError, TypeError):
             parent_task = None
     
+    # Check if linking to a process (process_id passed via query param)
+    preselected_process = None
+    process_id_param = request.args.get('process_id')
+    if process_id_param:
+        try:
+            preselected_process = Process.query.get(int(process_id_param))
+        except (ValueError, TypeError):
+            preselected_process = None
+    
     # Load available areas based on user role
     # Admins see all, others see only their area(s)
     if current_user.is_admin:
@@ -497,6 +512,17 @@ def create_task():
             area_id=area_id  # NEW: Assign area
         )
         
+        # Handle process_id from form
+        process_id_str = request.form.get('process_id')
+        if process_id_str and process_id_str.strip():
+            try:
+                process_id = int(process_id_str)
+                process = Process.query.get(process_id)
+                if process:
+                    new_task.process_id = process_id
+            except (ValueError, TypeError):
+                pass
+        
         # Add assignees
         for user_id in assignee_ids:
             user = User.query.get(int(user_id))
@@ -597,7 +623,8 @@ def create_task():
                     area_id=new_task.area_id,  # Inherit area
                     parent_id=new_task.id,  # Default to main task (may be changed)
                     enabled=False,  # Start disabled (blocked by parent)
-                    planned_start_date=subtask_planned_start  # Use calculated or inherited start date
+                    planned_start_date=subtask_planned_start,  # Use calculated or inherited start date
+                    process_id=new_task.process_id  # Inherit process from parent
                 )
                 
                 # Assign user if specified
@@ -646,26 +673,9 @@ def create_task():
         if subtasks_created > 0:
             db.session.commit()
         
-        # Also create subtasks from template if a template was selected
-        template_id_str = request.form.get('template_id')
-        if template_id_str:
-            try:
-                template_id = int(template_id_str)
-                template = TaskTemplate.query.get(template_id)
-                if template and template.subtask_templates.count() > 0:
-                    # Get assignees for subtasks (same as main task)
-                    subtask_assignees_list = list(new_task.assignees)
-                    create_subtasks_from_template(
-                        template=template,
-                        parent_task=new_task,
-                        assignees=subtask_assignees_list,
-                        creator=current_user,
-                        area_id=new_task.area_id
-                    )
-                    db.session.commit()
-                    subtasks_created += template.subtask_templates.count()
-            except (ValueError, TypeError):
-                pass  # Invalid template_id, ignore
+        # NOTE: Subtasks from template are already handled by the frontend
+        # which populates the subtask form fields when a template is selected.
+        # No need to call create_subtasks_from_template here as it would create duplicates.
         
         # Log activity
         log_activity(
@@ -683,7 +693,19 @@ def create_task():
             flash('Tarea creada exitosamente.', 'success')
         return redirect(url_for('main.dashboard'))
         
-    return render_template('create_task.html', users=users, available_tags=available_tags, templates=templates, available_areas=available_areas, parent_task=parent_task)
+    # Get available processes for the user
+    user_area_ids = [a.id for a in current_user.areas]
+    if current_user.is_admin:
+        available_processes = Process.query.filter_by(status='Active').order_by(Process.name).all()
+    elif user_area_ids:
+        available_processes = Process.query.filter(
+            Process.area_id.in_(user_area_ids),
+            Process.status == 'Active'
+        ).order_by(Process.name).all()
+    else:
+        available_processes = []
+        
+    return render_template('create_task.html', users=users, available_tags=available_tags, templates=templates, available_areas=available_areas, parent_task=parent_task, available_processes=available_processes, preselected_process=preselected_process)
 
 @main_bp.route('/task/<int:task_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -903,6 +925,19 @@ def edit_task(task_id):
         if old_state['priority'] != task.priority:
             changes.append(f'Prioridad: {old_state["priority"]} -> {task.priority}')
         if old_state['status'] != task.status:
+            # Record status change (StatusTransition)
+            try:
+                new_transition = StatusTransition(
+                    task_id=task.id,
+                    from_status=old_state['status'],
+                    to_status=task.status,
+                    changed_by_id=current_user.id,
+                    comment=request.form.get('edit_comment')
+                )
+                db.session.add(new_transition)
+            except Exception as e:
+                pass # Fail silently if history recording fails to avoid blocking the save
+
             changes.append(f'Estado: {old_state["status"]} -> {task.status}')
         
         # Helper to format date for comparison
@@ -1359,6 +1394,7 @@ def calendar():
 @login_required
 def toggle_task_status(task_id):
     task = Task.query.get_or_404(task_id)
+    old_status = task.status
     
     # Verify user has access to this task (admin, creator, or assignee)
     if not current_user.is_admin and task.creator_id != current_user.id and current_user not in task.assignees:
@@ -1403,6 +1439,20 @@ def toggle_task_status(task_id):
         task.completed_at = None
         task.completion_comment = None  # Clear comment when reopening
     
+    # Record status change
+    if old_status != task.status:
+        try:
+            new_transition = StatusTransition(
+                task_id=task.id,
+                from_status=old_status,
+                to_status=task.status,
+                changed_by_id=current_user.id,
+                comment=completion_comment if task.status == 'Completed' else None
+            )
+            db.session.add(new_transition)
+        except Exception:
+            pass
+
     db.session.commit()
     
     # Log activity
@@ -1654,11 +1704,29 @@ def update_task_status(task_id):
         area_id=task.area_id
     )
     
+    # Auto-complete process if all tasks are completed
+    process_completed = False
+    if new_status == 'Completed' and task.process_id:
+        process = Process.query.get(task.process_id)
+        if process and process.check_and_complete():
+            process.completed_by_id = current_user.id
+            db.session.commit()
+            process_completed = True
+            log_activity(
+                user=current_user,
+                action='process_auto_completed',
+                description=f'completó automáticamente el proceso "{process.name}" (todas las tareas completadas)',
+                target_type='process',
+                target_id=process.id,
+                area_id=process.area_id
+            )
+    
     return jsonify({
         'success': True,
         'task_id': task.id,
         'old_status': old_status,
-        'new_status': new_status
+        'new_status': new_status,
+        'process_completed': process_completed
     })
 
 
@@ -4520,6 +4588,514 @@ def activity_log():
                           today=today)
 
 
+# --- Process Type Management Routes ---
+
+@main_bp.route('/process-types', methods=['GET', 'POST'])
+@login_required
+def manage_process_types():
+    """View and create process types - Admin/Supervisor only"""
+    from models import Area
+    
+    # Only admin and supervisors can manage process types
+    if not current_user.is_admin and current_user.role != 'supervisor':
+        flash('No tienes permiso para gestionar tipos de proceso.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    # Get user's areas for filtering
+    user_area_ids = [a.id for a in current_user.areas]
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        color = request.form.get('color', '#6366f1')
+        icon = request.form.get('icon', 'fa-folder')
+        template_id = request.form.get('template_id')
+        area_id = request.form.get('area_id')
+        
+        if not name:
+            flash('El nombre del tipo de proceso es requerido.', 'danger')
+            return redirect(url_for('main.manage_process_types'))
+        
+        # Determine area_id
+        if current_user.is_admin and area_id:
+            area_id = int(area_id)
+        elif current_user.areas:
+            area_id = current_user.areas[0].id
+        else:
+            flash('No tienes un área asignada.', 'danger')
+            return redirect(url_for('main.manage_process_types'))
+        
+        # Check for duplicate name in same area
+        existing = ProcessType.query.filter_by(name=name, area_id=area_id).first()
+        if existing:
+            flash('Ya existe un tipo de proceso con ese nombre en esta área.', 'danger')
+            return redirect(url_for('main.manage_process_types'))
+        
+        # Create process type
+        process_type = ProcessType(
+            name=name,
+            description=description,
+            color=color,
+            icon=icon,
+            area_id=area_id,
+            created_by_id=current_user.id,
+            template_id=int(template_id) if template_id else None
+        )
+        
+        db.session.add(process_type)
+        db.session.commit()
+        
+        # Log activity
+        log_activity(
+            user=current_user,
+            action='process_type_created',
+            description=f'creó el tipo de proceso "{name}"',
+            target_type='process_type',
+            target_id=process_type.id,
+            area_id=area_id
+        )
+        
+        flash(f'Tipo de proceso "{name}" creado exitosamente.', 'success')
+        return redirect(url_for('main.manage_process_types'))
+    
+    # GET - List process types
+    if current_user.is_admin:
+        process_types = ProcessType.query.filter_by(is_active=True).order_by(ProcessType.name).all()
+        templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
+        areas = Area.query.order_by(Area.name).all()
+    else:
+        if user_area_ids:
+            process_types = ProcessType.query.filter(
+                ProcessType.area_id.in_(user_area_ids),
+                ProcessType.is_active == True
+            ).order_by(ProcessType.name).all()
+            templates = TaskTemplate.query.filter(TaskTemplate.area_id.in_(user_area_ids)).order_by(TaskTemplate.name).all()
+        else:
+            process_types = []
+            templates = []
+        areas = current_user.areas
+    
+    return render_template('manage_process_types.html', 
+                           process_types=process_types,
+                           templates=templates,
+                           areas=areas,
+                           show_area_selector=current_user.is_admin)
+
+
+@main_bp.route('/process-types/<int:pt_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_process_type(pt_id):
+    """Edit a process type"""
+    from models import Area
+    
+    process_type = ProcessType.query.get_or_404(pt_id)
+    
+    # Check permissions
+    user_area_ids = [a.id for a in current_user.areas]
+    if not current_user.is_admin and process_type.area_id not in user_area_ids:
+        flash('No tienes permiso para editar este tipo de proceso.', 'danger')
+        return redirect(url_for('main.manage_process_types'))
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        color = request.form.get('color', '#6366f1')
+        icon = request.form.get('icon', 'fa-folder')
+        template_id = request.form.get('template_id')
+        
+        if not name:
+            flash('El nombre del tipo de proceso es requerido.', 'danger')
+            return redirect(url_for('main.edit_process_type', pt_id=pt_id))
+        
+        # Check for duplicate name in same area (excluding self)
+        existing = ProcessType.query.filter(
+            ProcessType.name == name,
+            ProcessType.area_id == process_type.area_id,
+            ProcessType.id != pt_id
+        ).first()
+        if existing:
+            flash('Ya existe un tipo de proceso con ese nombre en esta área.', 'danger')
+            return redirect(url_for('main.edit_process_type', pt_id=pt_id))
+        
+        process_type.name = name
+        process_type.description = description
+        process_type.color = color
+        process_type.icon = icon
+        process_type.template_id = int(template_id) if template_id else None
+        
+        db.session.commit()
+        
+        # Log activity
+        log_activity(
+            user=current_user,
+            action='process_type_edited',
+            description=f'editó el tipo de proceso "{name}"',
+            target_type='process_type',
+            target_id=process_type.id,
+            area_id=process_type.area_id
+        )
+        
+        flash(f'Tipo de proceso "{name}" actualizado exitosamente.', 'success')
+        return redirect(url_for('main.manage_process_types'))
+    
+    # GET - Show edit form
+    if current_user.is_admin:
+        templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
+    else:
+        templates = TaskTemplate.query.filter(TaskTemplate.area_id.in_(user_area_ids)).order_by(TaskTemplate.name).all()
+    
+    return render_template('edit_process_type.html', 
+                           process_type=process_type,
+                           templates=templates)
+
+
+@main_bp.route('/process-types/<int:pt_id>/toggle', methods=['POST'])
+@login_required
+def toggle_process_type(pt_id):
+    """Activate/Deactivate a process type"""
+    process_type = ProcessType.query.get_or_404(pt_id)
+    
+    # Check permissions
+    user_area_ids = [a.id for a in current_user.areas]
+    if not current_user.is_admin and process_type.area_id not in user_area_ids:
+        return jsonify({'success': False, 'error': 'No tienes permiso'}), 403
+    
+    # Check if there are active processes
+    if process_type.is_active:
+        active_processes = Process.query.filter_by(
+            process_type_id=pt_id,
+            status='Active'
+        ).count()
+        if active_processes > 0:
+            return jsonify({
+                'success': False, 
+                'error': f'No se puede desactivar: hay {active_processes} proceso(s) activo(s)'
+            }), 400
+    
+    process_type.is_active = not process_type.is_active
+    db.session.commit()
+    
+    action = 'activó' if process_type.is_active else 'desactivó'
+    log_activity(
+        user=current_user,
+        action='process_type_toggled',
+        description=f'{action} el tipo de proceso "{process_type.name}"',
+        target_type='process_type',
+        target_id=process_type.id,
+        area_id=process_type.area_id
+    )
+    
+    return jsonify({
+        'success': True,
+        'is_active': process_type.is_active
+    })
+
+
+@main_bp.route('/process-types/<int:pt_id>/delete', methods=['POST'])
+@login_required
+def delete_process_type(pt_id):
+    """Delete a process type - only if no processes exist"""
+    process_type = ProcessType.query.get_or_404(pt_id)
+    
+    # Check permissions
+    user_area_ids = [a.id for a in current_user.areas]
+    if not current_user.is_admin and process_type.area_id not in user_area_ids:
+        return jsonify({'success': False, 'error': 'No tienes permiso'}), 403
+    
+    # Check if there are any processes
+    process_count = Process.query.filter_by(process_type_id=pt_id).count()
+    if process_count > 0:
+        return jsonify({
+            'success': False,
+            'error': f'No se puede eliminar: hay {process_count} proceso(s) asociados. Desactívalo en su lugar.'
+        }), 400
+    
+    name = process_type.name
+    area_id = process_type.area_id
+    
+    db.session.delete(process_type)
+    db.session.commit()
+    
+    log_activity(
+        user=current_user,
+        action='process_type_deleted',
+        description=f'eliminó el tipo de proceso "{name}"',
+        target_type='process_type',
+        target_id=pt_id,
+        area_id=area_id
+    )
+    
+    return jsonify({'success': True})
+
+
+# --- Process Management Routes ---
+
+@main_bp.route('/processes')
+@login_required
+def list_processes():
+    """List all processes"""
+    from models import Area
+    
+    # Get filter parameters
+    filter_type = request.args.get('type')
+    filter_status = request.args.get('status', 'Active')
+    filter_area = request.args.get('area')
+    
+    user_area_ids = [a.id for a in current_user.areas]
+    
+    # Base query
+    query = Process.query.options(
+        joinedload(Process.process_type),
+        joinedload(Process.area),
+        joinedload(Process.created_by)
+    )
+    
+    # Role-based filtering
+    if current_user.can_see_all_areas():
+        if filter_area:
+            query = query.filter(Process.area_id == int(filter_area))
+        available_areas = Area.query.order_by(Area.name).all()
+        show_area_filter = True
+    else:
+        if user_area_ids:
+            query = query.filter(Process.area_id.in_(user_area_ids))
+        else:
+            query = query.filter(Process.area_id == -1)
+        available_areas = current_user.areas
+        show_area_filter = False
+    
+    # Status filter
+    if filter_status and filter_status != 'all':
+        query = query.filter(Process.status == filter_status)
+    
+    # Type filter
+    if filter_type:
+        query = query.filter(Process.process_type_id == int(filter_type))
+    
+    # Order by due date
+    processes = query.order_by(Process.due_date.asc()).all()
+    
+    # Get process types for filter dropdown
+    if current_user.is_admin:
+        process_types = ProcessType.query.filter_by(is_active=True).order_by(ProcessType.name).all()
+    else:
+        process_types = ProcessType.query.filter(
+            ProcessType.area_id.in_(user_area_ids),
+            ProcessType.is_active == True
+        ).order_by(ProcessType.name).all()
+    
+    # Calculate stats
+    active_count = sum(1 for p in processes if p.status == 'Active')
+    completed_count = sum(1 for p in processes if p.status == 'Completed')
+    
+    return render_template('processes.html',
+                           processes=processes,
+                           process_types=process_types,
+                           filter_type=filter_type,
+                           filter_status=filter_status,
+                           filter_area=filter_area,
+                           areas=available_areas,
+                           show_area_filter=show_area_filter,
+                           active_count=active_count,
+                           completed_count=completed_count)
+
+
+@main_bp.route('/processes/create', methods=['GET', 'POST'])
+@login_required
+def create_process():
+    """Create a new process"""
+    from models import Area
+    
+    # Only supervisor+ can create processes
+    if not current_user.can_create_tasks():
+        flash('No tienes permiso para crear procesos.', 'danger')
+        return redirect(url_for('main.list_processes'))
+    
+    user_area_ids = [a.id for a in current_user.areas]
+    
+    if request.method == 'POST':
+        process_type_id = request.form.get('process_type_id')
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        due_date_str = request.form.get('due_date')
+        due_time_str = request.form.get('due_time', '18:00')
+        
+        if not process_type_id or not name or not due_date_str:
+            flash('Tipo de proceso, nombre y fecha límite son requeridos.', 'danger')
+            return redirect(url_for('main.create_process'))
+        
+        # Get process type
+        process_type = ProcessType.query.get_or_404(int(process_type_id))
+        
+        # Check permission for this area
+        if not current_user.is_admin and process_type.area_id not in user_area_ids:
+            flash('No tienes permiso para crear procesos de este tipo.', 'danger')
+            return redirect(url_for('main.create_process'))
+        
+        # Parse due date
+        try:
+            due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+            if due_time_str:
+                due_time = datetime.strptime(due_time_str, '%H:%M').time()
+                due_date = datetime.combine(due_date.date(), due_time)
+        except ValueError:
+            flash('Fecha inválida.', 'danger')
+            return redirect(url_for('main.create_process'))
+        
+        # Create process
+        process = Process(
+            process_type_id=process_type.id,
+            name=name,
+            description=description,
+            area_id=process_type.area_id,
+            due_date=due_date,
+            created_by_id=current_user.id,
+            status='Active'
+        )
+        
+        db.session.add(process)
+        db.session.flush()  # Get process ID
+        
+        # If process type has template, create tasks automatically
+        tasks_created = 0
+        if process_type.template:
+            template = process_type.template
+            
+            # Get assignees from form
+            assignee_ids = request.form.getlist('assignees')
+            assignees = [User.query.get(int(uid)) for uid in assignee_ids if uid]
+            assignees = [a for a in assignees if a]
+            
+            # Create main task from template
+            main_task = Task(
+                title=template.title,
+                description=template.description or description,
+                priority=template.priority,
+                status='Pending',
+                creator_id=current_user.id,
+                area_id=process_type.area_id,
+                due_date=due_date,
+                process_id=process.id,
+                planned_start_date=datetime.now()  # Start now
+            )
+            
+            for tag in template.tags:
+                main_task.tags.append(tag)
+            for assignee in assignees:
+                main_task.assignees.append(assignee)
+            
+            db.session.add(main_task)
+            db.session.flush()
+            tasks_created = 1
+            
+            # Create subtasks from template
+            if template.subtask_templates.count() > 0:
+                create_subtasks_from_template(template, main_task, assignees, current_user, process_type.area_id)
+                tasks_created += template.subtask_templates.count()
+                
+                # Associate all created subtasks with the process
+                for child in main_task.children:
+                    child.process_id = process.id
+        
+        db.session.commit()
+        
+        # Log activity
+        log_activity(
+            user=current_user,
+            action='process_created',
+            description=f'creó el proceso "{name}"' + (f' con {tasks_created} tarea(s)' if tasks_created > 0 else ''),
+            target_type='process',
+            target_id=process.id,
+            area_id=process.area_id
+        )
+        
+        flash(f'Proceso "{name}" creado exitosamente' + (f' con {tasks_created} tarea(s).' if tasks_created > 0 else '.'), 'success')
+        return redirect(url_for('main.process_details', process_id=process.id))
+    
+    # GET - Show create form
+    if current_user.is_admin:
+        process_types = ProcessType.query.filter_by(is_active=True).order_by(ProcessType.name).all()
+        users = User.query.all()
+    else:
+        process_types = ProcessType.query.filter(
+            ProcessType.area_id.in_(user_area_ids),
+            ProcessType.is_active == True
+        ).order_by(ProcessType.name).all()
+        users = [u for u in User.query.all() if any(area in u.areas for area in current_user.areas)]
+    
+    # Default due date: 7 days from now
+    default_due_date = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+    
+    return render_template('create_process.html',
+                           process_types=process_types,
+                           users=users,
+                           default_due_date=default_due_date)
+
+
+@main_bp.route('/processes/<int:process_id>')
+@login_required
+def process_details(process_id):
+    """View process details"""
+    process = Process.query.options(
+        joinedload(Process.process_type),
+        joinedload(Process.area),
+        joinedload(Process.created_by),
+        joinedload(Process.completed_by)
+    ).get_or_404(process_id)
+    
+    # Check permission
+    user_area_ids = [a.id for a in current_user.areas]
+    if not current_user.is_admin and process.area_id not in user_area_ids:
+        flash('No tienes permiso para ver este proceso.', 'danger')
+        return redirect(url_for('main.list_processes'))
+    
+    # Get tasks in this process with necessary relationships loaded
+    tasks = Task.query.filter_by(process_id=process_id)\
+        .options(
+            joinedload(Task.assignees),
+            subqueryload(Task.children),
+            subqueryload(Task.status_history).joinedload(StatusTransition.changed_by)
+        )\
+        .order_by(Task.created_at.asc())\
+        .all()
+    
+    return render_template('process_details.html',
+                           process=process,
+                           tasks=tasks,
+                           now_utc=now_utc)
+
+
+@main_bp.route('/processes/<int:process_id>/cancel', methods=['POST'])
+@login_required
+def cancel_process(process_id):
+    """Cancel a process and annul all its tasks"""
+    process = Process.query.get_or_404(process_id)
+    
+    # Check permission
+    user_area_ids = [a.id for a in current_user.areas]
+    if not current_user.is_admin and process.area_id not in user_area_ids:
+        return jsonify({'success': False, 'error': 'No tienes permiso'}), 403
+    
+    if process.status != 'Active':
+        return jsonify({'success': False, 'error': 'Solo se pueden cancelar procesos activos'}), 400
+    
+    # Cancel process and annul tasks
+    process.cancel_with_tasks(current_user)
+    db.session.commit()
+    
+    # Log activity
+    log_activity(
+        user=current_user,
+        action='process_cancelled',
+        description=f'canceló el proceso "{process.name}" y anuló sus tareas',
+        target_type='process',
+        target_id=process.id,
+        area_id=process.area_id
+    )
+    
+    return jsonify({'success': True})
+
+
 # --- Helper for Template Subtasks (Appended) ---
 def create_subtasks_from_template(template, parent_task, assignees=None, creator=None, area_id=None):
     """
@@ -4575,7 +5151,8 @@ def create_subtasks_from_template(template, parent_task, assignees=None, creator
              parent_id=parent_task.id, # Temp, will be updated in pass 2
              planned_start_date=subtask_start_date,
              due_date=subtask_due_date,
-             enabled=False # Initially blocked
+             enabled=False, # Initially blocked
+             process_id=parent_task.process_id  # Inherit process from parent
         )
         
         # Tags

@@ -159,6 +159,10 @@ class Task(db.Model):
     # Comment added on completion
     completion_comment = db.Column(db.Text, nullable=True)
 
+    # Process association (tasks can belong to a process or be independent)
+    process_id = db.Column(db.Integer, db.ForeignKey('process.id'), nullable=True)
+    # Relationship defined in Process model with backref='tasks'
+
     def __repr__(self):
         return f'<Task {self.title}>'
 
@@ -179,11 +183,150 @@ class Tag(db.Model):
     def __repr__(self):
         return f'<Tag {self.name}>'
 
+
+class ProcessType(db.Model):
+    """
+    Tipos/Categorías de procesos definidos por admin/supervisor.
+    Ejemplo: "Revisión de Expediente", "Alta de Cliente", "Auditoría".
+    Privados por área.
+    """
+    __tablename__ = 'process_type'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)  # Nombre del tipo
+    description = db.Column(db.Text, nullable=True)
+    color = db.Column(db.String(7), nullable=False, default='#6366f1')
+    icon = db.Column(db.String(50), nullable=True, default='fa-folder')  # FontAwesome icon
+    
+    # Pertenece a un área
+    area_id = db.Column(db.Integer, db.ForeignKey('area.id'), nullable=False)
+    area = db.relationship('Area', backref=db.backref('process_types', lazy='dynamic'))
+    
+    # Metadata
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_by = db.relationship('User', backref='created_process_types')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
+    
+    # Plantilla de tareas asociada (opcional)
+    # Si se asocia, al crear un proceso de este tipo se crean automáticamente las tareas
+    template_id = db.Column(db.Integer, db.ForeignKey('task_template.id'), nullable=True)
+    template = db.relationship('TaskTemplate', backref='process_types')
+    
+    # Constraint: nombre único por área
+    __table_args__ = (
+        db.UniqueConstraint('name', 'area_id', name='uq_process_type_name_area'),
+    )
+    
+    def __repr__(self):
+        return f'<ProcessType {self.name}>'
+
+
+class Process(db.Model):
+    """
+    Una instancia de un tipo de proceso.
+    Ejemplo: "Revisión de Expediente - Cliente Pérez #001"
+    Agrupa tareas relacionadas y calcula métricas.
+    """
+    __tablename__ = 'process'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Tipo de proceso
+    process_type_id = db.Column(db.Integer, db.ForeignKey('process_type.id'), nullable=False)
+    process_type = db.relationship('ProcessType', backref=db.backref('processes', lazy='dynamic'))
+    
+    # Identificador del proceso (e.g., "Cliente Pérez - Exp 2024-123")
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    
+    # Estado: Active, Completed, Cancelled
+    status = db.Column(db.String(20), nullable=False, default='Active')
+    
+    # Área (heredada del tipo, pero almacenada para consultas rápidas)
+    area_id = db.Column(db.Integer, db.ForeignKey('area.id'), nullable=False)
+    area = db.relationship('Area', backref=db.backref('processes', lazy='dynamic'))
+    
+    # Fechas del proceso
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    started_at = db.Column(db.DateTime, nullable=True)  # Cuando se inició la primera tarea
+    completed_at = db.Column(db.DateTime, nullable=True)  # Cuando se completaron todas las tareas
+    due_date = db.Column(db.DateTime, nullable=False)  # Fecha límite del proceso (obligatoria)
+    
+    # Quién lo creó/completó
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_by = db.relationship('User', foreign_keys=[created_by_id], backref='created_processes')
+    completed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    completed_by = db.relationship('User', foreign_keys=[completed_by_id])
+    
+    # Relación con tareas (definida aquí, Task tiene process_id)
+    tasks = db.relationship('Task', backref='process', lazy='dynamic')
+    
+    @property
+    def total_time_spent(self):
+        """Suma de time_spent de todas las tareas del proceso"""
+        from sqlalchemy import func
+        total = db.session.query(func.sum(Task.time_spent))\
+            .filter(Task.process_id == self.id, Task.status != 'Anulado')\
+            .scalar()
+        return total or 0
+    
+    @property
+    def completed_tasks_count(self):
+        return self.tasks.filter(Task.status == 'Completed').count()
+    
+    @property
+    def total_tasks_count(self):
+        return self.tasks.filter(Task.status != 'Anulado').count()
+    
+    @property
+    def progress_percentage(self):
+        total = self.total_tasks_count
+        if total == 0:
+            return 0
+        return int((self.completed_tasks_count / total) * 100)
+    
+    def check_and_complete(self):
+        """
+        Verifica si todas las tareas están completadas y marca el proceso como completado.
+        Retorna True si el proceso se completó, False si no.
+        """
+        if self.status != 'Active':
+            return False
+        
+        total = self.total_tasks_count
+        completed = self.completed_tasks_count
+        
+        if total > 0 and completed == total:
+            self.status = 'Completed'
+            self.completed_at = datetime.utcnow()
+            return True
+        return False
+    
+    def cancel_with_tasks(self, cancelled_by_user):
+        """
+        Cancela el proceso y anula todas sus tareas.
+        """
+        self.status = 'Cancelled'
+        self.completed_by_id = cancelled_by_user.id
+        self.completed_at = datetime.utcnow()
+        
+        # Anular todas las tareas del proceso
+        for task in self.tasks.filter(Task.status != 'Anulado').all():
+            task.status = 'Anulado'
+            task.completed_by_id = cancelled_by_user.id
+            task.completed_at = datetime.utcnow()
+    
+    def __repr__(self):
+        return f'<Process {self.name}>'
+
+
 # Association table for Many-to-Many relationship between TaskTemplates and Tags
 template_tags = db.Table('template_tags',
     db.Column('template_id', db.Integer, db.ForeignKey('task_template.id', ondelete='CASCADE'), primary_key=True),
     db.Column('tag_id', db.Integer, db.ForeignKey('tag.id', ondelete='CASCADE'), primary_key=True)
 )
+
 
 class TaskTemplate(db.Model):
     id = db.Column(db.Integer, primary_key=True)

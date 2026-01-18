@@ -51,6 +51,10 @@
             <!-- Main Navigation -->
             <div class="nav-section">
                 <div class="nav-section-title">Principal</div>
+                <a href="{{ url_for('main.scrum_board') }}" class="nav-link" data-tooltip="Tablero Scrum">
+                    <i class="fas fa-columns"></i>
+                    <span>Tablero Scrum</span>
+                </a>
                 <a href="{{ url_for('main.dashboard') }}" class="nav-link" data-tooltip="Mis Tareas">
                     <i class="fas fa-tasks"></i>
                     <span>Mis Tareas</span>
@@ -61,21 +65,21 @@
                     <span>Nueva Tarea</span>
                 </a>
                 {% endif %}
-                <a href="{{ url_for('main.expiration_calendar') }}" class="nav-link" data-tooltip="Vencimientos">
-                    <i class="fas fa-clock"></i>
-                    <span>Vencimientos</span>
+                <a href="{{ url_for('main.list_processes') }}" class="nav-link" data-tooltip="Procesos">
+                    <i class="fas fa-folder-open"></i>
+                    <span>Procesos</span>
                 </a>
                 <a href="{{ url_for('main.calendar') }}" class="nav-link" data-tooltip="Calendario">
                     <i class="fas fa-calendar-alt"></i>
                     <span>Calendario</span>
                 </a>
+                <a href="{{ url_for('main.expiration_calendar') }}" class="nav-link" data-tooltip="Vencimientos">
+                    <i class="fas fa-clock"></i>
+                    <span>Vencimientos</span>
+                </a>
                 <a href="{{ url_for('main.task_tree') }}" class="nav-link" data-tooltip="Árbol">
                     <i class="fas fa-sitemap"></i>
                     <span>Árbol</span>
-                </a>
-                <a href="{{ url_for('main.scrum_board') }}" class="nav-link" data-tooltip="Tablero Scrum">
-                    <i class="fas fa-columns"></i>
-                    <span>Tablero Scrum</span>
                 </a>
             </div>
 
@@ -110,6 +114,10 @@
                 <a href="{{ url_for('main.activity_log') }}" class="nav-link" data-tooltip="Actividades">
                     <i class="fas fa-history"></i>
                     <span>Actividades</span>
+                </a>
+                <a href="{{ url_for('main.manage_process_types') }}" class="nav-link" data-tooltip="Tipos de Proceso">
+                    <i class="fas fa-layer-group"></i>
+                    <span>Tipos de Proceso</span>
                 </a>
                 {% endif %}
                 {% if current_user.can_create_tasks() %}

@@ -30,6 +30,59 @@
     margin-top: 0.5rem;
 }
 
+/* Process Tag - Link to process */
+.process-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-decoration: none;
+    background: color-mix(in srgb, var(--process-color, #6366f1) 15%, white);
+    color: var(--process-color, #6366f1);
+    border: 1px solid color-mix(in srgb, var(--process-color, #6366f1) 30%, white);
+    transition: all 0.2s ease;
+}
+
+.process-tag:hover {
+    background: color-mix(in srgb, var(--process-color, #6366f1) 25%, white);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.process-tag i {
+    font-size: 0.7rem;
+}
+
+/* Area Tag */
+.area-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--area-color, #2563eb) 15%, white);
+    color: var(--area-color, #2563eb);
+    border: 1px solid color-mix(in srgb, var(--area-color, #2563eb) 30%, white);
+}
+
+/* Tag Pill (for task tags) */
+.tag-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--tag-color, #64748b) 15%, white);
+    color: var(--tag-color, #64748b);
+}
+
 /* Tag Selector (Multi-select dropdown) */
 .tag-selector {
     position: relative;

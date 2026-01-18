@@ -167,6 +167,37 @@
         </div>
     </div>
 
+    <!-- Process Section -->
+    {% if task.process %}
+    <div style="margin-top: 1rem;">
+        <div class="form-group">
+            <label><i class="fas fa-folder-open"></i> Proceso Vinculado</label>
+            <a href="{{ url_for('main.process_details', process_id=task.process.id) }}"
+                style="display: block; padding: 0.8rem; background: linear-gradient(135deg, {{ task.process.process_type.color }}10 0%, {{ task.process.process_type.color }}20 100%); border: 2px solid {{ task.process.process_type.color }}50; border-radius: 8px; text-decoration: none; transition: all 0.2s;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div
+                        style="width: 40px; height: 40px; background: {{ task.process.process_type.color }}30; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                        <i class="fas {{ task.process.process_type.icon }}"
+                            style="color: {{ task.process.process_type.color }};"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight: 600; color: var(--text-color);">{{ task.process.name }}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-light);">
+                            {{ task.process.process_type.name }} ·
+                            <span
+                                style="color: {% if task.process.status == 'Active' %}#2563eb{% elif task.process.status == 'Completed' %}#16a34a{% else %}#64748b{% endif %};">
+                                {{ task.process.status }}
+                            </span>
+                            · {{ task.process.progress_percentage }}% completado
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right" style="margin-left: auto; color: var(--text-light);"></i>
+                </div>
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Fechas en fila separada -->
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
         {% if task.planned_start_date %}

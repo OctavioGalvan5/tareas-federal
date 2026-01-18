@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div
+        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <h2 style="margin: 0;"><i class="fas fa-layer-group"></i> Tipos de Proceso</h2>
+            <p style="color: var(--text-light); margin: 0.5rem 0 0 0;">Define categorías de procesos para agrupar tareas
+                relacionadas</p>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            <a href="{{ url_for('main.list_processes') }}" class="button-secondary">
+                <i class="fas fa-folder-open"></i> Ver Procesos
+            </a>
+            <a href="{{ url_for('main.dashboard') }}" class="button-secondary">
+                <i class="fas fa-arrow-left"></i> Volver
+            </a>
+        </div>
+    </div>
+
+    <!-- Create New Process Type Form -->
+    <div
+        style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; border: 1px solid #bae6fd;">
+        <h3 style="margin: 0 0 1rem 0; color: #0369a1;"><i class="fas fa-plus-circle"></i> Crear Tipo de Proceso</h3>
+        <form method="POST" action="{{ url_for('main.manage_process_types') }}">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label><i class="fas fa-tag"></i> Nombre *</label>
+                    <input type="text" name="name" required placeholder="Ej: Revisión de Expediente"
+                        style="width: 100%; padding: 0.8rem; border: 1px solid #e5e7eb; border-radius: 8px;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label><i class="fas fa-palette"></i> Color</label>
+                    <input type="color" name="color" value="#6366f1"
+                        style="width: 100%; height: 42px; padding: 0.25rem; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label><i class="fas fa-icons"></i> Icono</label>
+                    <select name="icon"
+                        style="width: 100%; padding: 0.8rem; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <option value="fa-folder">📁 Carpeta</option>
+                        <option value="fa-file-alt">📄 Documento</option>
+                        <option value="fa-briefcase">💼 Maletín</option>
+                        <option value="fa-clipboard-check">📋 Portapapeles</option>
+                        <option value="fa-tasks">✅ Tareas</option>
+                        <option value="fa-cogs">⚙️ Configuración</option>
+                        <option value="fa-chart-line">📈 Gráfico</option>
+                        <option value="fa-users">👥 Usuarios</option>
+                        <option value="fa-balance-scale">⚖️ Legal</option>
+                        <option value="fa-calculator">🧮 Cálculos</option>
+                    </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label><i class="fas fa-file-invoice"></i> Plantilla de Tareas</label>
+                    <select name="template_id"
+                        style="width: 100%; padding: 0.8rem; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <option value="">-- Sin plantilla --</option>
+                        {% for template in templates %}
+                        <option value="{{ template.id }}">{{ template.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {% if show_area_selector %}
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label><i class="fas fa-building"></i> Área *</label>
+                    <select name="area_id" required
+                        style="width: 100%; padding: 0.8rem; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        {% for area in areas %}
+                        <option value="{{ area.id }}">{{ area.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="form-group" style="margin-top: 1rem; margin-bottom: 0;">
+                <label><i class="fas fa-align-left"></i> Descripción</label>
+                <textarea name="description" rows="2" placeholder="Descripción opcional del tipo de proceso..."
+                    style="width: 100%; padding: 0.8rem; border: 1px solid #e5e7eb; border-radius: 8px; resize: vertical;"></textarea>
+            </div>
+
+            <div style="margin-top: 1rem; text-align: right;">
+                <button type="submit" class="button">
+                    <i class="fas fa-save"></i> Crear Tipo de Proceso
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Existing Process Types -->
+    <h3 style="margin: 0 0 1rem 0;"><i class="fas fa-list"></i> Tipos de Proceso Existentes</h3>
+
+    {% if process_types %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem;">
+        {% for pt in process_types %}
+        <div class="process-type-card"
+            style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 1.25rem; transition: all 0.2s; position: relative; overflow: hidden;">
+            <!-- Color indicator -->
+            <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: {{ pt.color }};"></div>
+
+            <div style="display: flex; align-items: flex-start; gap: 1rem;">
+                <div
+                    style="width: 48px; height: 48px; background: {{ pt.color }}20; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="fas {{ pt.icon }}" style="font-size: 1.25rem; color: {{ pt.color }};"></i>
+                </div>
+                <div style="flex: 1; min-width: 0;">
+                    <h4 style="margin: 0 0 0.25rem 0; color: var(--text-color); font-size: 1.1rem;">{{ pt.name }}</h4>
+                    <p
+                        style="margin: 0; color: var(--text-light); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        {{ pt.description or 'Sin descripción' }}
+                    </p>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
+                {% if pt.template %}
+                <span
+                    style="background: #f0fdf4; color: #16a34a; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">
+                    <i class="fas fa-file-invoice"></i> {{ pt.template.name }}
+                </span>
+                {% endif %}
+
+                <span
+                    style="background: #f8fafc; color: #64748b; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem;">
+                    <i class="fas fa-building"></i> {{ pt.area.name }}
+                </span>
+
+                <span
+                    style="background: #f8fafc; color: #64748b; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.75rem;">
+                    <i class="fas fa-folder-open"></i> {{ pt.processes.count() }} proceso(s)
+                </span>
+            </div>
+
+            <div
+                style="display: flex; gap: 0.5rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #f1f5f9;">
+                <a href="{{ url_for('main.edit_process_type', pt_id=pt.id) }}" class="button-secondary"
+                    style="flex: 1; text-align: center; padding: 0.5rem;">
+                    <i class="fas fa-edit"></i> Editar
+                </a>
+                <button onclick="toggleProcessType({{ pt.id }})" class="button-secondary"
+                    style="padding: 0.5rem 0.75rem;" title="Desactivar">
+                    <i class="fas fa-power-off"></i>
+                </button>
+                <button onclick="deleteProcessType({{ pt.id }}, '{{ pt.name }}')" class="button-secondary"
+                    style="padding: 0.5rem 0.75rem; color: #dc2626;" title="Eliminar">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: var(--text-light); background: #f8fafc; border-radius: 12px;">
+        <i class="fas fa-layer-group" style="font-size: 3rem; opacity: 0.3; margin-bottom: 1rem;"></i>
+        <p style="margin: 0; font-size: 1.1rem;">No hay tipos de proceso creados.</p>
+        <p style="margin: 0.5rem 0 0 0;">Crea tu primer tipo de proceso usando el formulario de arriba.</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .process-type-card:hover {
+        border-color: var(--primary-color);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+        transform: translateY(-2px);
+    }
+</style>
+
+<script>
+    function toggleProcessType(ptId) {
+        if (!confirm('¿Estás seguro de que deseas desactivar este tipo de proceso?')) return;
+
+        fetch(`/process-types/${ptId}/toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + (data.error || 'No se pudo cambiar el estado'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error de conexión');
+            });
+    }
+
+    function deleteProcessType(ptId, name) {
+        if (!confirm(`¿Estás seguro de que deseas eliminar el tipo de proceso "${name}"?`)) return;
+
+        fetch(`/process-types/${ptId}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + (data.error || 'No se pudo eliminar'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error de conexión');
+            });
+    }
+</script>
+{% endblock %}

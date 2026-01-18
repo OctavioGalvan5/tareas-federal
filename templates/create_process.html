@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 800px; margin: 0 auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <div>
+            <h2 style="margin: 0;"><i class="fas fa-plus-circle"></i> Crear Nuevo Proceso</h2>
+            <p style="color: var(--text-light); margin: 0.5rem 0 0 0;">Inicia un nuevo flujo de trabajo</p>
+        </div>
+        <a href="{{ url_for('main.list_processes') }}" class="button-secondary">
+            <i class="fas fa-arrow-left"></i> Volver
+        </a>
+    </div>
+
+    {% if process_types %}
+    <form method="POST" action="{{ url_for('main.create_process') }}">
+        <!-- Process Type Selection -->
+        <div class="form-group">
+            <label><i class="fas fa-layer-group"></i> Tipo de Proceso *</label>
+            <div id="process-type-grid"
+                style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;">
+                {% for pt in process_types %}
+                <label class="process-type-option" style="cursor: pointer; position: relative;">
+                    <input type="radio" name="process_type_id" value="{{ pt.id }}"
+                        data-has-template="{{ 'true' if pt.template else 'false' }}"
+                        data-template-name="{{ pt.template.name if pt.template else '' }}" required
+                        style="position: absolute; opacity: 0; pointer-events: none;">
+                    <div class="process-type-card"
+                        style="border: 2px solid #e5e7eb; border-radius: 12px; padding: 1rem; transition: all 0.2s; background: white;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <div
+                                style="width: 40px; height: 40px; background: {{ pt.color }}20; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                                <i class="fas {{ pt.icon }}" style="color: {{ pt.color }};"></i>
+                            </div>
+                            <div>
+                                <div style="font-weight: 600; color: var(--text-color);">{{ pt.name }}</div>
+                                {% if pt.template %}
+                                <div style="font-size: 0.75rem; color: #16a34a;">
+                                    <i class="fas fa-magic"></i> Crea tareas automáticamente
+                                </div>
+                                {% else %}
+                                <div style="font-size: 0.75rem; color: var(--text-light);">
+                                    Sin plantilla asociada
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Template Info Box (shown when type with template is selected) -->
+        <div id="template-info"
+            style="display: none; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #86efac;">
+            <p style="margin: 0; color: #16a34a;">
+                <i class="fas fa-info-circle"></i> Al crear este proceso, se generarán automáticamente las tareas de la
+                plantilla: <strong id="template-name-display"></strong>
+            </p>
+        </div>
+
+        <!-- Process Name -->
+        <div class="form-group">
+            <label><i class="fas fa-tag"></i> Nombre/Identificador del Proceso *</label>
+            <input type="text" name="name" required placeholder="Ej: Cliente Pérez - Expediente 2024-123"
+                style="width: 100%; padding: 0.8rem; border: 1px solid #e5e7eb; border-radius: 8px;">
+            <small style="color: var(--text-light);">Un identificador único para este proceso específico</small>
+        </div>
+
+        <!-- Due Date & Time -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label><i class="fas fa-calendar-alt"></i> Fecha Límite *</label>
+                <input type="date" name="due_date" required value="{{ default_due_date }}"
+                    style="width: 100%; padding: 0.8rem; border: 1px solid #e5e7eb; border-radius: 8px;">
+            </div>
+            <div class="form-group">
+                <label><i class="fas fa-clock"></i> Hora Límite</label>
+                <input type="time" name="due_time" value="18:00"
+                    style="width: 100%; padding: 0.8rem; border: 1px solid #e5e7eb; border-radius: 8px;">
+            </div>
+        </div>
+
+        <!-- Assignees (shown only for types with template) -->
+        <div id="assignees-section" style="display: none;" class="form-group">
+            <label><i class="fas fa-users"></i> Asignar Tareas a</label>
+            <select name="assignees" multiple
+                style="width: 100%; padding: 0.8rem; border: 1px solid #e5e7eb; border-radius: 8px; min-height: 100px;">
+                {% for user in users %}
+                <option value="{{ user.id }}">{{ user.full_name }}</option>
+                {% endfor %}
+            </select>
+            <small style="color: var(--text-light);">Las tareas creadas se asignarán a estos usuarios (mantén Ctrl para
+                seleccionar varios)</small>
+        </div>
+
+        <!-- Description -->
+        <div class="form-group">
+            <label><i class="fas fa-align-left"></i> Descripción</label>
+            <textarea name="description" rows="3" placeholder="Descripción opcional del proceso..."
+                style="width: 100%; padding: 0.8rem; border: 1px solid #e5e7eb; border-radius: 8px; resize: vertical;"></textarea>
+        </div>
+
+        <!-- Submit -->
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+            <a href="{{ url_for('main.list_processes') }}" class="button-secondary">
+                <i class="fas fa-times"></i> Cancelar
+            </a>
+            <button type="submit" class="button">
+                <i class="fas fa-rocket"></i> Crear Proceso
+            </button>
+        </div>
+    </form>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: var(--text-light); background: #f8fafc; border-radius: 12px;">
+        <i class="fas fa-layer-group" style="font-size: 3rem; opacity: 0.3; margin-bottom: 1rem;"></i>
+        <p style="margin: 0; font-size: 1.1rem;">No hay tipos de proceso disponibles.</p>
+        <p style="margin: 0.5rem 0 0 0;">Primero debes crear un tipo de proceso.</p>
+        {% if current_user.is_admin or current_user.role == 'supervisor' %}
+        <a href="{{ url_for('main.manage_process_types') }}" class="button" style="margin-top: 1rem;">
+            <i class="fas fa-plus"></i> Crear Tipo de Proceso
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .process-type-option input:checked+.process-type-card {
+        border-color: var(--primary-color);
+        background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    }
+
+    .process-type-card:hover {
+        border-color: #a5b4fc;
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const radios = document.querySelectorAll('input[name="process_type_id"]');
+        const templateInfo = document.getElementById('template-info');
+        const templateNameDisplay = document.getElementById('template-name-display');
+        const assigneesSection = document.getElementById('assignees-section');
+
+        radios.forEach(radio => {
+            radio.addEventListener('change', function () {
+                const hasTemplate = this.dataset.hasTemplate === 'true';
+                const templateName = this.dataset.templateName;
+
+                if (hasTemplate) {
+                    templateInfo.style.display = 'block';
+                    templateNameDisplay.textContent = templateName;
+                    assigneesSection.style.display = 'block';
+                } else {
+                    templateInfo.style.display = 'none';
+                    assigneesSection.style.display = 'none';
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

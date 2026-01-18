@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div
+        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <h2 style="margin: 0;"><i class="fas fa-folder-open"></i> Procesos</h2>
+            <p style="color: var(--text-light); margin: 0.5rem 0 0 0;">Gestiona los procesos activos y su progreso</p>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            {% if current_user.can_create_tasks() %}
+            <a href="{{ url_for('main.create_process') }}" class="button">
+                <i class="fas fa-plus"></i> Nuevo Proceso
+            </a>
+            {% endif %}
+            {% if current_user.is_admin or current_user.role == 'supervisor' %}
+            <a href="{{ url_for('main.manage_process_types') }}" class="button-secondary">
+                <i class="fas fa-layer-group"></i> Tipos de Proceso
+            </a>
+            {% endif %}
+            <a href="{{ url_for('main.dashboard') }}" class="button-secondary">
+                <i class="fas fa-arrow-left"></i> Volver
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div class="stat-card"
+            style="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border-left: 4px solid #3b82f6;">
+            <div class="stat-number" style="color: #1d4ed8;">{{ active_count }}</div>
+            <div class="stat-label">Activos</div>
+        </div>
+        <div class="stat-card"
+            style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border-left: 4px solid #22c55e;">
+            <div class="stat-number" style="color: #16a34a;">{{ completed_count }}</div>
+            <div class="stat-label">Completados</div>
+        </div>
+        <div class="stat-card"
+            style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-left: 4px solid #64748b;">
+            <div class="stat-number" style="color: #475569;">{{ processes|length }}</div>
+            <div class="stat-label">Total</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div
+        style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1.5rem;">
+        <form method="GET" action="{{ url_for('main.list_processes') }}"
+            style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+            <div style="flex: 1; min-width: 150px;">
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Estado</label>
+                <select name="status" onchange="this.form.submit()"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    <option value="Active" {% if filter_status=='Active' %}selected{% endif %}>Activos</option>
+                    <option value="Completed" {% if filter_status=='Completed' %}selected{% endif %}>Completados
+                    </option>
+                    <option value="Cancelled" {% if filter_status=='Cancelled' %}selected{% endif %}>Cancelados</option>
+                    <option value="all" {% if filter_status=='all' %}selected{% endif %}>Todos</option>
+                </select>
+            </div>
+
+            <div style="flex: 1; min-width: 180px;">
+                <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Tipo
+                    de Proceso</label>
+                <select name="type" onchange="this.form.submit()"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    <option value="">Todos los tipos</option>
+                    {% for pt in process_types %}
+                    <option value="{{ pt.id }}" {% if filter_type|string==pt.id|string %}selected{% endif %}>{{ pt.name
+                        }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {% if show_area_filter %}
+            <div style="flex: 1; min-width: 150px;">
+                <label
+                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Área</label>
+                <select name="area" onchange="this.form.submit()"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    <option value="">Todas las áreas</option>
+                    {% for area in areas %}
+                    <option value="{{ area.id }}" {% if filter_area|string==area.id|string %}selected{% endif %}>{{
+                        area.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Process List -->
+    {% if processes %}
+    <div style="display: flex; flex-direction: column; gap: 1rem;">
+        {% for process in processes %}
+        <div class="process-card"
+            style="background: white; border: 2px solid {% if process.status == 'Completed' %}#22c55e{% elif process.status == 'Cancelled' %}#94a3b8{% else %}#e5e7eb{% endif %}; border-radius: 12px; padding: 1.25rem; transition: all 0.2s;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+                <!-- Left: Info -->
+                <div style="flex: 1; min-width: 200px;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                        <div
+                            style="width: 40px; height: 40px; background: {{ process.process_type.color }}20; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                            <i class="fas {{ process.process_type.icon }}"
+                                style="color: {{ process.process_type.color }};"></i>
+                        </div>
+                        <div>
+                            <h4 style="margin: 0; font-size: 1.1rem;">
+                                <a href="{{ url_for('main.process_details', process_id=process.id) }}"
+                                    style="color: var(--text-color); text-decoration: none;">
+                                    {{ process.name }}
+                                </a>
+                            </h4>
+                            <span style="font-size: 0.8rem; color: var(--text-light);">{{ process.process_type.name
+                                }}</span>
+                        </div>
+                    </div>
+
+                    <div
+                        style="display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.85rem; color: var(--text-light);">
+                        <span><i class="fas fa-calendar"></i> Vence: {{ process.due_date.strftime('%d/%m/%Y') }}</span>
+                        <span><i class="fas fa-user"></i> {{ process.created_by.full_name }}</span>
+                        <span><i class="fas fa-building"></i> {{ process.area.name }}</span>
+                    </div>
+                </div>
+
+                <!-- Center: Progress -->
+                <div style="flex: 0 0 200px; text-align: center;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <!-- Progress Ring -->
+                        <div style="position: relative; width: 60px; height: 60px;">
+                            <svg style="transform: rotate(-90deg); width: 60px; height: 60px;">
+                                <circle cx="30" cy="30" r="25" stroke="#e5e7eb" stroke-width="6" fill="none" />
+                                <circle cx="30" cy="30" r="25"
+                                    stroke="{% if process.status == 'Completed' %}#22c55e{% elif process.status == 'Cancelled' %}#94a3b8{% else %}{{ process.process_type.color }}{% endif %}"
+                                    stroke-width="6" fill="none" stroke-linecap="round"
+                                    stroke-dasharray="{{ process.progress_percentage * 1.57 }}, 157" />
+                            </svg>
+                            <div
+                                style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: 700; font-size: 0.9rem;">
+                                {{ process.progress_percentage }}%
+                            </div>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="font-weight: 600; color: var(--text-color);">{{ process.completed_tasks_count
+                                }}/{{ process.total_tasks_count }}</div>
+                            <div style="font-size: 0.8rem; color: var(--text-light);">tareas</div>
+                            {% if process.total_time_spent > 0 %}
+                            <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 0.25rem;">
+                                <i class="fas fa-clock"></i> {{ process.total_time_spent }} min
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Status & Actions -->
+                <div style="flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem;">
+                    {% if process.status == 'Active' %}
+                    <span
+                        style="background: #dbeafe; color: #1d4ed8; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
+                        <i class="fas fa-play"></i> Activo
+                    </span>
+                    {% elif process.status == 'Completed' %}
+                    <span
+                        style="background: #dcfce7; color: #16a34a; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
+                        <i class="fas fa-check-circle"></i> Completado
+                    </span>
+                    {% elif process.status == 'Cancelled' %}
+                    <span
+                        style="background: #f1f5f9; color: #64748b; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
+                        <i class="fas fa-ban"></i> Cancelado
+                    </span>
+                    {% endif %}
+
+                    <div style="display: flex; gap: 0.5rem;">
+                        <a href="{{ url_for('main.process_details', process_id=process.id) }}" class="button-secondary"
+                            style="padding: 0.4rem 0.75rem; font-size: 0.85rem;">
+                            <i class="fas fa-eye"></i> Ver
+                        </a>
+                        {% if process.status == 'Active' and (current_user.is_admin or current_user.role ==
+                        'supervisor') %}
+                        <button onclick="cancelProcess({{ process.id }}, '{{ process.name }}')" class="button-secondary"
+                            style="padding: 0.4rem 0.75rem; font-size: 0.85rem; color: #dc2626;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: var(--text-light); background: #f8fafc; border-radius: 12px;">
+        <i class="fas fa-folder-open" style="font-size: 3rem; opacity: 0.3; margin-bottom: 1rem;"></i>
+        <p style="margin: 0; font-size: 1.1rem;">No hay procesos que mostrar.</p>
+        {% if current_user.can_create_tasks() %}
+        <a href="{{ url_for('main.create_process') }}" class="button" style="margin-top: 1rem;">
+            <i class="fas fa-plus"></i> Crear Proceso
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .stat-card {
+        padding: 1.25rem;
+        border-radius: 12px;
+        text-align: center;
+    }
+
+    .stat-number {
+        font-size: 2rem;
+        font-weight: 700;
+    }
+
+    .stat-label {
+        font-size: 0.9rem;
+        color: var(--text-light);
+        font-weight: 500;
+    }
+
+    .process-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        transform: translateY(-2px);
+    }
+</style>
+
+<script>
+    function cancelProcess(processId, name) {
+        Swal.fire({
+            title: 'Cancelar Proceso',
+            text: `¿Estás seguro de que deseas cancelar el proceso "${name}"? Esto anulará todas las tareas asociadas.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Sí, cancelar',
+            cancelButtonText: 'No'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                fetch(`/processes/${processId}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Cancelado', 'El proceso ha sido cancelado y sus tareas anuladas.', 'success')
+                                .then(() => window.location.reload());
+                        } else {
+                            Swal.fire('Error', data.error || 'No se pudo cancelar el proceso', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire('Error', 'Error de conexión', 'error');
+                    });
+            }
+        });
+    }
+</script>
+{% endblock %}

@@ -337,6 +337,13 @@
         {% endif %}
 
         <div class="tags-container">
+            {% if task.process %}
+            <a href="{{ url_for('main.process_details', process_id=task.process.id) }}" class="process-tag"
+                style="--process-color: {{ task.process.process_type.color }};">
+                <i class="fas {{ task.process.process_type.icon }}"></i>
+                {{ task.process.name|truncate(20) }}
+            </a>
+            {% endif %}
             {% if task.area %}
             <span class="area-tag" style="--area-color: {{ task.area.color }};">
                 {{ task.area.name }}

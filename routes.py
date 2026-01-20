@@ -799,7 +799,9 @@ def edit_task(task_id):
         
         # Update priority and due_date - Admin and Supervisors
         if current_user.is_admin or current_user.role == 'supervisor':
-            task.priority = request.form.get('priority')
+            priority = request.form.get('priority')
+            if priority:  # Only update if provided
+                task.priority = priority
             
             # Parse start date and time
             start_date_str = request.form.get('start_date')

@@ -222,6 +222,13 @@ class ProcessType(db.Model):
         return f'<ProcessType {self.name}>'
 
 
+# Association table for tracking areas that have been involved with a process (for read-only access)
+process_involved_areas = db.Table('process_involved_areas',
+    db.Column('process_id', db.Integer, db.ForeignKey('process.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('area_id', db.Integer, db.ForeignKey('area.id', ondelete='CASCADE'), primary_key=True)
+)
+
+
 class Process(db.Model):
     """
     Una instancia de un tipo de proceso.
@@ -262,6 +269,10 @@ class Process(db.Model):
     # Relación con tareas (definida aquí, Task tiene process_id)
     tasks = db.relationship('Task', backref='process', lazy='dynamic')
     
+    # Áreas involucradas (anteriores) que pueden ver pero no modificar el proceso
+    involved_areas = db.relationship('Area', secondary=process_involved_areas,
+                                      backref=db.backref('involved_processes', lazy='dynamic'))
+    
     @property
     def total_time_spent(self):
         """Suma de time_spent de todas las tareas del proceso"""
@@ -290,8 +301,16 @@ class Process(db.Model):
         """
         Verifica si todas las tareas están completadas y marca el proceso como completado.
         Retorna True si el proceso se completó, False si no.
+        
+        NOTA: Procesos que han sido transferidos entre áreas NO se auto-completan.
+        El área actual debe completarlo manualmente cuando termine todo su trabajo.
         """
         if self.status != 'Active':
+            return False
+        
+        # Si el proceso tiene historial de transferencias, NO auto-completar
+        # El área destino debe completar manualmente
+        if hasattr(self, 'transfers') and len(list(self.transfers)) > 0:
             return False
         
         total = self.total_tasks_count
@@ -319,6 +338,55 @@ class Process(db.Model):
     
     def __repr__(self):
         return f'<Process {self.name}>'
+
+
+class ProcessTransfer(db.Model):
+    """Historial de pases de procesos entre áreas."""
+    __tablename__ = 'process_transfer'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    process_id = db.Column(db.Integer, db.ForeignKey('process.id'), nullable=False)
+    process = db.relationship('Process', backref=db.backref('transfers', order_by='ProcessTransfer.transferred_at'))
+    
+    from_area_id = db.Column(db.Integer, db.ForeignKey('area.id'), nullable=False)
+    from_area = db.relationship('Area', foreign_keys=[from_area_id])
+    
+    to_area_id = db.Column(db.Integer, db.ForeignKey('area.id'), nullable=False)
+    to_area = db.relationship('Area', foreign_keys=[to_area_id])
+    
+    transferred_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    transferred_by = db.relationship('User', backref='process_transfers')
+    
+    transferred_at = db.Column(db.DateTime, default=datetime.utcnow)
+    comment = db.Column(db.Text, nullable=True)
+    
+    def __repr__(self):
+        return f'<ProcessTransfer {self.from_area.name} -> {self.to_area.name}>'
+
+
+class ProcessEvent(db.Model):
+    """Historial general de eventos del proceso."""
+    __tablename__ = 'process_event'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    process_id = db.Column(db.Integer, db.ForeignKey('process.id'), nullable=False)
+    process = db.relationship('Process', backref=db.backref('events', order_by='ProcessEvent.created_at', lazy='dynamic'))
+    
+    event_type = db.Column(db.String(50), nullable=False)  # task_created, task_completed, transfer, status_change, etc.
+    description = db.Column(db.Text, nullable=False)
+    
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    user = db.relationship('User')
+    
+    task_id = db.Column(db.Integer, db.ForeignKey('task.id'), nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Additional data in JSON format (optional)
+    extra_data = db.Column(db.Text, nullable=True)
+    
+    def __repr__(self):
+        return f'<ProcessEvent {self.event_type}: {self.description[:30]}>'
 
 
 # Association table for Many-to-Many relationship between TaskTemplates and Tags

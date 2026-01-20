@@ -14,6 +14,11 @@
             <div>
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
                     <h2 style="margin: 0;">{{ process.name }}</h2>
+                    <span title="ID del Proceso (Click para copiar)" onclick="copyToClipboard('{{ process.id }}')"
+                        style="background: #e2e8f0; color: #475569; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-family: monospace; cursor: pointer; border: 1px solid #cbd5e1;">
+                        #{{ process.id }} <i class="fas fa-copy" style="font-size: 0.7rem;"></i>
+                    </span>
+
                     {% if process.status == 'Active' %}
                     <span
                         style="background: #dbeafe; color: #1d4ed8; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
@@ -37,7 +42,15 @@
             </div>
         </div>
         <div style="display: flex; gap: 0.5rem;">
+            {% if process.status != 'Cancelled' and (current_user.is_admin or current_user.role == 'supervisor') %}
+            <button onclick="openTransferModal()" class="button-secondary" style="color: #6366f1;">
+                <i class="fas fa-exchange-alt"></i> Pasar a otra Área
+            </button>
+            {% endif %}
             {% if process.status == 'Active' and (current_user.is_admin or current_user.role == 'supervisor') %}
+            <button onclick="completeProcess()" class="button" style="background: #16a34a;">
+                <i class="fas fa-check-circle"></i> Completar Proceso
+            </button>
             <button onclick="cancelProcess()" class="button-secondary" style="color: #dc2626;">
                 <i class="fas fa-times"></i> Cancelar Proceso
             </button>
@@ -269,6 +282,61 @@
         </p>
     </div>
     {% endif %}
+
+    <!-- Transfer History -->
+    <!-- General History -->
+    {% if events|length > 0 %}
+    <div style="margin-top: 2rem;">
+        <h3 style="margin-bottom: 1rem;"><i class="fas fa-history"></i> Historial General</h3>
+        <div style="background: #f8fafc; border-radius: 12px; padding: 1rem; border: 1px solid #e2e8f0;">
+            {% for event in events %}
+            <div
+                style="display: flex; align-items: start; gap: 1rem; padding: 0.75rem 0; {% if not loop.last %}border-bottom: 1px solid #e2e8f0;{% endif %}">
+
+                <!-- Icon based on event type -->
+                <div
+                    style="width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+                    background: {% if event.event_type == 'transfer' %}#dbeafe{% elif event.event_type == 'process_completed' %}#dcfce7{% elif event.event_type == 'task_completed' %}#f1f5f9{% elif event.event_type == 'task_created' %}#e0e7ff{% else %}#f1f5f9{% endif %};">
+
+                    {% if event.event_type == 'transfer' %}
+                    <i class="fas fa-exchange-alt" style="color: #2563eb; font-size: 0.9rem;"></i>
+                    {% elif event.event_type == 'process_completed' %}
+                    <i class="fas fa-flag-checkered" style="color: #16a34a; font-size: 0.9rem;"></i>
+                    {% elif event.event_type == 'task_completed' %}
+                    <i class="fas fa-check" style="color: #64748b; font-size: 0.9rem;"></i>
+                    {% elif event.event_type == 'task_created' %}
+                    <i class="fas fa-plus" style="color: #6366f1; font-size: 0.9rem;"></i>
+                    {% else %}
+                    <i class="fas fa-circle" style="color: #64748b; font-size: 0.5rem;"></i>
+                    {% endif %}
+                </div>
+
+                <div style="flex: 1;">
+                    <div style="font-weight: 500; font-size: 0.95rem; color: #1e293b;">
+                        {{ event.description }}
+                    </div>
+                    <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">
+                        {{ (event.created_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M') }}
+                        {% if event.user %}
+                        por <strong>{{ event.user.full_name }}</strong>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Involved Areas (read-only) -->
+    {% if process.involved_areas|length > 0 %}
+    <div style="margin-top: 1.5rem;">
+        <p style="font-size: 0.85rem; color: var(--text-light);">
+            <i class="fas fa-eye"></i> Áreas con acceso de lectura:
+            {% for area in process.involved_areas %}{{ area.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+        </p>
+    </div>
+    {% endif %}
 </div>
 
 <style>
@@ -277,6 +345,35 @@
         box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1);
     }
 </style>
+
+<!-- Transfer Modal -->
+<div id="transferModal"
+    style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div
+        style="background: white; border-radius: 16px; padding: 2rem; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+        <h3 style="margin: 0 0 1rem 0;"><i class="fas fa-exchange-alt"></i> Pasar a otra Área</h3>
+        <div style="margin-bottom: 1rem;">
+            <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">Área destino</label>
+            <select id="toAreaSelect" class="form-input" style="width: 100%;">
+                <option value="">Seleccionar área...</option>
+                {% for area in all_areas %}
+                {% if area.id != process.area_id %}
+                <option value="{{ area.id }}">{{ area.name }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        <div style="margin-bottom: 1.5rem;">
+            <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">Comentario (opcional)</label>
+            <textarea id="transferComment" class="form-input" style="width: 100%; min-height: 80px;"
+                placeholder="Ej: Pasa a Contable para revisión de gastos"></textarea>
+        </div>
+        <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+            <button onclick="closeTransferModal()" class="button-secondary">Cancelar</button>
+            <button onclick="submitTransfer()" class="button"><i class="fas fa-check"></i> Confirmar</button>
+        </div>
+    </div>
+</div>
 
 <script>
     function cancelProcess() {
@@ -311,6 +408,53 @@
             }
         });
     }
+
+    function completeProcess() {
+        Swal.fire({
+            title: 'Completar Proceso',
+            html: `
+                <div style="text-align: left; font-size: 0.95rem;">
+                    <p><strong>⚠️ Antes de completar, considera:</strong></p>
+                    <div style="background: #fef3c7; padding: 0.75rem; border-radius: 8px; margin: 0.75rem 0; border-left: 4px solid #f59e0b;">
+                        <strong>Si tu área terminó pero otras deben continuar:</strong><br>
+                        Usar <strong>"Pasar a otra Área"</strong> para que el proceso siga activo.
+                    </div>
+                    <div style="background: #dcfce7; padding: 0.75rem; border-radius: 8px; margin: 0.75rem 0; border-left: 4px solid #16a34a;">
+                        <strong>Si TODO el trabajo está finalizado:</strong><br>
+                        Usar <strong>"Completar Proceso"</strong> para cerrar definitivamente.
+                    </div>
+                    <p style="margin-top: 1rem;">¿Estás seguro de que <u>todo el proceso</u> está terminado?</p>
+                </div>
+            `,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#16a34a',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Sí, completar definitivamente',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                fetch('/processes/{{ process.id }}/complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: true })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Completado', 'El proceso ha sido marcado como completado.', 'success')
+                                .then(() => window.location.reload());
+                        } else {
+                            Swal.fire('Error', data.error || 'No se pudo completar el proceso', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire('Error', 'Error de conexión', 'error');
+                    });
+            }
+        });
+    }
     function toggleHistory(taskId) {
         const historyDiv = document.getElementById(`history-${taskId}`);
         if (historyDiv.style.display === 'none') {
@@ -318,6 +462,43 @@
         } else {
             historyDiv.style.display = 'none';
         }
+    }
+
+    function openTransferModal() {
+        document.getElementById('transferModal').style.display = 'flex';
+    }
+
+    function closeTransferModal() {
+        document.getElementById('transferModal').style.display = 'none';
+    }
+
+    function submitTransfer() {
+        const toAreaId = document.getElementById('toAreaSelect').value;
+        const comment = document.getElementById('transferComment').value;
+
+        if (!toAreaId) {
+            Swal.fire('Error', 'Debe seleccionar un área destino', 'error');
+            return;
+        }
+
+        fetch('/processes/{{ process.id }}/transfer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to_area_id: parseInt(toAreaId), comment: comment })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Transferido', `El proceso fue transferido de ${data.from_area} a ${data.to_area}`, 'success')
+                        .then(() => window.location.reload());
+                } else {
+                    Swal.fire('Error', data.error || 'No se pudo transferir el proceso', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire('Error', 'Error de conexión', 'error');
+            });
     }
 </script>
 {% endblock %}

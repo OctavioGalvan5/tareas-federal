@@ -620,7 +620,34 @@ def generate_task_pdf(tasks, filters):
     pdf.set_text_color(0, 0, 0)
     
     fill = False
+    
+    # Define header drawing as a closure for reuse
+    def draw_table_header():
+        pdf.set_fill_color(0, 119, 190)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font('Arial', 'B', 8)
+        
+        pdf.cell(w_title, 10, 'Título', 0, 0, 'L', True)
+        pdf.cell(w_creator, 10, 'Creado por', 0, 0, 'L', True)
+        pdf.cell(w_assigned, 10, 'Asignado a', 0, 0, 'L', True)
+        pdf.cell(w_status, 10, 'Estado', 0, 0, 'C', True)
+        pdf.cell(w_priority, 10, 'Prioridad', 0, 0, 'C', True)
+        pdf.cell(w_date, 10, 'Vencimiento', 0, 0, 'C', True)
+        pdf.cell(w_completed, 10, 'Completado por', 0, 1, 'C', True)
+        
+        pdf.set_font('Arial', '', 8)
+        pdf.set_text_color(0, 0, 0)
+    
+    # Disable auto page break to have full control
+    pdf.set_auto_page_break(False)
+    
     for task in tasks:
+        # Check for page break (Threshold set to 260mm to be safe, A4 is 297mm)
+        if pdf.get_y() > 260:
+            pdf.add_page()
+            draw_table_header()
+            fill = False # Reset zebra fill on new page
+            
         # Zebra striping
         if fill:
             pdf.set_fill_color(243, 244, 246) # Gray 100
@@ -647,7 +674,7 @@ def generate_task_pdf(tasks, filters):
         else:
             completed_info = "-"
         
-        # Save current Y position
+        # Save current Y position for cells
         y_start = pdf.get_y()
         x_start = pdf.get_x()
         
@@ -670,18 +697,21 @@ def generate_task_pdf(tasks, filters):
         pdf.cell(w_priority, 10, task.priority, 0, 0, 'C', fill)
         pdf.cell(w_date, 10, to_buenos_aires(task.due_date).strftime('%d/%m/%Y'), 0, 0, 'C', fill)
         
-        # Completed by (Multi-cell needs special handling to not break flow)
-        # We use x,y positioning
-        x_current = pdf.get_x()
-        y_current = pdf.get_y()
-        
+        # Completed by (Multi-cell needs special handling)
+        # We manually position this last cell
         pdf.set_font('Arial', '', 7)
         pdf.multi_cell(w_completed, 5, completed_info, 0, 'C', fill)
         pdf.set_font('Arial', '', 8)
         
-        # Move to next line based on max height (which is 10)
+        # Force move to next line 
+        # CAUTION: multi_cell moves Y. We need to ensure we align next row correctly.
+        # Since the height is fixed at 10 (2 lines of 5), and multi_cell takes height as line height
+        # If content < 2 lines, it might be less. We force spacing.
         pdf.set_xy(x_start, y_start + 10)
         
         fill = not fill
+        
+    # Re-enable auto page break
+    pdf.set_auto_page_break(True, margin=15)
         
     return pdf

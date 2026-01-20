@@ -4,7 +4,7 @@ from extensions import db
 from models import User, Task, Tag, TaskTemplate, SubtaskTemplate, Expiration, RecurringTask, ActivityLog, ProcessType, Process, StatusTransition
 from datetime import datetime, date, timedelta
 from pdf_utils import generate_task_pdf
-from excel_utils import generate_task_excel
+from excel_utils import generate_task_excel, generate_import_template, process_excel_import
 from io import BytesIO
 from utils import calculate_business_days_until
 from sqlalchemy.orm import joinedload, subqueryload
@@ -105,6 +105,34 @@ def log_activity(user, action, description, target_type=None, target_id=None, ar
     except Exception as e:
         print(f"Error logging activity: {e}")
         db.session.rollback()
+
+
+def log_process_event(process_id, event_type, description, user_id=None, task_id=None, extra_data=None):
+    """
+    Registra un evento en el historial del proceso.
+    
+    Args:
+        process_id: ID del proceso
+        event_type: Tipo de evento ('task_created', 'task_completed', 'transfer', 'status_change')
+        description: Descripción legible del evento
+        user_id: ID del usuario que realizó la acción (opcional)
+        task_id: ID de la tarea relacionada (opcional)
+        extra_data: Datos adicionales en formato JSON (opcional)
+    """
+    try:
+        from models import ProcessEvent
+        event = ProcessEvent(
+            process_id=process_id,
+            event_type=event_type,
+            description=description,
+            user_id=user_id,
+            task_id=task_id,
+            extra_data=extra_data
+        )
+        db.session.add(event)
+        # Note: Don't commit here, let the caller handle the commit
+    except Exception as e:
+        print(f"Error logging process event: {e}")
 
 
 main_bp = Blueprint('main', __name__)
@@ -558,6 +586,16 @@ def create_task():
                 
         db.session.add(new_task)
         db.session.commit()
+        
+        # Log process event if part of a process
+        if new_task.process_id:
+            log_process_event(
+                process_id=new_task.process_id,
+                event_type='task_created',
+                description=f'Tarea creada: {new_task.title}',
+                user_id=current_user.id,
+                task_id=new_task.id
+            )
         
         # Process inline subtasks (if any) - with hierarchy support
         subtask_titles = request.form.getlist('subtask_title[]')
@@ -1427,11 +1465,19 @@ def toggle_task_status(task_id):
                     child.due_date = now_utc()
                     adjusted_dates_count += 1
         
-        if enabled_children_count > 0:
-            msg = f'Se habilitaron {enabled_children_count} tarea(s) dependiente(s).'
             if adjusted_dates_count > 0:
                 msg += f' Se ajustó la fecha de vencimiento de {adjusted_dates_count} tarea(s) que ya habían vencido.'
             flash(msg, 'info')
+        
+        # Log process event if part of a process
+        if task.process_id:
+            log_process_event(
+                process_id=task.process_id,
+                event_type='task_completed',
+                description=f'Tarea completada: {task.title}',
+                user_id=current_user.id,
+                task_id=task.id
+            )
     else:
         # Note: We don't disable children when uncompleting - they stay enabled
         task.status = 'Pending'
@@ -1621,6 +1667,17 @@ def update_task_status(task_id):
         
         if data.get('comment'):
             task.completion_comment = data.get('comment')
+        
+        # Log process event if part of a process
+        if task.process_id:
+            log_process_event(
+                process_id=task.process_id,
+                event_type='task_completed',
+                description=f'Tarea completada: {task.title}',
+                user_id=current_user.id,
+                task_id=task.id
+            )
+            
         # Enable child tasks when parent is completed
         for child in task.children:
             if not child.enabled:
@@ -3076,8 +3133,7 @@ def calculate_kpis(tasks, global_completed):
     }
 
 # --- Excel Import Routes ---
-@main_bp.route('/import/template')
-@login_required
+
 def download_import_template():
     """Download the Excel template for importing tasks"""
     if not current_user.can_create_tasks():
@@ -3099,8 +3155,7 @@ def download_import_template():
     response.headers['Content-Disposition'] = 'attachment; filename=plantilla_tareas.xlsx'
     return response
 
-@main_bp.route('/import/tasks', methods=['POST'])
-@login_required
+
 def import_tasks():
     """Import tasks from an uploaded Excel file"""
     # Check permission first
@@ -5036,6 +5091,8 @@ def create_process():
 @login_required
 def process_details(process_id):
     """View process details"""
+    from models import Area
+    
     process = Process.query.options(
         joinedload(Process.process_type),
         joinedload(Process.area),
@@ -5043,9 +5100,14 @@ def process_details(process_id):
         joinedload(Process.completed_by)
     ).get_or_404(process_id)
     
-    # Check permission
+    # Check permission - allow current area OR involved areas (read-only)
     user_area_ids = [a.id for a in current_user.areas]
-    if not current_user.is_admin and process.area_id not in user_area_ids:
+    involved_area_ids = [a.id for a in process.involved_areas]
+    can_view = (current_user.is_admin or 
+                process.area_id in user_area_ids or 
+                any(aid in involved_area_ids for aid in user_area_ids))
+    
+    if not can_view:
         flash('No tienes permiso para ver este proceso.', 'danger')
         return redirect(url_for('main.list_processes'))
     
@@ -5059,9 +5121,17 @@ def process_details(process_id):
         .order_by(Task.created_at.asc())\
         .all()
     
+    # Get all areas for transfer modal
+    all_areas = Area.query.order_by(Area.name).all()
+    
+    # Get process events (history)
+    events = process.events.all()
+    
     return render_template('process_details.html',
                            process=process,
                            tasks=tasks,
+                           all_areas=all_areas,
+                           events=events,
                            now_utc=now_utc)
 
 
@@ -5094,6 +5164,147 @@ def cancel_process(process_id):
     )
     
     return jsonify({'success': True})
+
+
+@main_bp.route('/processes/<int:process_id>/complete', methods=['POST'])
+@login_required
+def complete_process(process_id):
+    """Manually complete a process"""
+    process = Process.query.get_or_404(process_id)
+    
+    # Check permission - only current area can complete
+    user_area_ids = [a.id for a in current_user.areas]
+    if not current_user.is_admin and process.area_id not in user_area_ids:
+        return jsonify({'success': False, 'error': 'No tienes permiso'}), 403
+    
+    if process.status != 'Active':
+        return jsonify({'success': False, 'error': 'Solo se pueden completar procesos activos'}), 400
+    
+    # Check for pending tasks
+    pending_tasks = process.tasks.filter(Task.status.in_(['Pending', 'In Progress', 'In Review'])).count()
+    
+    data = request.get_json() or {}
+    force = data.get('force', False)
+    
+    if pending_tasks > 0 and not force:
+        return jsonify({
+            'success': False,
+            'needs_confirmation': True,
+            'pending_count': pending_tasks,
+            'error': f'Hay {pending_tasks} tarea(s) sin completar en este proceso. Si tu área ya terminó su trabajo, deberías usar "Pasar a otra Área" en lugar de completar.'
+        }), 400
+    
+    # Complete the process
+    process.status = 'Completed'
+    process.completed_at = now_utc()
+    process.completed_by_id = current_user.id
+    
+    # Log process event for unified history
+    log_process_event(
+        process_id=process.id,
+        event_type='process_completed',
+        description=f'Proceso completado por {current_user.full_name}',
+        user_id=current_user.id
+    )
+    
+    db.session.commit()
+    
+    # Log activity
+    log_activity(
+        user=current_user,
+        action='process_completed',
+        description=f'completó el proceso "{process.name}"',
+        target_type='process',
+        target_id=process.id,
+        area_id=process.area_id
+    )
+    
+    return jsonify({'success': True})
+
+
+@main_bp.route('/processes/<int:process_id>/transfer', methods=['POST'])
+@login_required
+def transfer_process(process_id):
+    """Transfer a process to another area, keeping visibility for involved areas."""
+    from models import Process, Area, ProcessTransfer
+    
+    # Only admin and supervisor can transfer
+    if not current_user.is_admin and current_user.role != 'supervisor':
+        return jsonify({'success': False, 'error': 'No tienes permiso para transferir procesos'}), 403
+    
+    process = Process.query.get_or_404(process_id)
+    
+    # Check if user has access to current area
+    if not current_user.is_admin:
+        user_area_ids = [a.id for a in current_user.areas]
+        if process.area_id not in user_area_ids:
+            return jsonify({'success': False, 'error': 'Solo puedes transferir procesos de tu área'}), 403
+    
+    data = request.get_json() or {}
+    to_area_id = data.get('to_area_id')
+    comment = data.get('comment', '')
+    
+    if not to_area_id:
+        return jsonify({'success': False, 'error': 'Debe seleccionar un área destino'}), 400
+    
+    to_area = Area.query.get(to_area_id)
+    if not to_area:
+        return jsonify({'success': False, 'error': 'Área destino no encontrada'}), 404
+    
+    if process.area_id == to_area_id:
+        return jsonify({'success': False, 'error': 'El proceso ya está en esa área'}), 400
+    
+    # Store current area in involved_areas (for read-only access)
+    current_area = process.area
+    if current_area not in process.involved_areas:
+        process.involved_areas.append(current_area)
+    
+    # Create transfer record
+    transfer = ProcessTransfer(
+        process_id=process.id,
+        from_area_id=process.area_id,
+        to_area_id=to_area_id,
+        transferred_by_id=current_user.id,
+        comment=comment
+    )
+    db.session.add(transfer)
+    
+    # Update process area
+    old_area_name = process.area.name
+    process.area_id = to_area_id
+    
+    # If process was completed, reopen it - a transfer means more work is needed
+    if process.status == 'Completed':
+        process.status = 'Active'
+        process.completed_at = None
+        process.completed_by_id = None
+    
+    # Log process event for unified history
+    comment_suffix = f' - "{comment}"' if comment else ''
+    log_process_event(
+        process_id=process.id,
+        event_type='transfer',
+        description=f'Proceso transferido de {old_area_name} a {to_area.name}{comment_suffix}',
+        user_id=current_user.id
+    )
+    
+    db.session.commit()
+    
+    # Log activity
+    log_activity(
+        user=current_user,
+        action='process_transferred',
+        description=f'transfirió el proceso "{process.name}" de {old_area_name} a {to_area.name}',
+        target_type='process',
+        target_id=process.id,
+        area_id=to_area_id
+    )
+    
+    return jsonify({
+        'success': True,
+        'from_area': old_area_name,
+        'to_area': to_area.name
+    })
 
 
 # --- Helper for Template Subtasks (Appended) ---
@@ -5182,4 +5393,64 @@ def create_subtasks_from_template(template, parent_task, assignees=None, creator
             child.enabled = parent_task.enabled if parent_task.enabled else True
             
     db.session.commit()
+
+
+@main_bp.route('/download_import_template')
+@login_required
+def download_import_template():
+    """Download the Excel template for importing tasks."""
+    wb = generate_import_template()
+    
+    # Save to BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    from flask import send_file
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='plantilla_importacion_tareas.xlsx'
+    )
+
+
+@main_bp.route('/import_tasks', methods=['POST'])
+@login_required
+def import_tasks():
+    """Import tasks from an Excel file."""
+    # Check if a file was uploaded
+    if 'file' not in request.files:
+        flash('No se seleccionó ningún archivo', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    file = request.files['file']
+    
+    # Check if user selected a file
+    if file.filename == '':
+        flash('No se seleccionó ningún archivo', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    # Process the file
+    if file and (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
+        success_count, errors = process_excel_import(file, current_user)
+        
+        if success_count > 0:
+            flash(f'Se importaron exitosamente {success_count} tarea(s).', 'success')
+            
+        if errors:
+            # If many errors, maybe just show first 5?
+            error_msg = '<br>'.join(errors[:5])
+            if len(errors) > 5:
+                error_msg += f'<br>... y {len(errors) - 5} errores más.'
+            flash(f'Errores durante la importación:<br>{error_msg}', 'warning')
+            
+        if success_count == 0 and not errors:
+             flash('No se encontraron tareas válidas para importar.', 'warning')
+
+    else:
+        flash('Formato de archivo inválido. Por favor sube un Excel (.xlsx)', 'danger')
+        
+    return redirect(url_for('main.dashboard'))
+
 

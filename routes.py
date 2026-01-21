@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, make_response
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
-from models import User, Task, Tag, TaskTemplate, SubtaskTemplate, Expiration, RecurringTask, ActivityLog, ProcessType, Process, StatusTransition
+from models import User, Task, Tag, TaskTemplate, SubtaskTemplate, Expiration, RecurringTask, ActivityLog, ProcessType, Process, StatusTransition, TaskAttachment
 from datetime import datetime, date, timedelta
 from pdf_utils import generate_task_pdf
 from excel_utils import generate_task_excel, generate_import_template, process_excel_import
@@ -9,6 +9,8 @@ from io import BytesIO
 from utils import calculate_business_days_until
 from sqlalchemy.orm import joinedload, subqueryload
 import pytz
+from werkzeug.utils import secure_filename
+import storage
 
 # Buenos Aires timezone (for reference, conversion is done in templates)
 BUENOS_AIRES_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
@@ -1079,6 +1081,31 @@ def task_details(task_id):
         'label': 'Tarea Creada',
         'icon': 'fa-plus'
     })
+    
+    # Add Attachment Events (upload/delete)
+    attachment_logs = ActivityLog.query.filter(
+        ActivityLog.target_id == task.id,
+        ActivityLog.target_type == 'task',
+        ActivityLog.action.in_(['attachment_upload', 'attachment_delete'])
+    ).all()
+    
+    for log in attachment_logs:
+        if log.action == 'attachment_upload':
+            timeline_events.append({
+                'type': 'attachment_upload',
+                'timestamp': log.created_at,
+                'user': log.user,
+                'label': log.description,
+                'icon': 'fa-paperclip'
+            })
+        else:  # attachment_delete
+            timeline_events.append({
+                'type': 'attachment_delete',
+                'timestamp': log.created_at,
+                'user': log.user,
+                'label': log.description,
+                'icon': 'fa-trash'
+            })
 
     # Sort by timestamp
     timeline_events.sort(key=lambda x: x['timestamp'])
@@ -5457,3 +5484,169 @@ def import_tasks():
     return redirect(url_for('main.dashboard'))
 
 
+# =====================================================
+# FILE ATTACHMENTS (MinIO)
+# =====================================================
+
+@main_bp.route('/tasks/<int:task_id>/attachments', methods=['POST'])
+@login_required
+def upload_attachment(task_id):
+    """Upload a file attachment to a task."""
+    task = Task.query.get_or_404(task_id)
+    
+    # Check if user has access to this task
+    if not current_user.is_admin and current_user not in task.assignees and task.creator_id != current_user.id:
+        flash('No tienes permiso para adjuntar archivos a esta tarea.', 'danger')
+        return redirect(url_for('main.task_details', task_id=task_id))
+    
+    if 'file' not in request.files:
+        flash('No se seleccionó ningún archivo.', 'danger')
+        return redirect(url_for('main.task_details', task_id=task_id))
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        flash('No se seleccionó ningún archivo.', 'danger')
+        return redirect(url_for('main.task_details', task_id=task_id))
+    
+    # Check file extension
+    if not storage.allowed_file(file.filename):
+        flash(f'Tipo de archivo no permitido. Extensiones válidas: {", ".join(storage.ALLOWED_EXTENSIONS)}', 'danger')
+        return redirect(url_for('main.task_details', task_id=task_id))
+    
+    # Check file size
+    file.seek(0, 2)  # Seek to end
+    file_size = file.tell()
+    file.seek(0)  # Reset to start
+    
+    if file_size > storage.MAX_FILE_SIZE:
+        flash(f'El archivo excede el tamaño máximo de {storage.MAX_FILE_SIZE / (1024*1024):.0f} MB.', 'danger')
+        return redirect(url_for('main.task_details', task_id=task_id))
+    
+    # Secure the filename
+    filename = secure_filename(file.filename)
+    
+    # Upload to MinIO
+    success, result = storage.upload_file(file, task_id, filename)
+    
+    if not success:
+        flash(f'Error al subir archivo: {result}', 'danger')
+        return redirect(url_for('main.task_details', task_id=task_id))
+    
+    # Save metadata to database
+    attachment = TaskAttachment(
+        task_id=task_id,
+        filename=filename,
+        file_key=result,  # This is the file_key returned from upload_file
+        file_size=file_size,
+        content_type=file.content_type,
+        uploaded_by_id=current_user.id
+    )
+    db.session.add(attachment)
+    
+    # Log activity
+    activity = ActivityLog(
+        user_id=current_user.id,
+        action='attachment_upload',
+        description=f'Subió el archivo "{filename}" a la tarea #{task_id}',
+        target_type='task',
+        target_id=task_id,
+        area_id=task.area_id
+    )
+    db.session.add(activity)
+    db.session.commit()
+    
+    flash(f'Archivo "{filename}" subido y guardado exitosamente.', 'success')
+    return redirect(url_for('main.edit_task', task_id=task_id))
+
+
+@main_bp.route('/attachments/<int:attachment_id>/download')
+@login_required
+def download_attachment(attachment_id):
+    """Download a file attachment."""
+    attachment = TaskAttachment.query.get_or_404(attachment_id)
+    task = attachment.task
+    
+    # Check if user has access to this task
+    if not current_user.is_admin and current_user not in task.assignees and task.creator_id != current_user.id:
+        flash('No tienes permiso para descargar este archivo.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    # Download from MinIO
+    success, result = storage.download_file(attachment.file_key)
+    
+    if not success:
+        flash(f'Error al descargar archivo: {result}', 'danger')
+        return redirect(url_for('main.task_details', task_id=task.id))
+    
+    # Create response with file data
+    response = make_response(result['data'])
+    response.headers['Content-Type'] = result['content_type']
+    response.headers['Content-Disposition'] = f'attachment; filename="{attachment.filename}"'
+    
+    return response
+
+
+@main_bp.route('/attachments/<int:attachment_id>/delete', methods=['POST'])
+@login_required
+def delete_attachment(attachment_id):
+    """Delete a file attachment."""
+    attachment = TaskAttachment.query.get_or_404(attachment_id)
+    task = attachment.task
+    
+    # Check permission: only admin, the uploader, or task creator can delete
+    if not current_user.is_admin and attachment.uploaded_by_id != current_user.id and task.creator_id != current_user.id:
+        flash('No tienes permiso para eliminar este archivo.', 'danger')
+        return redirect(url_for('main.task_details', task_id=task.id))
+    
+    # Delete from MinIO
+    success, message = storage.delete_file(attachment.file_key)
+    
+    if not success:
+        flash(f'Error al eliminar archivo: {message}', 'warning')
+        # Continue to delete from DB anyway
+    
+    # Log activity
+    activity = ActivityLog(
+        user_id=current_user.id,
+        action='attachment_delete',
+        description=f'Eliminó el archivo "{attachment.filename}" de la tarea #{task.id}',
+        target_type='task',
+        target_id=task.id,
+        area_id=task.area_id
+    )
+    db.session.add(activity)
+    
+    # Delete from database
+    db.session.delete(attachment)
+    db.session.commit()
+    
+    flash(f'Archivo "{attachment.filename}" eliminado.', 'success')
+    return redirect(url_for('main.edit_task', task_id=task.id))
+
+
+@main_bp.route('/attachments/<int:attachment_id>/view')
+@login_required
+def view_attachment(attachment_id):
+    """View a file attachment in browser (for PDFs and images)."""
+    attachment = TaskAttachment.query.get_or_404(attachment_id)
+    task = attachment.task
+    
+    # Check if user has access to this task
+    if not current_user.is_admin and current_user not in task.assignees and task.creator_id != current_user.id:
+        flash('No tienes permiso para ver este archivo.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
+    # Download from MinIO
+    success, result = storage.download_file(attachment.file_key)
+    
+    if not success:
+        flash(f'Error al cargar archivo: {result}', 'danger')
+        return redirect(url_for('main.task_details', task_id=task.id))
+    
+    # Create response - display inline instead of download
+    response = make_response(result['data'])
+    response.headers['Content-Type'] = result['content_type']
+    response.headers['Content-Disposition'] = f'inline; filename="{attachment.filename}"'
+    
+    return response

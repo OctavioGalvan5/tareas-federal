@@ -627,3 +627,39 @@ def receive_set_status(target, value, oldvalue, initiator):
             if child.status != 'Anulado':
                 child.status = 'Anulado'
                 # Al asignar status, se dispara recursivamente este mismo listener
+
+
+class TaskAttachment(db.Model):
+    """
+    Archivos adjuntos a tareas.
+    Los archivos se almacenan en MinIO/S3 y aquí guardamos los metadatos.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('task.id', ondelete='CASCADE'), nullable=False)
+    
+    # Información del archivo
+    filename = db.Column(db.String(255), nullable=False)  # Nombre original del archivo
+    file_key = db.Column(db.String(500), nullable=False)  # Key en MinIO (path)
+    file_size = db.Column(db.Integer, nullable=False)     # Tamaño en bytes
+    content_type = db.Column(db.String(100), nullable=True)  # MIME type
+    
+    # Auditoría
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    task = db.relationship('Task', backref=db.backref('attachments', cascade='all, delete-orphan', order_by='TaskAttachment.created_at.desc()'))
+    uploaded_by = db.relationship('User', backref='uploaded_attachments')
+    
+    def __repr__(self):
+        return f'<TaskAttachment {self.filename}>'
+    
+    @property
+    def file_size_formatted(self):
+        """Devuelve el tamaño formateado (KB, MB)"""
+        if self.file_size < 1024:
+            return f"{self.file_size} B"
+        elif self.file_size < 1024 * 1024:
+            return f"{self.file_size / 1024:.1f} KB"
+        else:
+            return f"{self.file_size / (1024 * 1024):.1f} MB"

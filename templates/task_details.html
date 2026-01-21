@@ -248,6 +248,85 @@
         </div>
     </div>
 
+    <!-- 📎 File Attachments Section (View Only) -->
+    <div class="form-group"
+        style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 1.5rem; border-radius: 10px; border: 1px solid #f59e0b;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <label style="color: #92400e; font-weight: 700; font-size: 1.1rem; margin: 0;">
+                <i class="fas fa-paperclip"></i> Archivos Adjuntos
+                {% if task.attachments %}
+                <span
+                    style="background: #92400e; color: white; padding: 0.2rem 0.6rem; border-radius: 10px; font-size: 0.85rem; margin-left: 0.5rem;">
+                    {{ task.attachments|length }}
+                </span>
+                {% endif %}
+            </label>
+            {% if task.status != 'Anulado' %}
+            <a href="{{ url_for('main.edit_task', task_id=task.id) }}#uploadForm" class="button"
+                style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                <i class="fas fa-plus"></i> Gestionar Archivos
+            </a>
+            {% endif %}
+        </div>
+
+        <!-- File List -->
+        {% if task.attachments %}
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            {% for attachment in task.attachments %}
+            <div
+                style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: white; border: 1px solid #fcd34d; border-radius: 8px;">
+                <!-- File Icon -->
+                {% if attachment.content_type and 'pdf' in attachment.content_type %}
+                <i class="fas fa-file-pdf" style="font-size: 1.5rem; color: #ef4444;"></i>
+                {% elif attachment.filename.endswith('.doc') or attachment.filename.endswith('.docx') %}
+                <i class="fas fa-file-word" style="font-size: 1.5rem; color: #2563eb;"></i>
+                {% elif attachment.filename.endswith('.xls') or attachment.filename.endswith('.xlsx') %}
+                <i class="fas fa-file-excel" style="font-size: 1.5rem; color: #16a34a;"></i>
+                {% elif attachment.content_type and 'image' in attachment.content_type %}
+                <i class="fas fa-file-image" style="font-size: 1.5rem; color: #8b5cf6;"></i>
+                {% else %}
+                <i class="fas fa-file" style="font-size: 1.5rem; color: #64748b;"></i>
+                {% endif %}
+
+                <!-- File Info -->
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                        title="{{ attachment.filename }}">
+                        {{ attachment.filename }}
+                    </div>
+                    <div style="font-size: 0.8rem; color: #64748b;">
+                        {{ attachment.file_size_formatted }} · {{ attachment.uploaded_by.full_name }}
+                        · {{ (attachment.created_at|to_buenos_aires).strftime('%d/%m/%Y %H:%M') }}
+                    </div>
+                </div>
+
+                <!-- Actions (View & Download only) -->
+                <div style="display: flex; gap: 0.5rem;">
+                    <!-- View button for PDFs and Images -->
+                    {% if (attachment.content_type and 'pdf' in attachment.content_type) or (attachment.content_type and
+                    'image' in attachment.content_type) %}
+                    <a href="{{ url_for('main.view_attachment', attachment_id=attachment.id) }}" target="_blank"
+                        class="button" style="background: #8b5cf6; padding: 0.4rem 0.8rem; font-size: 0.85rem;"
+                        title="Ver">
+                        <i class="fas fa-eye"></i>
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="button"
+                        style="background: #2563eb; padding: 0.4rem 0.8rem; font-size: 0.85rem;" title="Descargar">
+                        <i class="fas fa-download"></i>
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p
+            style="color: #92400e; margin: 0; text-align: center; padding: 1rem; background: rgba(255,255,255,0.5); border-radius: 8px;">
+            <i class="fas fa-folder-open"></i> No hay archivos adjuntos
+        </p>
+        {% endif %}
+    </div>
+
     <!-- 🔗 Task Hierarchy Section -->
     {% if task.parent or task.children %}
     <div class="form-group"
@@ -427,6 +506,10 @@
                 {% set color = '#8b5cf6' %} <!-- Purple for edits -->
                 {% elif event.type == 'creation' %}
                 {% set color = '#10b981' %} <!-- Green for creation -->
+                {% elif event.type == 'attachment_upload' %}
+                {% set color = '#f59e0b' %} <!-- Orange for file upload -->
+                {% elif event.type == 'attachment_delete' %}
+                {% set color = '#ef4444' %} <!-- Red for file delete -->
                 {% endif %}
 
                 <!-- Time Line Connector (visual) -->

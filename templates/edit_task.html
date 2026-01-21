@@ -305,6 +305,101 @@
             </button>
         </div>
 
+        <!-- 📎 File Attachments Section -->
+        <div class="form-group"
+            style="margin-top: 1.5rem; padding: 1.5rem; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 10px; border: 1px solid #f59e0b;">
+            <label style="color: #92400e; font-weight: 700; font-size: 1.1rem; margin-bottom: 1rem; display: block;">
+                <i class="fas fa-paperclip"></i> Archivos Adjuntos
+                {% if task.attachments %}
+                <span
+                    style="background: #92400e; color: white; padding: 0.2rem 0.6rem; border-radius: 10px; font-size: 0.85rem; margin-left: 0.5rem;">
+                    {{ task.attachments|length }}
+                </span>
+                {% endif %}
+            </label>
+
+            <!-- Upload Form (separate from main form) -->
+            <div style="margin-bottom: 1rem; padding: 1rem; background: rgba(255,255,255,0.7); border-radius: 8px;">
+                <p style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: #92400e; font-weight: 600;">
+                    <i class="fas fa-upload"></i> Subir Nuevo Archivo
+                </p>
+                <div>
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <input type="file" name="file" id="attachment_file" multiple
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                            style="flex: 1; min-width: 200px; padding: 0.5rem; background: white; border: 2px dashed #f59e0b; border-radius: 8px; cursor: pointer;">
+                        <button type="button" id="btnUpload" onclick="uploadAttachment()" class="button"
+                            style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); white-space: nowrap;">
+                            <i class="fas fa-upload"></i> Subir
+                        </button>
+                    </div>
+                    <p style="margin: 0.5rem 0 0 0; font-size: 0.8rem; color: #92400e;">
+                        <i class="fas fa-info-circle"></i> Formatos: PDF, Word, Excel, Imágenes. Máximo 5 MB.
+                    </p>
+                </div>
+            </div>
+
+            <!-- File List -->
+            {% if task.attachments %}
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                {% for attachment in task.attachments %}
+                <div
+                    style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: white; border: 1px solid #fcd34d; border-radius: 8px;">
+                    <!-- File Icon -->
+                    {% if attachment.content_type and 'pdf' in attachment.content_type %}
+                    <i class="fas fa-file-pdf" style="font-size: 1.5rem; color: #ef4444;"></i>
+                    {% elif attachment.filename.endswith('.doc') or attachment.filename.endswith('.docx') %}
+                    <i class="fas fa-file-word" style="font-size: 1.5rem; color: #2563eb;"></i>
+                    {% elif attachment.filename.endswith('.xls') or attachment.filename.endswith('.xlsx') %}
+                    <i class="fas fa-file-excel" style="font-size: 1.5rem; color: #16a34a;"></i>
+                    {% elif attachment.content_type and 'image' in attachment.content_type %}
+                    <i class="fas fa-file-image" style="font-size: 1.5rem; color: #8b5cf6;"></i>
+                    {% else %}
+                    <i class="fas fa-file" style="font-size: 1.5rem; color: #64748b;"></i>
+                    {% endif %}
+
+                    <!-- File Info -->
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                            title="{{ attachment.filename }}">
+                            {{ attachment.filename }}
+                        </div>
+                        <div style="font-size: 0.8rem; color: #64748b;">
+                            {{ attachment.file_size_formatted }} · {{ attachment.uploaded_by.full_name }}
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div style="display: flex; gap: 0.5rem;">
+                        <!-- View button for PDFs and Images -->
+                        {% if (attachment.content_type and 'pdf' in attachment.content_type) or (attachment.content_type
+                        and 'image' in attachment.content_type) %}
+                        <a href="{{ url_for('main.view_attachment', attachment_id=attachment.id) }}" target="_blank"
+                            class="button" style="background: #8b5cf6; padding: 0.4rem 0.8rem; font-size: 0.85rem;"
+                            title="Ver">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                        {% endif %}
+                        <a href="{{ url_for('main.download_attachment', attachment_id=attachment.id) }}" class="button"
+                            style="background: #2563eb; padding: 0.4rem 0.8rem; font-size: 0.85rem;" title="Descargar">
+                            <i class="fas fa-download"></i>
+                        </a>
+                        <button type="button" onclick="deleteAttachment({{ attachment.id }})" class="button"
+                            style="background: #dc2626; padding: 0.4rem 0.8rem; font-size: 0.85rem;" title="Eliminar">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p
+                style="color: #92400e; margin: 0; text-align: center; padding: 1rem; background: rgba(255,255,255,0.5); border-radius: 8px;">
+                <i class="fas fa-folder-open"></i> No hay archivos adjuntos
+            </p>
+            {% endif %}
+        </div>
+
         <div class="form-group" style="margin-top: 1.5rem; border-top: 1px dashed #e2e8f0; padding-top: 1.5rem;">
             <label for="edit_comment"><i class="fas fa-comment-alt"></i> Comentario de Edición (Opcional)</label>
             <textarea id="edit_comment" name="edit_comment" rows="2"
@@ -312,7 +407,7 @@
         </div>
 
         <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
-            <a href="{{ url_for('main.dashboard') }}"
+            <a href="{{ url_for('main.task_details', task_id=task.id) }}"
                 style="padding: 0.9rem 2rem; text-decoration: none; color: var(--text-light); font-weight: 600; border-radius: 10px; border: 2px solid var(--border-color); transition: var(--transition);">
                 <i class="fas fa-times"></i> Cancelar
             </a>
@@ -324,6 +419,71 @@
 </div>
 
 <script>
+    async function uploadAttachment() {
+        const fileInput = document.getElementById('attachment_file');
+        const files = fileInput.files;
+        if (files.length === 0) {
+            alert('Por favor selecciona al menos un archivo.');
+            return;
+        }
+
+        const btn = document.getElementById('btnUpload');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+
+        let errors = [];
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Subiendo ${i + 1}/${files.length}...`;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch("{{ url_for('main.upload_attachment', task_id=task.id) }}", {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+
+                if (!response.ok && !response.redirected) {
+                    throw new Error(`Error en archivo ${file.name}`);
+                }
+            } catch (error) {
+                console.error(error);
+                errors.push(file.name);
+            }
+        }
+
+        if (errors.length > 0) {
+            alert(`Se completó con errores en: ${errors.join(', ')}`);
+        }
+
+        // Reload regardless to show success ones
+        window.location.reload();
+    }
+
+    function deleteAttachment(id) {
+        if (!confirm('¿Eliminar este archivo? Esta acción quedará registrada.')) return;
+
+        fetch(`/attachments/${id}/delete`, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+            .then(response => {
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al eliminar archivo.');
+            });
+    }
+
     function setTimeSpent(minutes) {
         document.getElementById('time_spent').value = minutes;
     }

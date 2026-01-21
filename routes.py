@@ -858,8 +858,9 @@ def edit_task(task_id):
             else:
                 task.time_spent = None
         
-        # Update assignees - ONLY if user is admin
-        if current_user.is_admin:
+        
+        # Update assignees - Admin and Supervisors
+        if current_user.is_admin or current_user.role == 'supervisor':
             assignee_ids = request.form.getlist('assignees')
             task.assignees = [] # Clear current assignees
             for user_id in assignee_ids:

@@ -36,23 +36,16 @@
         <div
             style="margin-bottom: 1.5rem; padding: 1rem; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 10px; border: 1px solid #bae6fd;">
             <label style="display: block; font-size: 0.9rem; color: #0369a1; margin-bottom: 0.5rem; font-weight: 600;">
-                <i class="fas fa-magic"></i>
-                {% if current_user.is_admin %}
-                Usar Plantilla (opcional)
-                {% else %}
-                Seleccionar Plantilla <span style="color: #dc2626;">*</span>
-                {% endif %}
+                <i class="fas fa-magic"></i> Usar Plantilla (opcional)
             </label>
-            {% if not current_user.is_admin %}
             <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">
-                <i class="fas fa-info-circle"></i> Debes seleccionar una plantilla para crear la tarea.
+                <i class="fas fa-info-circle"></i> Puedes usar una plantilla para autocompletar los campos, o llenarlos
+                manualmente.
             </p>
-            {% endif %}
             <div style="display: flex; gap: 0.5rem; align-items: center;">
                 <select id="templateSelector" name="template_id" onchange="applyTemplate()"
-                    style="flex: 1; padding: 0.6rem; border: 1px solid #7dd3fc; border-radius: 6px; background: white;"
-                    {% if not current_user.is_admin %}required{% endif %}>
-                    <option value="">-- Seleccionar plantilla --</option>
+                    style="flex: 1; padding: 0.6rem; border: 1px solid #7dd3fc; border-radius: 6px; background: white;">
+                    <option value="">-- Sin plantilla --</option>
                     {% for template in templates %}
                     <option value="{{ template.id }}">{{ template.name }} {% if template.subtask_templates.count() > 0
                         %}({{ template.subtask_templates.count() }} subtareas){% endif %}</option>

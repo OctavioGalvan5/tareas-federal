@@ -152,7 +152,7 @@
         </div>
         {% endif %}
 
-        {% if current_user.is_admin %}
+        {% if current_user.is_admin or current_user.role == 'supervisor' %}
         <div class="form-group">
             <label for="assignees"><i class="fas fa-users"></i> Asignar a (Mantén presionado Ctrl para seleccionar
                 varios)</label>
@@ -174,7 +174,7 @@
                 </span>
                 {% endfor %}
                 <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 0.5rem;">(Solo
-                    administradores pueden editar)</span>
+                    administradores y supervisores pueden editar)</span>
             </div>
         </div>
         {% endif %}

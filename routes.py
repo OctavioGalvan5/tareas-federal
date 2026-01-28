@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload, subqueryload
 import pytz
 from werkzeug.utils import secure_filename
 import storage
+import json
 
 # Buenos Aires timezone (for reference, conversion is done in templates)
 BUENOS_AIRES_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
@@ -1106,6 +1107,62 @@ def task_details(task_id):
                 'label': log.description,
                 'icon': 'fa-trash'
             })
+
+    # Add Postpone Events
+    postpone_logs = ActivityLog.query.filter(
+        ActivityLog.target_id == task.id,
+        ActivityLog.target_type == 'task',
+        ActivityLog.action == 'task_postponed'
+    ).all()
+    
+    for log in postpone_logs:
+        details = {}
+        if log.details:
+            try:
+                details = json.loads(log.details)
+            except:
+                pass
+        
+        old_date = details.get('old_due_date', '?')
+        new_date = details.get('new_due_date', '?')
+        
+        timeline_events.append({
+            'type': 'postpone',
+            'timestamp': log.created_at,
+            'user': log.user,
+            'label': f'Pospuesta: {old_date} → {new_date}',
+            'comment': None,
+            'icon': 'fa-clock'
+        })
+
+    # Add Transfer Events
+    transfer_logs = ActivityLog.query.filter(
+        ActivityLog.target_id == task.id,
+        ActivityLog.target_type == 'task',
+        ActivityLog.action == 'task_transferred'
+    ).all()
+    
+    for log in transfer_logs:
+        details = {}
+        if log.details:
+            try:
+                details = json.loads(log.details)
+            except:
+                pass
+        
+        to_user = details.get('to_user', '?')
+        from_users = details.get('from_users', [])
+        transfer_comment = details.get('comment')
+        
+        timeline_events.append({
+            'type': 'transfer',
+            'timestamp': log.created_at,
+            'user': log.user,
+            'label': f'Pasada a {to_user}',
+            'comment': transfer_comment,
+            'icon': 'fa-exchange-alt',
+            'from_users': from_users
+        })
 
     # Sort by timestamp
     timeline_events.sort(key=lambda x: x['timestamp'])
@@ -2497,6 +2554,245 @@ def api_toggle_notifications():
         'success': True,
         'notifications_enabled': current_user.notifications_enabled
     })
+
+@main_bp.route('/api/tasks/<int:task_id>/postpone', methods=['POST'])
+@login_required
+def api_postpone_task(task_id):
+    """
+    Posponer una tarea moviendo su fecha de vencimiento.
+    Registra quién y cuándo la pospuso en el historial de actividad.
+    
+    Body JSON:
+        days: int (1, 3, 7, etc.) - días a posponer
+        custom_date: string (YYYY-MM-DD) - fecha personalizada (opcional, si se usa ignora days)
+    """
+    task = Task.query.get_or_404(task_id)
+    
+    # Validar que el usuario tiene permiso (es asignado, creador, admin o supervisor del área)
+    is_assignee = current_user in task.assignees
+    is_creator = task.creator_id == current_user.id
+    is_admin = current_user.is_admin
+    is_supervisor = current_user.role == 'supervisor' and task.area_id in [a.id for a in current_user.areas]
+    
+    if not (is_assignee or is_creator or is_admin or is_supervisor):
+        return jsonify({'success': False, 'message': 'No tienes permiso para posponer esta tarea'}), 403
+    
+    data = request.get_json()
+    days = data.get('days')
+    custom_date_str = data.get('custom_date')
+    
+    # Guardar fecha original para el log
+    old_due_date = task.due_date
+    old_due_date_str = old_due_date.strftime('%d/%m/%Y')
+    
+    # Calcular nueva fecha
+    if custom_date_str:
+        try:
+            # Parsear fecha personalizada
+            new_date = datetime.strptime(custom_date_str, '%Y-%m-%d')
+            # Mantener la hora original del due_date
+            new_due_date = new_date.replace(
+                hour=old_due_date.hour,
+                minute=old_due_date.minute,
+                second=old_due_date.second
+            )
+            postpone_description = f'fecha personalizada ({new_due_date.strftime("%d/%m/%Y")})'
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Formato de fecha inválido. Use YYYY-MM-DD'}), 400
+    elif days:
+        try:
+            days = int(days)
+            if days <= 0:
+                return jsonify({'success': False, 'message': 'Los días deben ser positivos'}), 400
+            new_due_date = old_due_date + timedelta(days=days)
+            if days == 1:
+                postpone_description = '1 día'
+            elif days == 7:
+                postpone_description = '1 semana'
+            else:
+                postpone_description = f'{days} días'
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Valor de días inválido'}), 400
+    else:
+        return jsonify({'success': False, 'message': 'Debe especificar days o custom_date'}), 400
+    
+    # Actualizar la tarea
+    task.due_date = new_due_date
+    task.last_edited_by_id = current_user.id
+    task.last_edited_at = datetime.utcnow()
+    
+    new_due_date_str = new_due_date.strftime('%d/%m/%Y')
+    
+    # Registrar en el log de actividad
+    log_activity(
+        user=current_user,
+        action='task_postponed',
+        description=f'pospuso la tarea "{task.title}" ({postpone_description}): {old_due_date_str} → {new_due_date_str}',
+        target_type='task',
+        target_id=task.id,
+        area_id=task.area_id,
+        details=json.dumps({
+            'old_due_date': old_due_date_str,
+            'new_due_date': new_due_date_str,
+            'postpone_type': 'custom' if custom_date_str else 'days',
+            'postpone_value': custom_date_str if custom_date_str else days
+        })
+    )
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Tarea pospuesta exitosamente',
+        'new_due_date': new_due_date_str,
+        'old_due_date': old_due_date_str
+    })
+
+@main_bp.route('/api/tasks/<int:task_id>/transfer', methods=['POST'])
+@login_required
+def api_transfer_task(task_id):
+    """
+    Pasar una tarea a otro usuario.
+    - Reemplaza los asignados actuales con el nuevo usuario
+    - Cambia el estado a 'Pending'
+    - Limpia los campos de tracking (started_at, in_review_at, etc.)
+    - Registra en el historial quién la pasó y a quién
+    
+    Body JSON:
+        to_user_id: int (ID del usuario destino)
+        comment: string (opcional, motivo del pase)
+    """
+    task = Task.query.get_or_404(task_id)
+    
+    # Validar que el usuario tiene permiso
+    is_assignee = current_user in task.assignees
+    is_creator = task.creator_id == current_user.id
+    is_admin = current_user.is_admin
+    is_supervisor = current_user.role == 'supervisor' and task.area_id in [a.id for a in current_user.areas]
+    
+    if not (is_assignee or is_creator or is_admin or is_supervisor):
+        return jsonify({'success': False, 'message': 'No tienes permiso para pasar esta tarea'}), 403
+    
+    # No permitir pasar tareas completadas o anuladas
+    if task.status in ['Completed', 'Anulado']:
+        return jsonify({'success': False, 'message': 'No se puede pasar una tarea completada o anulada'}), 400
+    
+    data = request.get_json()
+    to_user_id = data.get('to_user_id')
+    comment = data.get('comment', '').strip()
+    
+    if not to_user_id:
+        return jsonify({'success': False, 'message': 'Debe especificar el usuario destino'}), 400
+    
+    # Obtener usuario destino
+    to_user = User.query.get(to_user_id)
+    if not to_user:
+        return jsonify({'success': False, 'message': 'Usuario destino no encontrado'}), 404
+    
+    # Guardar información anterior para el log
+    old_assignees = [u.full_name for u in task.assignees]
+    old_status = task.status
+    
+    # Limpiar asignados y agregar el nuevo
+    task.assignees.clear()
+    task.assignees.append(to_user)
+    
+    # Cambiar estado a Pending
+    task.status = 'Pending'
+    
+    # Limpiar campos de tracking
+    task.started_at = None
+    task.started_by_id = None
+    task.in_review_at = None
+    task.in_review_by_id = None
+    task.completed_at = None
+    task.completed_by_id = None
+    task.approved_at = None
+    task.approved_by_id = None
+    
+    # Actualizar último editor
+    task.last_edited_by_id = current_user.id
+    task.last_edited_at = datetime.utcnow()
+    
+    # Registrar transición de estado si cambió
+    if old_status != 'Pending':
+        from models import StatusTransition
+        transition = StatusTransition(
+            task_id=task.id,
+            from_status=old_status,
+            to_status='Pending',
+            changed_by_id=current_user.id,
+            comment=f'Pase de tarea a {to_user.full_name}'
+        )
+        db.session.add(transition)
+    
+    # Registrar en el log de actividad
+    log_activity(
+        user=current_user,
+        action='task_transferred',
+        description=f'pasó la tarea "{task.title}" a {to_user.full_name}',
+        target_type='task',
+        target_id=task.id,
+        area_id=task.area_id,
+        details=json.dumps({
+            'from_users': old_assignees,
+            'to_user': to_user.full_name,
+            'to_user_id': to_user.id,
+            'old_status': old_status,
+            'comment': comment if comment else None
+        })
+    )
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Tarea pasada a {to_user.full_name}',
+        'new_assignee': to_user.full_name
+    })
+
+@main_bp.route('/api/users', methods=['GET'])
+@login_required
+def api_get_users():
+    """
+    Obtener lista de usuarios para el selector de pase de tareas.
+    Devuelve todos los usuarios activos ordenados por nombre con sus áreas.
+    """
+    users = User.query.order_by(User.full_name).all()
+    
+    users_data = [{
+        'id': u.id,
+        'username': u.username,
+        'full_name': u.full_name,
+        'role': u.role,
+        'area_ids': [a.id for a in u.areas]
+    } for u in users]
+    
+    return jsonify({
+        'success': True,
+        'users': users_data
+    })
+
+@main_bp.route('/api/areas', methods=['GET'])
+@login_required
+def api_get_areas():
+    """
+    Obtener lista de áreas para el selector de pase de tareas.
+    """
+    from models import Area
+    areas = Area.query.order_by(Area.name).all()
+    
+    areas_data = [{
+        'id': a.id,
+        'name': a.name,
+        'color': a.color
+    } for a in areas]
+    
+    return jsonify({
+        'success': True,
+        'areas': areas_data
+    })
+
 # Tags Routes - Append to routes.py
 
 # --- Tags Management Routes ---

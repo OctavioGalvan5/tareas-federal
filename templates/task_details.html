@@ -88,6 +88,10 @@
                     style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
                     <i class="fas fa-plus-circle"></i> Subtarea
                 </a>
+                <button onclick="transferTask({{ task.id }})" class="button"
+                    style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                    <i class="fas fa-exchange-alt"></i> Pasar
+                </button>
                 {% if current_user.is_admin %}
                 <button onclick="anularTask({{ task.id }})" class="button"
                     style="background-color: #dc2626; padding: 0.5rem 0.8rem;" title="Anular Tarea">
@@ -509,7 +513,11 @@
                 {% elif event.type == 'attachment_upload' %}
                 {% set color = '#f59e0b' %} <!-- Orange for file upload -->
                 {% elif event.type == 'attachment_delete' %}
-                {% set color = '#ef4444' %} <!-- Red for file delete -->
+                {% set color = '#ef4444' %} {# Red for file delete #}
+                {% elif event.type == 'postpone' %}
+                {% set color = '#8b5cf6' %} {# Purple for postpone #}
+                {% elif event.type == 'transfer' %}
+                {% set color = '#f59e0b' %} {# Orange for transfer #}
                 {% endif %}
 
                 <!-- Time Line Connector (visual) -->
@@ -695,6 +703,155 @@
                 console.error('Error:', error);
                 alert('Error de conexión');
             });
+    }
+
+    async function transferTask(taskId) {
+        try {
+            // Fetch areas and users
+            const [areasRes, usersRes] = await Promise.all([
+                fetch('/api/areas'),
+                fetch('/api/users')
+            ]);
+            const areasData = await areasRes.json();
+            const usersData = await usersRes.json();
+
+            if (!usersData.success) {
+                Swal.fire('Error', 'No se pudieron cargar los datos', 'error');
+                return;
+            }
+
+            // Store users globally for filtering
+            window._transferUsers = usersData.users;
+            window._transferAreas = areasData.areas || [];
+
+            // Build areas options
+            const areaOptions = window._transferAreas.map(a =>
+                `<option value="${a.id}">${a.name}</option>`
+            ).join('');
+
+            Swal.fire({
+                title: '<i class="fas fa-exchange-alt" style="color: #f59e0b;"></i> Pasar Tarea',
+                html: `
+                    <div style="text-align: left; padding: 0 0.5rem;">
+                        <div style="margin-bottom: 1rem;">
+                            <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">
+                                <i class="fas fa-building" style="color: #6366f1;"></i> Área:
+                            </label>
+                            <select id="swal-area-select" style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; background: white;">
+                                <option value="">-- Todas las áreas --</option>
+                                ${areaOptions}
+                            </select>
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">
+                                <i class="fas fa-user" style="color: #10b981;"></i> Usuario destino:
+                            </label>
+                            <select id="swal-user-select" style="width: 100%; box-sizing: border-box; padding: 0.6rem 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; background: white;">
+                                <option value="">-- Seleccionar usuario --</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">
+                                <i class="fas fa-comment" style="color: #f59e0b;"></i> Comentario (opcional):
+                            </label>
+                            <textarea id="swal-comment" placeholder="Motivo del pase..." 
+                                style="width: 100%; box-sizing: border-box; min-height: 80px; padding: 0.6rem 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 0.95rem; resize: vertical; font-family: inherit;"></textarea>
+                        </div>
+                    </div>
+                `,
+                width: 420,
+                showCancelButton: true,
+                confirmButtonText: '<i class="fas fa-paper-plane"></i> Pasar Tarea',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#f59e0b',
+                cancelButtonColor: '#6b7280',
+                didOpen: () => {
+                    updateUserSelect('');
+                    document.getElementById('swal-area-select').addEventListener('change', function () {
+                        updateUserSelect(this.value);
+                    });
+                },
+                preConfirm: () => {
+                    const userId = document.getElementById('swal-user-select').value;
+                    const comment = document.getElementById('swal-comment').value;
+                    if (!userId) {
+                        Swal.showValidationMessage('Debe seleccionar un usuario');
+                        return false;
+                    }
+                    return { userId, comment };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Get the selected user name for the confirmation
+                    const selectedUser = window._transferUsers.find(u => u.id == result.value.userId);
+                    const userName = selectedUser ? selectedUser.full_name : 'el usuario seleccionado';
+
+                    // Show confirmation warning
+                    Swal.fire({
+                        icon: 'warning',
+                        title: '¿Está seguro?',
+                        html: `<p>Está a punto de pasar la tarea a <strong>${userName}</strong>.</p>
+                               <p style="color: #dc2626; font-size: 0.9rem; margin-top: 0.5rem;">
+                               <i class="fas fa-exclamation-triangle"></i> 
+                               No podrá recuperarla hasta que esa persona se la devuelva.</p>`,
+                        showCancelButton: true,
+                        confirmButtonText: '<i class="fas fa-check"></i> Sí, pasar tarea',
+                        cancelButtonText: 'Cancelar',
+                        confirmButtonColor: '#f59e0b',
+                        cancelButtonColor: '#6b7280',
+                        reverseButtons: true
+                    }).then((confirmResult) => {
+                        if (confirmResult.isConfirmed) {
+                            fetch(`/api/tasks/${taskId}/transfer`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    to_user_id: parseInt(result.value.userId),
+                                    comment: result.value.comment
+                                })
+                            })
+                                .then(res => res.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        Swal.fire({
+                                            icon: 'success',
+                                            title: '¡Tarea pasada!',
+                                            text: data.message,
+                                            confirmButtonColor: '#10b981'
+                                        }).then(() => window.location.reload());
+                                    } else {
+                                        Swal.fire('Error', data.message, 'error');
+                                    }
+                                })
+                                .catch(err => {
+                                    console.error(err);
+                                    Swal.fire('Error', 'Error de conexión', 'error');
+                                });
+                        }
+                    });
+                }
+            });
+        } catch (error) {
+            console.error(error);
+            Swal.fire('Error', 'Error al cargar datos', 'error');
+        }
+    }
+
+    function updateUserSelect(areaId) {
+        const userSelect = document.getElementById('swal-user-select');
+        let filteredUsers = window._transferUsers;
+
+        if (areaId) {
+            filteredUsers = window._transferUsers.filter(u =>
+                u.area_ids && u.area_ids.includes(parseInt(areaId))
+            );
+        }
+
+        const options = filteredUsers.map(u =>
+            `<option value="${u.id}">${u.full_name} (${u.username})</option>`
+        ).join('');
+
+        userSelect.innerHTML = `<option value="">-- Seleccionar usuario --</option>${options}`;
     }
 </script>
 {% endblock %}

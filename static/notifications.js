@@ -43,14 +43,19 @@ function showNotificationModal(tasks, expirations, overdueTasks, overdueExpirati
             const daysText = task.days_overdue === 1 ? '1 día hábil' : `${task.days_overdue} días hábiles`;
 
             html += `
-                <li class="notification-task-item overdue-item priority-${priorityClass}" onclick="goToTask(${task.id})" style="cursor: pointer;">
+                <li class="notification-task-item overdue-item priority-${priorityClass}">
                     <div class="task-icon" style="background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%); color: #dc2626;"><i class="fas fa-times-circle"></i></div>
                     <div class="task-info">
-                        <h4>${escapeHtml(task.title)} <i class="fas fa-external-link-alt" style="font-size: 0.7rem; color: #94a3b8;"></i></h4>
+                        <h4 onclick="goToTask(${task.id})" style="cursor: pointer;">${escapeHtml(task.title)} <i class="fas fa-external-link-alt" style="font-size: 0.7rem; color: #94a3b8;"></i></h4>
                         <p style="color: #dc2626; font-weight: 700;"><i class="fas fa-exclamation-triangle"></i> ¡VENCIDA hace ${daysText}!</p>
                         <p><i class="fas fa-calendar-times"></i> Venció el: ${task.due_date}</p>
                         ${task.description ? `<p class="task-desc">${escapeHtml(task.description)}</p>` : ''}
-                        <span class="task-priority">${task.priority}</span>
+                        <div class="task-actions">
+                            <span class="task-priority">${task.priority}</span>
+                            <button class="postpone-btn" onclick="event.stopPropagation(); showPostponeMenu(${task.id}, this)">
+                                <i class="fas fa-clock"></i> Posponer
+                            </button>
+                        </div>
                     </div>
                 </li>
             `;
@@ -102,15 +107,20 @@ function showNotificationModal(tasks, expirations, overdueTasks, overdueExpirati
             }
 
             html += `
-                <li class="notification-task-item priority-${priorityClass}" onclick="goToTask(${task.id})" style="cursor: pointer;">
+                <li class="notification-task-item priority-${priorityClass}">
                     <div class="task-icon"><i class="fas fa-tasks"></i></div>
                     <div class="task-info">
-                        <h4>${escapeHtml(task.title)} <i class="fas fa-external-link-alt" style="font-size: 0.7rem; color: #94a3b8;"></i></h4>
+                        <h4 onclick="goToTask(${task.id})" style="cursor: pointer;">${escapeHtml(task.title)} <i class="fas fa-external-link-alt" style="font-size: 0.7rem; color: #94a3b8;"></i></h4>
                         <p style="color: ${urgencyColor}; font-weight: 700;"><i class="fas fa-exclamation-circle"></i> ${urgencyText}</p>
                         <p><i class="fas fa-calendar"></i> Fecha de vencimiento: ${task.due_date}</p>
                         ${task.enabled_at ? `<p style="color: #8b5cf6;"><i class="fas fa-unlock"></i> Habilitada el: ${task.enabled_at}</p>` : ''}
                         ${task.description ? `<p class="task-desc">${escapeHtml(task.description)}</p>` : ''}
-                        <span class="task-priority">${task.priority}</span>
+                        <div class="task-actions">
+                            <span class="task-priority">${task.priority}</span>
+                            <button class="postpone-btn" onclick="event.stopPropagation(); showPostponeMenu(${task.id}, this)">
+                                <i class="fas fa-clock"></i> Posponer
+                            </button>
+                        </div>
                     </div>
                 </li>
             `;
@@ -214,4 +224,211 @@ function goToTask(taskId) {
 function goToExpirations() {
     closeNotificationModal();
     window.location.href = '/expirations';
+}
+
+// ========== POSTPONE FUNCTIONALITY ==========
+
+function showPostponeMenu(taskId, buttonElement) {
+    // Hide any existing menus first
+    hidePostponeMenus();
+
+    // Get tomorrow's date for the min attribute
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const minDate = tomorrow.toISOString().split('T')[0];
+
+    // Create the menu
+    const menu = document.createElement('div');
+    menu.className = 'postpone-menu';
+    menu.id = `postpone-menu-${taskId}`;
+    menu.innerHTML = `
+        <div class="postpone-menu-header">Posponer hasta</div>
+        <div class="postpone-option" onclick="postponeTask(${taskId}, 1)">
+            <i class="fas fa-forward"></i> 1 día
+        </div>
+        <div class="postpone-option" onclick="postponeTask(${taskId}, 3)">
+            <i class="fas fa-forward"></i> 3 días
+        </div>
+        <div class="postpone-option" onclick="postponeTask(${taskId}, 7)">
+            <i class="fas fa-calendar-week"></i> 1 semana
+        </div>
+        <div class="postpone-option custom-date" onclick="toggleCustomDateInput(${taskId})">
+            <i class="fas fa-calendar-alt"></i> Fecha personalizada
+        </div>
+        <div class="postpone-custom-input" id="custom-date-input-${taskId}">
+            <input type="date" id="custom-date-${taskId}" min="${minDate}">
+            <button class="confirm-btn" onclick="postponeTaskCustom(${taskId})">
+                <i class="fas fa-check"></i> Confirmar
+            </button>
+        </div>
+    `;
+
+    // Position the menu near the button
+    const rect = buttonElement.getBoundingClientRect();
+    menu.style.position = 'fixed';
+    menu.style.top = (rect.bottom + 5) + 'px';
+    menu.style.left = rect.left + 'px';
+
+    // Append to body to avoid overflow issues
+    document.body.appendChild(menu);
+
+    // Close menu when clicking outside
+    setTimeout(() => {
+        document.addEventListener('click', handleOutsideClick);
+    }, 0);
+}
+
+function handleOutsideClick(event) {
+    const menus = document.querySelectorAll('.postpone-menu');
+    let clickedInside = false;
+
+    menus.forEach(menu => {
+        if (menu.contains(event.target)) {
+            clickedInside = true;
+        }
+    });
+
+    if (!clickedInside && !event.target.classList.contains('postpone-btn')) {
+        hidePostponeMenus();
+        document.removeEventListener('click', handleOutsideClick);
+    }
+}
+
+function hidePostponeMenus() {
+    const menus = document.querySelectorAll('.postpone-menu');
+    menus.forEach(menu => menu.remove());
+}
+
+function toggleCustomDateInput(taskId) {
+    const input = document.getElementById(`custom-date-input-${taskId}`);
+    input.classList.toggle('show');
+}
+
+function postponeTask(taskId, days) {
+    fetch(`/api/tasks/${taskId}/postpone`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ days: days })
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                hidePostponeMenus();
+                showPostponeSuccess(data.message, data.new_due_date);
+                // Refresh notifications after a short delay
+                setTimeout(() => {
+                    checkTasksDueSoon();
+                }, 1500);
+            } else {
+                showPostponeError(data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error postponing task:', error);
+            showPostponeError('Error al posponer la tarea');
+        });
+}
+
+function postponeTaskCustom(taskId) {
+    const dateInput = document.getElementById(`custom-date-${taskId}`);
+    const customDate = dateInput.value;
+
+    if (!customDate) {
+        showPostponeError('Por favor selecciona una fecha');
+        return;
+    }
+
+    fetch(`/api/tasks/${taskId}/postpone`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ custom_date: customDate })
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                hidePostponeMenus();
+                showPostponeSuccess(data.message, data.new_due_date);
+                // Refresh notifications after a short delay
+                setTimeout(() => {
+                    checkTasksDueSoon();
+                }, 1500);
+            } else {
+                showPostponeError(data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error postponing task:', error);
+            showPostponeError('Error al posponer la tarea');
+        });
+}
+
+function showPostponeSuccess(message, newDate) {
+    // Create a toast notification
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        z-index: 10002;
+        animation: fadeInUp 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-weight: 500;
+    `;
+    toast.innerHTML = `
+        <i class="fas fa-check-circle" style="font-size: 1.25rem;"></i>
+        <div>
+            <div>${message}</div>
+            <div style="font-size: 0.85rem; opacity: 0.9;">Nueva fecha: ${newDate}</div>
+        </div>
+    `;
+
+    document.body.appendChild(toast);
+
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.style.animation = 'fadeOut 0.3s ease-out forwards';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+function showPostponeError(message) {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        z-index: 10002;
+        animation: fadeInUp 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-weight: 500;
+    `;
+    toast.innerHTML = `
+        <i class="fas fa-exclamation-circle" style="font-size: 1.25rem;"></i>
+        <div>${message}</div>
+    `;
+
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = 'fadeOut 0.3s ease-out forwards';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }

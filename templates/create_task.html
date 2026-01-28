@@ -141,13 +141,29 @@
 
 
         <div class="form-group">
-            <label for="assignees"><i class="fas fa-users"></i> Asignar a (Mantén presionado Ctrl para seleccionar
-                varios)</label>
-            <select id="assignees" name="assignees" multiple required style="height: 150px;">
+            <label><i class="fas fa-users"></i> Asignar a</label>
+
+            <!-- Chips de usuarios seleccionados -->
+            <div id="selectedUsersChips" class="user-chips-container">
+                <span class="no-selection">Haz clic en los usuarios para asignarlos</span>
+            </div>
+
+            <!-- Búsqueda -->
+            <input type="text" id="userSearchInput" placeholder="Buscar usuario..." class="user-search-input"
+                oninput="filterUsers(this.value)">
+
+            <!-- Grid de usuarios -->
+            <div id="usersGrid" class="users-grid">
                 {% for user in users %}
-                <option value="{{ user.id }}">{{ user.full_name }}</option>
+                <label class="user-card" data-username="{{ user.full_name|lower }}">
+                    <input type="checkbox" name="assignees" value="{{ user.id }}" data-name="{{ user.full_name }}"
+                        onchange="updateSelectedUsers()">
+                    <div class="user-avatar" data-color="{{ user.id % 8 }}">{{ user.full_name[:2]|upper }}</div>
+                    <span class="user-name">{{ user.full_name }}</span>
+                    <span class="check-overlay"><i class="fas fa-check"></i></span>
+                </label>
                 {% endfor %}
-            </select>
+            </div>
         </div>
 
         <!-- 🏢 Area Selector - Only for Admins -->
@@ -450,6 +466,61 @@
                 display.appendChild(tagEl);
             });
         }
+    }
+
+    // ===== User Selector Functions =====
+    function updateSelectedUsers() {
+        const checkboxes = document.querySelectorAll('#usersGrid input[name="assignees"]:checked');
+        const display = document.getElementById('selectedUsersChips');
+
+        // Update card selected class for browsers without :has() support
+        document.querySelectorAll('.user-card').forEach(card => {
+            const cb = card.querySelector('input[type="checkbox"]');
+            if (cb.checked) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        });
+
+        if (checkboxes.length === 0) {
+            display.innerHTML = '<span class="no-selection">Haz clic en los usuarios para asignarlos</span>';
+        } else {
+            display.innerHTML = '';
+            checkboxes.forEach(cb => {
+                const chip = document.createElement('span');
+                chip.className = 'user-chip';
+                chip.innerHTML = `
+                    ${cb.dataset.name}
+                    <button type="button" class="remove-btn" onclick="removeUser(${cb.value})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                display.appendChild(chip);
+            });
+        }
+    }
+
+    function removeUser(userId) {
+        const checkbox = document.querySelector(`#usersGrid input[value="${userId}"]`);
+        if (checkbox) {
+            checkbox.checked = false;
+            updateSelectedUsers();
+        }
+    }
+
+    function filterUsers(searchTerm) {
+        const term = searchTerm.toLowerCase().trim();
+        const cards = document.querySelectorAll('.user-card');
+
+        cards.forEach(card => {
+            const username = card.dataset.username || '';
+            if (term === '' || username.includes(term)) {
+                card.classList.remove('hidden');
+            } else {
+                card.classList.add('hidden');
+            }
+        });
     }
 
     function applyTemplate() {

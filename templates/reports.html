@@ -40,36 +40,88 @@
 <div class="card" style="margin-bottom: 2rem;">
     <div class="filters-section">
         <!-- Primera fila: Selectores múltiples -->
-        <div
-            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1rem;">
+            <!-- Selector de Usuarios -->
             <div>
                 <label
-                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem; font-weight: 500;">
+                    style="display: block; font-size: 0.9rem; color: var(--text-color); margin-bottom: 0.5rem; font-weight: 600;">
                     <i class="fas fa-users" style="margin-right: 0.25rem;"></i> Usuarios
+                    <span style="float: right; font-weight: normal;">
+                        <button type="button" onclick="selectAllReportUsers()" class="mini-btn">Todos</button>
+                        <button type="button" onclick="selectNoReportUsers()" class="mini-btn">Ninguno</button>
+                    </span>
                 </label>
-                <select id="userFilter" multiple
-                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; height: 100px; background: #fff;">
+
+                <!-- Chips de usuarios seleccionados -->
+                <div id="selectedReportUsersChips" class="user-chips-container"
+                    style="min-height: 36px; padding: 0.5rem;">
+                    <span class="no-selection">Todos los usuarios (sin filtro)</span>
+                </div>
+
+                <!-- Búsqueda de usuarios -->
+                <input type="text" id="reportUserSearch" placeholder="Buscar usuario..." class="user-search-input"
+                    style="padding: 0.5rem 0.75rem 0.5rem 2.25rem; font-size: 0.85rem;"
+                    oninput="filterReportUsers(this.value)">
+
+                <!-- Grid de usuarios -->
+                <div id="reportUsersGrid" class="users-grid"
+                    style="max-height: 180px; padding: 0.75rem; margin-top: 0.5rem;">
                     {% for user in users %}
-                    <option value="{{ user.id }}" selected>{{ user.full_name }}</option>
+                    <label class="user-card" data-username="{{ user.full_name|lower }}" style="padding: 0.5rem;">
+                        <input type="checkbox" name="report_users" value="{{ user.id }}"
+                            data-name="{{ user.full_name }}" onchange="updateReportUsers()">
+                        <div class="user-avatar" data-color="{{ user.id % 8 }}"
+                            style="width: 36px; height: 36px; font-size: 0.8rem;">{{ user.full_name[:2]|upper }}</div>
+                        <span class="user-name" style="font-size: 0.7rem;">{{ user.full_name }}</span>
+                        <span class="check-overlay" style="width: 18px; height: 18px; font-size: 0.6rem;"><i
+                                class="fas fa-check"></i></span>
+                    </label>
                     {% endfor %}
-                </select>
-                <small style="color: var(--text-light); font-size: 0.75rem;">Ctrl + Click para múltiple</small>
+                </div>
             </div>
 
+            <!-- Selector de Etiquetas -->
             <div>
                 <label
-                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem; font-weight: 500;">
+                    style="display: block; font-size: 0.9rem; color: var(--text-color); margin-bottom: 0.5rem; font-weight: 600;">
                     <i class="fas fa-tags" style="margin-right: 0.25rem;"></i> Etiquetas
+                    <span style="float: right; font-weight: normal;">
+                        <button type="button" onclick="selectAllReportTags()" class="mini-btn">Todas</button>
+                        <button type="button" onclick="selectNoReportTags()" class="mini-btn">Ninguna</button>
+                    </span>
                 </label>
-                <select id="tagFilter" multiple
-                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; height: 100px; background: #fff;">
+
+                <!-- Chips de etiquetas seleccionadas -->
+                <div id="selectedReportTagsChips" class="user-chips-container"
+                    style="min-height: 36px; padding: 0.5rem;">
+                    <span class="no-selection">Todas las etiquetas</span>
+                </div>
+
+                <!-- Búsqueda de etiquetas -->
+                <input type="text" id="reportTagSearch" placeholder="Buscar etiqueta..." class="user-search-input"
+                    style="padding: 0.5rem 0.75rem 0.5rem 2.25rem; font-size: 0.85rem;"
+                    oninput="filterReportTags(this.value)">
+
+                <!-- Grid de etiquetas -->
+                <div id="reportTagsGrid" class="users-grid"
+                    style="max-height: 180px; padding: 0.75rem; margin-top: 0.5rem;">
                     {% for tag in tags %}
-                    <option value="{{ tag.id }}">{{ tag.name }}</option>
+                    <label class="user-card" data-tagname="{{ tag.name|lower }}" style="padding: 0.5rem;">
+                        <input type="checkbox" name="report_tags" value="{{ tag.id }}" data-name="{{ tag.name }}"
+                            data-color="{{ tag.color }}" onchange="updateReportTags()">
+                        <div class="user-avatar"
+                            style="width: 36px; height: 36px; font-size: 0.8rem; background: {{ tag.color }};">
+                            <i class="fas fa-tag" style="font-size: 0.9rem;"></i>
+                        </div>
+                        <span class="user-name" style="font-size: 0.7rem;">{{ tag.name }}</span>
+                        <span class="check-overlay" style="width: 18px; height: 18px; font-size: 0.6rem;"><i
+                                class="fas fa-check"></i></span>
+                    </label>
                     {% endfor %}
-                </select>
-                <small style="color: var(--text-light); font-size: 0.75rem;">Ctrl + Click para múltiple</small>
+                </div>
             </div>
         </div>
+
 
         <!-- Segunda fila: Filtros simples y botón -->
         <div
@@ -203,17 +255,171 @@
         loadReportData();
     });
 
+    // ===== Report User Selector Functions =====
+    function getSelectedUserIds() {
+        const checkboxes = document.querySelectorAll('#reportUsersGrid input[name="report_users"]:checked');
+        return Array.from(checkboxes).map(cb => cb.value);
+    }
+
+    function getSelectedTagIds() {
+        const checkboxes = document.querySelectorAll('#reportTagsGrid input[name="report_tags"]:checked');
+        return Array.from(checkboxes).map(cb => cb.value);
+    }
+
+    function updateReportUsers() {
+        const checkboxes = document.querySelectorAll('#reportUsersGrid input[name="report_users"]:checked');
+        const display = document.getElementById('selectedReportUsersChips');
+
+        // Update card selected class
+        document.querySelectorAll('#reportUsersGrid .user-card').forEach(card => {
+            const cb = card.querySelector('input[type="checkbox"]');
+            if (cb.checked) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        });
+
+        if (checkboxes.length === 0) {
+            display.innerHTML = '<span class="no-selection">Todos los usuarios (sin filtro)</span>';
+        } else {
+            display.innerHTML = '';
+            checkboxes.forEach(cb => {
+                const chip = document.createElement('span');
+                chip.className = 'user-chip';
+                chip.style.cssText = 'font-size: 0.8rem; padding: 0.3rem 0.4rem 0.3rem 0.6rem;';
+                chip.innerHTML = `
+                    ${cb.dataset.name}
+                    <button type="button" class="remove-btn" onclick="removeReportUser(${cb.value})" style="width: 18px; height: 18px;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                display.appendChild(chip);
+            });
+        }
+    }
+
+    function removeReportUser(userId) {
+        const checkbox = document.querySelector(`#reportUsersGrid input[value="${userId}"]`);
+        if (checkbox) {
+            checkbox.checked = false;
+            updateReportUsers();
+        }
+    }
+
+    function filterReportUsers(searchTerm) {
+        const term = searchTerm.toLowerCase().trim();
+        const cards = document.querySelectorAll('#reportUsersGrid .user-card');
+
+        cards.forEach(card => {
+            const username = card.dataset.username || '';
+            if (term === '' || username.includes(term)) {
+                card.classList.remove('hidden');
+            } else {
+                card.classList.add('hidden');
+            }
+        });
+    }
+
+    // ===== Report Tag Selector Functions =====
+    function updateReportTags() {
+        const checkboxes = document.querySelectorAll('#reportTagsGrid input[name="report_tags"]:checked');
+        const display = document.getElementById('selectedReportTagsChips');
+
+        // Update card selected class
+        document.querySelectorAll('#reportTagsGrid .user-card').forEach(card => {
+            const cb = card.querySelector('input[type="checkbox"]');
+            if (cb.checked) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        });
+
+        if (checkboxes.length === 0) {
+            display.innerHTML = '<span class="no-selection">Todas las etiquetas (sin filtro)</span>';
+        } else {
+            display.innerHTML = '';
+            checkboxes.forEach(cb => {
+                const chip = document.createElement('span');
+                chip.className = 'user-chip';
+                chip.style.cssText = `font-size: 0.8rem; padding: 0.3rem 0.4rem 0.3rem 0.6rem; background: ${cb.dataset.color};`;
+                chip.innerHTML = `
+                    ${cb.dataset.name}
+                    <button type="button" class="remove-btn" onclick="removeReportTag(${cb.value})" style="width: 18px; height: 18px;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                display.appendChild(chip);
+            });
+        }
+    }
+
+    function removeReportTag(tagId) {
+        const checkbox = document.querySelector(`#reportTagsGrid input[value="${tagId}"]`);
+        if (checkbox) {
+            checkbox.checked = false;
+            updateReportTags();
+        }
+    }
+
+    function filterReportTags(searchTerm) {
+        const term = searchTerm.toLowerCase().trim();
+        const cards = document.querySelectorAll('#reportTagsGrid .user-card');
+
+        cards.forEach(card => {
+            const tagname = card.dataset.tagname || '';
+            if (term === '' || tagname.includes(term)) {
+                card.classList.remove('hidden');
+            } else {
+                card.classList.add('hidden');
+            }
+        });
+    }
+
+    // ===== Select All / None Buttons =====
+    function selectAllReportUsers() {
+        document.querySelectorAll('#reportUsersGrid input[name="report_users"]').forEach(cb => {
+            cb.checked = true;
+        });
+        updateReportUsers();
+    }
+
+    function selectNoReportUsers() {
+        document.querySelectorAll('#reportUsersGrid input[name="report_users"]').forEach(cb => {
+            cb.checked = false;
+        });
+        updateReportUsers();
+    }
+
+    function selectAllReportTags() {
+        document.querySelectorAll('#reportTagsGrid input[name="report_tags"]').forEach(cb => {
+            cb.checked = true;
+        });
+        updateReportTags();
+    }
+
+    function selectNoReportTags() {
+        document.querySelectorAll('#reportTagsGrid input[name="report_tags"]').forEach(cb => {
+            cb.checked = false;
+        });
+        updateReportTags();
+    }
+
+    // Keep old function for compatibility with calcTagA/calcTagB
     function getSelectedValues(selectId) {
         const select = document.getElementById(selectId);
+        if (!select) return [];
         return Array.from(select.selectedOptions).map(option => option.value);
     }
 
     function loadReportData() {
-        const userIds = getSelectedValues('userFilter');
-        const tagIds = getSelectedValues('tagFilter');
+        const userIds = getSelectedUserIds();
+        const tagIds = getSelectedTagIds();
         const status = document.getElementById('statusFilter').value;
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
+
 
         fetch('/api/reports/data', {
             method: 'POST',
@@ -361,8 +567,8 @@
     }
 
     function exportReport() {
-        const userIds = getSelectedValues('userFilter');
-        const tagIds = getSelectedValues('tagFilter');
+        const userIds = getSelectedUserIds();
+        const tagIds = getSelectedTagIds();
         const status = document.getElementById('statusFilter').value;
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;

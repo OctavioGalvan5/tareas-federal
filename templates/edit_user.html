@@ -22,15 +22,11 @@
                 <option value="usuario" {% if user.role=='usuario' %}selected{% endif %}>Usuario</option>
                 <option value="usuario_plus" {% if user.role=='usuario_plus' %}selected{% endif %}>Usuario con
                     Facultades (puede crear tareas)</option>
-                <option value="supervisor" {% if user.role=='supervisor' %}selected{% endif %}>Supervisor (solo 1 área)
+                <option value="supervisor" {% if user.role=='supervisor' %}selected{% endif %}>Supervisor
                 </option>
                 <option value="gerente" {% if user.role=='gerente' %}selected{% endif %}>Gerente (ve todas las áreas)
                 </option>
             </select>
-            <p id="singleAreaNote"
-                style="{% if user.role not in ['supervisor', 'usuario_plus'] %}display: none;{% endif %} font-size: 0.8rem; color: #f59e0b; margin-top: 0.3rem;">
-                <i class="fas fa-exclamation-triangle"></i> Este rol solo puede tener 1 área asignada
-            </p>
             <p id="usuarioPlusNote"
                 style="{% if user.role != 'usuario_plus' %}display: none;{% endif %} font-size: 0.8rem; color: #3b82f6; margin-top: 0.3rem;">
                 <i class="fas fa-info-circle"></i> Puede crear tareas pero no puede ver reportes
@@ -78,61 +74,22 @@
 <script>
     function handleRoleChange() {
         const roleSelect = document.getElementById('role');
-        const singleAreaNote = document.getElementById('singleAreaNote');
         const usuarioPlusNote = document.getElementById('usuarioPlusNote');
-        const checkboxes = document.querySelectorAll('.area-checkbox');
 
         if (!roleSelect) return;
 
-        const needsSingleArea = roleSelect.value === 'supervisor' || roleSelect.value === 'usuario_plus';
         const isUsuarioPlus = roleSelect.value === 'usuario_plus';
 
-        // Show/hide notes
-        if (singleAreaNote) {
-            singleAreaNote.style.display = needsSingleArea ? 'block' : 'none';
-        }
+        // Show/hide usuario_plus note
         if (usuarioPlusNote) {
             usuarioPlusNote.style.display = isUsuarioPlus ? 'block' : 'none';
-        }
-
-        if (needsSingleArea) {
-            // Enforce only 1 area for supervisor and usuario_plus
-            let checkedCount = 0;
-            checkboxes.forEach(cb => {
-                if (cb.checked) {
-                    checkedCount++;
-                    if (checkedCount > 1) {
-                        cb.checked = false;
-                    }
-                }
-            });
-
-            // Add listener to enforce 1 area
-            checkboxes.forEach(cb => {
-                cb.addEventListener('change', enforceSingleArea);
-            });
-        } else {
-            // Remove restriction
-            checkboxes.forEach(cb => {
-                cb.removeEventListener('change', enforceSingleArea);
-            });
-        }
-    }
-
-    function enforceSingleArea(event) {
-        const roleSelect = document.getElementById('role');
-        const needsSingleArea = roleSelect && (roleSelect.value === 'supervisor' || roleSelect.value === 'usuario_plus');
-        if (needsSingleArea && event.target.checked) {
-            // Uncheck all others
-            document.querySelectorAll('.area-checkbox').forEach(cb => {
-                if (cb !== event.target) {
-                    cb.checked = false;
-                }
-            });
         }
     }
 
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', handleRoleChange);
+
+    // Update on role change
+    document.getElementById('role').addEventListener('change', handleRoleChange);
 </script>
 {% endblock %}

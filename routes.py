@@ -1668,29 +1668,22 @@ def can_change_task_status(user, task, new_status):
             return True, None
         return False, "Solo puedes modificar tareas de tu área"
     
-    # Usuario+ can do forward transitions on their own tasks and complete
+    # Usuario+ can change status on their own tasks
     if user.role == 'usuario_plus':
         if user in task.assignees or task.creator_id == user.id:
-            # Can move forward in workflow
-            if task.status == 'Pending' and new_status == 'In Progress':
+            # Can move to any active status
+            if new_status in ['Pending', 'In Progress', 'In Review', 'Completed']:
                 return True, None
-            if task.status == 'In Progress' and new_status == 'In Review':
-                return True, None
-            if task.status == 'In Review' and new_status == 'Completed':
-                return True, None
-            return False, "Solo puedes avanzar tareas en el flujo"
+            return False, "Estado inválido"
         return False, "Solo puedes modificar tareas asignadas a ti"
-    
-    # Usuario can only do Pending->In Progress->In Review on their own tasks
+
+    # Usuario can change status on their own tasks
     if user.role == 'usuario':
         if user in task.assignees or task.creator_id == user.id:
-            if task.status == 'Pending' and new_status == 'In Progress':
+            # Can move to any active status
+            if new_status in ['Pending', 'In Progress', 'In Review', 'Completed']:
                 return True, None
-            if task.status == 'In Progress' and new_status == 'In Review':
-                return True, None
-            if task.status == 'In Review' and new_status == 'Completed':
-                return True, None
-            return False, "Solo puedes avanzar tareas en el flujo"
+            return False, "Estado inválido"
         return False, "Solo puedes modificar tareas asignadas a ti"
     
     return False, "No tienes permiso para cambiar el estado"

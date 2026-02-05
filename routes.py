@@ -2338,10 +2338,12 @@ def manage_users():
         password = request.form.get('password')
         full_name = request.form.get('full_name')
         
-        # Supervisors cannot create admins or other supervisors
+        # Supervisors cannot create admins, supervisors, or gerentes
         if is_supervisor:
             is_admin = False
-            role = 'usuario'  # Supervisors can only create regular users
+            requested_role = request.form.get('role', 'usuario')
+            # Supervisors can only create 'usuario' or 'usuario_plus'
+            role = requested_role if requested_role in ['usuario', 'usuario_plus'] else 'usuario'
             area_ids = [str(supervisor_area.id)]  # Force to supervisor's area
         else:
             is_admin = 'is_admin' in request.form

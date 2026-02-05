@@ -28,22 +28,29 @@
                     <input type="password" id="password" name="password" required placeholder="Contraseña segura">
                 </div>
 
-                <!-- Role Selector - Only visible for Admins -->
-                {% if not is_supervisor %}
+                <!-- Role Selector -->
                 <div class="form-group">
                     <label for="role"><i class="fas fa-user-tag"></i> Rol</label>
                     <select id="role" name="role" onchange="handleRoleChange()"
                         style="padding: 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px;">
                         <option value="usuario">Usuario</option>
+                        <option value="usuario_plus">Usuario con Facultades (puede crear tareas)</option>
+                        {% if not is_supervisor %}
                         <option value="supervisor">Supervisor (solo 1 área)</option>
                         <option value="gerente">Gerente (ve todas las áreas)</option>
+                        {% endif %}
                     </select>
+                    <p id="usuarioPlusNote"
+                        style="display: none; font-size: 0.8rem; color: #3b82f6; margin-top: 0.3rem;">
+                        <i class="fas fa-info-circle"></i> Puede crear tareas pero no puede ver reportes
+                    </p>
+                    {% if not is_supervisor %}
                     <p id="supervisorAreaNote"
                         style="display: none; font-size: 0.8rem; color: #f59e0b; margin-top: 0.3rem;">
                         <i class="fas fa-exclamation-triangle"></i> Los supervisores solo pueden tener 1 área asignada
                     </p>
+                    {% endif %}
                 </div>
-                {% endif %}
 
                 <!-- Areas Selector -->
                 {% if all_areas %}
@@ -164,13 +171,18 @@
         const roleSelect = document.getElementById('role');
         const areasContainer = document.getElementById('areasContainer');
         const supervisorNote = document.getElementById('supervisorAreaNote');
+        const usuarioPlusNote = document.getElementById('usuarioPlusNote');
         const checkboxes = document.querySelectorAll('.area-checkbox');
 
-        if (!roleSelect || !areasContainer) return;
+        if (!roleSelect) return;
 
         const isSupervisor = roleSelect.value === 'supervisor';
+        const isUsuarioPlus = roleSelect.value === 'usuario_plus';
 
-        // Show/hide note
+        // Show/hide notes
+        if (usuarioPlusNote) {
+            usuarioPlusNote.style.display = isUsuarioPlus ? 'block' : 'none';
+        }
         if (supervisorNote) {
             supervisorNote.style.display = isSupervisor ? 'block' : 'none';
         }

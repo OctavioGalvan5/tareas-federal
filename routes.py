@@ -1870,146 +1870,174 @@ def update_task_status(task_id):
 @main_bp.route('/scrum-board')
 @login_required
 def scrum_board():
-    """Scrum/Kanban board view with 4 status columns"""
+    """Scrum/Kanban board view with 4 status columns - OPTIMIZED"""
     from models import Area
+    
+    # Limit for completed tasks (performance optimization)
+    COMPLETED_LIMIT = 10
     
     # Get filter parameters
     filter_area = request.args.get('area')
     filter_assignee = request.args.get('assignee')
-    filter_period = request.args.get('period', 'week')  # Period filter: today, week, month, custom, all
-    filter_date_from = request.args.get('date_from')  # Custom range start
-    filter_date_to = request.args.get('date_to')  # Custom range end
-    show_blocked = request.args.get('show_blocked', 'true')  # Show blocked tasks (default: true)
+    filter_period = request.args.get('period', 'week')  # DEFAULT CHANGED TO 'week' for performance
+    filter_date_from = request.args.get('date_from')
+    filter_date_to = request.args.get('date_to')
+    show_blocked = request.args.get('show_blocked', 'true')
     
-    # Base query - exclude Anulado, optionally include disabled tasks
-    query = Task.query.options(
+    # Pagination for completed tasks (lazy loading)
+    completed_offset = request.args.get('completed_offset', 0, type=int)
+    
+    # Base query options (reusable)
+    query_options = [
         joinedload(Task.assignees),
         joinedload(Task.tags),
         joinedload(Task.area),
-        joinedload(Task.parent)  # Load parent for blocked tasks
-    ).filter(Task.status != 'Anulado')
+        joinedload(Task.parent)
+    ]
     
-    # Filter by enabled status
-    if show_blocked != 'true':
-        query = query.filter(Task.enabled == True)
-    
-    # Apply date/period filter
-    # ALWAYS include overdue tasks (past due date, not completed)
+    # Date filter setup
     today = date.today()
     overdue_condition = db.and_(
         db.func.date(Task.due_date) < today,
         Task.status.in_(['Pending', 'In Progress', 'In Review'])
     )
     
-    if filter_period == 'today':
-        # Show tasks that: start today OR due today OR in progress/review OR overdue
-        query = query.filter(
-            db.or_(
-                db.func.date(Task.due_date) == today,
-                db.func.date(Task.planned_start_date) == today,
-                Task.status.in_(['In Progress', 'In Review']),
-                overdue_condition  # Always show overdue
-            )
-        )
-    elif filter_period == 'week':
-        week_start = today - timedelta(days=today.weekday())
-        week_end = week_start + timedelta(days=6)
-        # Show tasks in this week OR in progress/review OR overdue
-        query = query.filter(
-            db.or_(
-                db.and_(db.func.date(Task.due_date) >= week_start, db.func.date(Task.due_date) <= week_end),
-                db.and_(db.func.date(Task.planned_start_date) >= week_start, db.func.date(Task.planned_start_date) <= week_end),
-                Task.status.in_(['In Progress', 'In Review']),
-                overdue_condition  # Always show overdue
-            )
-        )
-    elif filter_period == 'month':
-        month_start = today.replace(day=1)
-        if today.month == 12:
-            month_end = today.replace(day=31)
-        else:
-            month_end = (today.replace(month=today.month + 1, day=1) - timedelta(days=1))
-        # Show tasks in this month OR in progress/review OR overdue
-        query = query.filter(
-            db.or_(
-                db.and_(db.func.date(Task.due_date) >= month_start, db.func.date(Task.due_date) <= month_end),
-                db.and_(db.func.date(Task.planned_start_date) >= month_start, db.func.date(Task.planned_start_date) <= month_end),
-                Task.status.in_(['In Progress', 'In Review']),
-                overdue_condition  # Always show overdue
-            )
-        )
-    elif filter_period == 'custom':
-        # Custom date range - filter by due date or planned start date, plus overdue
-        custom_conditions = [overdue_condition]  # Always include overdue
-        
-        if filter_date_from:
-            try:
-                date_from_obj = datetime.strptime(filter_date_from, '%Y-%m-%d').date()
-                custom_conditions.append(db.func.date(Task.due_date) >= date_from_obj)
-                custom_conditions.append(db.func.date(Task.planned_start_date) >= date_from_obj)
-            except ValueError:
-                pass
-        if filter_date_to:
-            try:
-                date_to_obj = datetime.strptime(filter_date_to, '%Y-%m-%d').date()
-                custom_conditions.append(db.func.date(Task.due_date) <= date_to_obj)
-                custom_conditions.append(db.func.date(Task.planned_start_date) <= date_to_obj)
-            except ValueError:
-                pass
-        
-        if custom_conditions:
-            query = query.filter(db.or_(*custom_conditions))
-    # if filter_period == 'all', no date filter is applied
-    
-    # Role-based visibility
-    user_area_ids = [a.id for a in current_user.areas]
-    
-    if current_user.can_only_see_own_tasks():
-        # Usuario/Usuario+ see only their tasks
-        if user_area_ids:
-            query = query.filter(
+    def apply_date_filter(query):
+        """Apply date/period filter to query"""
+        if filter_period == 'today':
+            return query.filter(
                 db.or_(
-                    Task.assignees.any(id=current_user.id),
-                    Task.creator_id == current_user.id
+                    db.func.date(Task.due_date) == today,
+                    db.func.date(Task.planned_start_date) == today,
+                    Task.status.in_(['In Progress', 'In Review']),
+                    overdue_condition
                 )
-            ).filter(Task.area_id.in_(user_area_ids))
+            )
+        elif filter_period == 'week':
+            week_start = today - timedelta(days=today.weekday())
+            week_end = week_start + timedelta(days=6)
+            return query.filter(
+                db.or_(
+                    db.and_(db.func.date(Task.due_date) >= week_start, db.func.date(Task.due_date) <= week_end),
+                    db.and_(db.func.date(Task.planned_start_date) >= week_start, db.func.date(Task.planned_start_date) <= week_end),
+                    Task.status.in_(['In Progress', 'In Review']),
+                    overdue_condition
+                )
+            )
+        elif filter_period == 'month':
+            month_start = today.replace(day=1)
+            if today.month == 12:
+                month_end = today.replace(day=31)
+            else:
+                month_end = (today.replace(month=today.month + 1, day=1) - timedelta(days=1))
+            return query.filter(
+                db.or_(
+                    db.and_(db.func.date(Task.due_date) >= month_start, db.func.date(Task.due_date) <= month_end),
+                    db.and_(db.func.date(Task.planned_start_date) >= month_start, db.func.date(Task.planned_start_date) <= month_end),
+                    Task.status.in_(['In Progress', 'In Review']),
+                    overdue_condition
+                )
+            )
+        elif filter_period == 'custom':
+            custom_conditions = [overdue_condition]
+            if filter_date_from:
+                try:
+                    date_from_obj = datetime.strptime(filter_date_from, '%Y-%m-%d').date()
+                    custom_conditions.append(db.func.date(Task.due_date) >= date_from_obj)
+                except ValueError:
+                    pass
+            if filter_date_to:
+                try:
+                    date_to_obj = datetime.strptime(filter_date_to, '%Y-%m-%d').date()
+                    custom_conditions.append(db.func.date(Task.due_date) <= date_to_obj)
+                except ValueError:
+                    pass
+            if custom_conditions:
+                return query.filter(db.or_(*custom_conditions))
+        # 'all' - no date filter
+        return query
+    
+    def apply_role_filter(query):
+        """Apply role-based visibility filter"""
+        user_area_ids = [a.id for a in current_user.areas]
+        
+        if current_user.can_only_see_own_tasks():
+            if user_area_ids:
+                return query.filter(
+                    db.or_(
+                        Task.assignees.any(id=current_user.id),
+                        Task.creator_id == current_user.id
+                    )
+                ).filter(Task.area_id.in_(user_area_ids))
+            else:
+                return query.filter(Task.area_id == -1)
+        elif current_user.can_see_all_areas():
+            if filter_area:
+                return query.filter(Task.area_id == int(filter_area))
+            return query
         else:
-            query = query.filter(Task.area_id == -1)
+            # Supervisor
+            if user_area_ids:
+                return query.filter(Task.area_id.in_(user_area_ids))
+            else:
+                return query.filter(Task.area_id == -1)
+        return query
+    
+    # Determine available areas based on role
+    user_area_ids = [a.id for a in current_user.areas]
+    if current_user.can_only_see_own_tasks():
         available_areas = current_user.areas
         show_area_filter = False
     elif current_user.can_see_all_areas():
-        # Admin sees all
-        if filter_area:
-            query = query.filter(Task.area_id == int(filter_area))
         available_areas = Area.query.order_by(Area.name).all()
         show_area_filter = True
     else:
-        # Supervisor sees their area
-        if user_area_ids:
-            query = query.filter(Task.area_id.in_(user_area_ids))
-        else:
-            query = query.filter(Task.area_id == -1)
         available_areas = current_user.areas
         show_area_filter = False
     
-    # Filter by assignee if specified
+    # === QUERY 1: Active tasks (Pending, In Progress, In Review) ===
+    active_query = Task.query.options(*query_options).filter(
+        Task.status.in_(['Pending', 'In Progress', 'In Review', 'Scheduled'])
+    )
+    
+    if show_blocked != 'true':
+        active_query = active_query.filter(Task.enabled == True)
+    
+    active_query = apply_date_filter(active_query)
+    active_query = apply_role_filter(active_query)
+    
     if filter_assignee:
-        query = query.filter(Task.assignees.any(id=int(filter_assignee)))
+        active_query = active_query.filter(Task.assignees.any(id=int(filter_assignee)))
     
-    # Get all matching tasks
-    all_tasks = query.order_by(Task.due_date.asc()).all()
+    active_tasks = active_query.order_by(Task.due_date.asc()).all()
     
-    # Group by status (Scheduled tasks go into Pending with a flag)
+    # === QUERY 2: Completed tasks (LIMITED for performance) ===
+    completed_query = Task.query.options(*query_options).filter(Task.status == 'Completed')
+    completed_query = apply_role_filter(completed_query)
+    
+    if filter_assignee:
+        completed_query = completed_query.filter(Task.assignees.any(id=int(filter_assignee)))
+    
+    # Apply date filter only for non-'all' periods (for 'all', show recent completed)
+    if filter_period != 'all':
+        completed_query = apply_date_filter(completed_query)
+    
+    # Count total completed (for "showing X of Y")
+    completed_total = completed_query.count()
+    
+    # Get limited completed tasks, ordered by completion date (most recent first)
+    completed_tasks = completed_query.order_by(Task.completed_at.desc()).offset(completed_offset).limit(COMPLETED_LIMIT).all()
+    
+    # Group tasks by status
     tasks_by_status = {
         'Pending': [],
         'In Progress': [],
         'In Review': [],
-        'Completed': []
+        'Completed': completed_tasks
     }
     
-    for task in all_tasks:
+    for task in active_tasks:
         if task.status == 'Scheduled':
-            # Scheduled tasks appear in Pending column with a badge
             tasks_by_status['Pending'].append(task)
         elif task.status in tasks_by_status:
             tasks_by_status[task.status].append(task)
@@ -2031,7 +2059,10 @@ def scrum_board():
                            filter_date_from=filter_date_from,
                            filter_date_to=filter_date_to,
                            status_labels=STATUS_LABELS,
-                           today=today)
+                           today=today,
+                           completed_total=completed_total,
+                           completed_limit=COMPLETED_LIMIT,
+                           completed_offset=completed_offset)
 
 @main_bp.route('/export_pdf')
 @login_required
@@ -5781,25 +5812,33 @@ def import_tasks():
 @login_required
 def upload_attachment(task_id):
     """Upload a file attachment to a task."""
+    print(f"=== INICIO upload_attachment para task_id={task_id} ===")
     task = Task.query.get_or_404(task_id)
+    print(f"DEBUG: Tarea encontrada: {task.title}")
     
     # Check if user has access to this task
     if not current_user.is_admin and current_user not in task.assignees and task.creator_id != current_user.id:
+        print(f"DEBUG: Usuario sin permiso: {current_user.username}")
         flash('No tienes permiso para adjuntar archivos a esta tarea.', 'danger')
         return redirect(url_for('main.task_details', task_id=task_id))
     
+    print(f"DEBUG: request.files keys: {list(request.files.keys())}")
     if 'file' not in request.files:
+        print("DEBUG: 'file' no está en request.files")
         flash('No se seleccionó ningún archivo.', 'danger')
         return redirect(url_for('main.task_details', task_id=task_id))
     
     file = request.files['file']
+    print(f"DEBUG: Archivo recibido: filename={file.filename}, content_type={file.content_type}")
     
     if file.filename == '':
+        print("DEBUG: filename está vacío")
         flash('No se seleccionó ningún archivo.', 'danger')
         return redirect(url_for('main.task_details', task_id=task_id))
     
     # Check file extension
     if not storage.allowed_file(file.filename):
+        print(f"DEBUG: Extensión no permitida para: {file.filename}")
         flash(f'Tipo de archivo no permitido. Extensiones válidas: {", ".join(storage.ALLOWED_EXTENSIONS)}', 'danger')
         return redirect(url_for('main.task_details', task_id=task_id))
     
@@ -5807,22 +5846,29 @@ def upload_attachment(task_id):
     file.seek(0, 2)  # Seek to end
     file_size = file.tell()
     file.seek(0)  # Reset to start
+    print(f"DEBUG: Tamaño del archivo: {file_size} bytes ({file_size / (1024*1024):.2f} MB)")
     
     if file_size > storage.MAX_FILE_SIZE:
+        print(f"DEBUG: Archivo muy grande. Máximo: {storage.MAX_FILE_SIZE}")
         flash(f'El archivo excede el tamaño máximo de {storage.MAX_FILE_SIZE / (1024*1024):.0f} MB.', 'danger')
         return redirect(url_for('main.task_details', task_id=task_id))
     
     # Secure the filename
     filename = secure_filename(file.filename)
+    print(f"DEBUG: Filename seguro: {filename}")
     
     # Upload to MinIO
+    print(f"DEBUG: Llamando a storage.upload_file...")
     success, result = storage.upload_file(file, task_id, filename)
+    print(f"DEBUG: Resultado de upload_file: success={success}, result={result}")
     
     if not success:
+        print(f"DEBUG: Error al subir a MinIO: {result}")
         flash(f'Error al subir archivo: {result}', 'danger')
         return redirect(url_for('main.task_details', task_id=task_id))
     
     # Save metadata to database
+    print("DEBUG: Guardando metadata en base de datos...")
     attachment = TaskAttachment(
         task_id=task_id,
         filename=filename,
@@ -5844,8 +5890,10 @@ def upload_attachment(task_id):
     )
     db.session.add(activity)
     db.session.commit()
+    print(f"DEBUG: Archivo guardado exitosamente. Attachment ID: {attachment.id}")
     
     flash(f'Archivo "{filename}" subido y guardado exitosamente.', 'success')
+    print("=== FIN upload_attachment (éxito) ===")
     return redirect(url_for('main.edit_task', task_id=task_id))
 
 

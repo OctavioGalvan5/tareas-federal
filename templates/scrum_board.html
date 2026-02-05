@@ -408,11 +408,15 @@
             </div>
         </div>
 
-        <!-- Completado Column -->
+        <!-- Completado Column (LIMITED for performance) -->
         <div class="scrum-column column-completed">
             <div class="column-header">
                 <span><i class="fas fa-check-circle"></i> Completado</span>
-                <span class="count">{{ tasks_by_status['Completed']|length }}</span>
+                <span class="count"
+                    title="Mostrando {{ tasks_by_status['Completed']|length }} de {{ completed_total }} tareas">
+                    {{ tasks_by_status['Completed']|length }}{% if completed_total > tasks_by_status['Completed']|length
+                    %}/{{ completed_total }}{% endif %}
+                </span>
             </div>
             <div class="column-tasks" data-status="Completed" ondrop="drop(event)" ondragover="allowDrop(event)"
                 ondragleave="dragLeave(event)">
@@ -421,6 +425,17 @@
                 {% else %}
                 <div class="empty-column">Sin tareas completadas</div>
                 {% endfor %}
+
+                {% if completed_total > tasks_by_status['Completed']|length %}
+                <!-- Load More Button -->
+                <div style="text-align: center; padding: 1rem; margin-top: 0.5rem;">
+                    <button type="button" onclick="loadMoreCompleted()" id="loadMoreBtn"
+                        style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: all 0.2s;">
+                        <i class="fas fa-plus-circle"></i>
+                        Cargar más ({{ completed_total - tasks_by_status['Completed']|length }} restantes)
+                    </button>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -536,6 +551,19 @@
             customRange.style.display = 'none';
             applyFilters();
         }
+    }
+
+    function loadMoreCompleted() {
+        // Get current URL params and add offset for more completed tasks
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentOffset = parseInt(urlParams.get('completed_offset') || '0');
+        const newOffset = currentOffset + {{ completed_limit }
+    };
+
+    urlParams.set('completed_offset', newOffset);
+
+    // Navigate with new offset
+    window.location.href = '/scrum-board?' + urlParams.toString();
     }
 </script>
 {% endblock %}

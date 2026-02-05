@@ -364,7 +364,11 @@
         <div class="scrum-column column-pending">
             <div class="column-header">
                 <span><i class="fas fa-inbox"></i> Pendiente</span>
-                <span class="count">{{ tasks_by_status['Pending']|length }}</span>
+                <span class="count"
+                    title="Mostrando {{ tasks_by_status['Pending']|length }} de {{ column_totals['Pending'] }} tareas">
+                    {{ tasks_by_status['Pending']|length }}{% if column_totals['Pending'] >
+                    tasks_by_status['Pending']|length %}/{{ column_totals['Pending'] }}{% endif %}
+                </span>
             </div>
             <div class="column-tasks" data-status="Pending" ondrop="drop(event)" ondragover="allowDrop(event)"
                 ondragleave="dragLeave(event)">
@@ -373,6 +377,16 @@
                 {% else %}
                 <div class="empty-column">Sin tareas pendientes</div>
                 {% endfor %}
+
+                {% if column_totals['Pending'] > tasks_by_status['Pending']|length %}
+                <div style="text-align: center; padding: 0.75rem; margin-top: 0.5rem;">
+                    <button type="button" onclick="loadMore('pending')"
+                        style="background: linear-gradient(135deg, #64748b 0%, #475569 100%); color: white; border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.8rem;">
+                        <i class="fas fa-plus-circle"></i> Cargar más ({{ column_totals['Pending'] -
+                        tasks_by_status['Pending']|length }} restantes)
+                    </button>
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -380,7 +394,11 @@
         <div class="scrum-column column-in-progress">
             <div class="column-header">
                 <span><i class="fas fa-spinner"></i> En Proceso</span>
-                <span class="count">{{ tasks_by_status['In Progress']|length }}</span>
+                <span class="count"
+                    title="Mostrando {{ tasks_by_status['In Progress']|length }} de {{ column_totals['In Progress'] }} tareas">
+                    {{ tasks_by_status['In Progress']|length }}{% if column_totals['In Progress'] > tasks_by_status['In
+                    Progress']|length %}/{{ column_totals['In Progress'] }}{% endif %}
+                </span>
             </div>
             <div class="column-tasks" data-status="In Progress" ondrop="drop(event)" ondragover="allowDrop(event)"
                 ondragleave="dragLeave(event)">
@@ -389,6 +407,16 @@
                 {% else %}
                 <div class="empty-column">Sin tareas en proceso</div>
                 {% endfor %}
+
+                {% if column_totals['In Progress'] > tasks_by_status['In Progress']|length %}
+                <div style="text-align: center; padding: 0.75rem; margin-top: 0.5rem;">
+                    <button type="button" onclick="loadMore('in_progress')"
+                        style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.8rem;">
+                        <i class="fas fa-plus-circle"></i> Cargar más ({{ column_totals['In Progress'] -
+                        tasks_by_status['In Progress']|length }} restantes)
+                    </button>
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -396,7 +424,11 @@
         <div class="scrum-column column-in-review">
             <div class="column-header">
                 <span><i class="fas fa-eye"></i> En Revisión</span>
-                <span class="count">{{ tasks_by_status['In Review']|length }}</span>
+                <span class="count"
+                    title="Mostrando {{ tasks_by_status['In Review']|length }} de {{ column_totals['In Review'] }} tareas">
+                    {{ tasks_by_status['In Review']|length }}{% if column_totals['In Review'] > tasks_by_status['In
+                    Review']|length %}/{{ column_totals['In Review'] }}{% endif %}
+                </span>
             </div>
             <div class="column-tasks" data-status="In Review" ondrop="drop(event)" ondragover="allowDrop(event)"
                 ondragleave="dragLeave(event)">
@@ -405,6 +437,16 @@
                 {% else %}
                 <div class="empty-column">Sin tareas en revisión</div>
                 {% endfor %}
+
+                {% if column_totals['In Review'] > tasks_by_status['In Review']|length %}
+                <div style="text-align: center; padding: 0.75rem; margin-top: 0.5rem;">
+                    <button type="button" onclick="loadMore('in_review')"
+                        style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.8rem;">
+                        <i class="fas fa-plus-circle"></i> Cargar más ({{ column_totals['In Review'] -
+                        tasks_by_status['In Review']|length }} restantes)
+                    </button>
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -413,9 +455,9 @@
             <div class="column-header">
                 <span><i class="fas fa-check-circle"></i> Completado</span>
                 <span class="count"
-                    title="Mostrando {{ tasks_by_status['Completed']|length }} de {{ completed_total }} tareas">
-                    {{ tasks_by_status['Completed']|length }}{% if completed_total > tasks_by_status['Completed']|length
-                    %}/{{ completed_total }}{% endif %}
+                    title="Mostrando {{ tasks_by_status['Completed']|length }} de {{ column_totals['Completed'] }} tareas">
+                    {{ tasks_by_status['Completed']|length }}{% if column_totals['Completed'] >
+                    tasks_by_status['Completed']|length %}/{{ column_totals['Completed'] }}{% endif %}
                 </span>
             </div>
             <div class="column-tasks" data-status="Completed" ondrop="drop(event)" ondragover="allowDrop(event)"
@@ -426,13 +468,12 @@
                 <div class="empty-column">Sin tareas completadas</div>
                 {% endfor %}
 
-                {% if completed_total > tasks_by_status['Completed']|length %}
-                <!-- Load More Button -->
-                <div style="text-align: center; padding: 1rem; margin-top: 0.5rem;">
-                    <button type="button" onclick="loadMoreCompleted()" id="loadMoreBtn"
-                        style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: all 0.2s;">
-                        <i class="fas fa-plus-circle"></i>
-                        Cargar más ({{ completed_total - tasks_by_status['Completed']|length }} restantes)
+                {% if column_totals['Completed'] > tasks_by_status['Completed']|length %}
+                <div style="text-align: center; padding: 0.75rem; margin-top: 0.5rem;">
+                    <button type="button" onclick="loadMore('completed')"
+                        style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.8rem;">
+                        <i class="fas fa-plus-circle"></i> Cargar más ({{ column_totals['Completed'] -
+                        tasks_by_status['Completed']|length }} restantes)
                     </button>
                 </div>
                 {% endif %}
@@ -553,17 +594,17 @@
         }
     }
 
-    function loadMoreCompleted() {
-        // Get current URL params and add offset for more completed tasks
+    function loadMore(column) {
+        // Get current URL params and increase offset for the specified column
         const urlParams = new URLSearchParams(window.location.search);
-        const currentOffset = parseInt(urlParams.get('completed_offset') || '0');
-        const newOffset = currentOffset + {{ completed_limit }
-    };
+        const offsetParam = column + '_offset';
+        const currentOffset = parseInt(urlParams.get(offsetParam) || '0');
+        const newOffset = currentOffset + 10;
 
-    urlParams.set('completed_offset', newOffset);
+        urlParams.set(offsetParam, newOffset);
 
-    // Navigate with new offset
-    window.location.href = '/scrum-board?' + urlParams.toString();
+        // Navigate with new offset
+        window.location.href = '/scrum-board?' + urlParams.toString();
     }
 </script>
 {% endblock %}

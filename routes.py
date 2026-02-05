@@ -1995,52 +1995,66 @@ def scrum_board():
         available_areas = current_user.areas
         show_area_filter = False
     
-    # === QUERY 1: Active tasks (Pending, In Progress, In Review) ===
-    active_query = Task.query.options(*query_options).filter(
-        Task.status.in_(['Pending', 'In Progress', 'In Review', 'Scheduled'])
-    )
+    # Helper to build base query with filters
+    def build_filtered_query(status_filter):
+        q = Task.query.options(*query_options).filter(Task.status.in_(status_filter) if isinstance(status_filter, list) else Task.status == status_filter)
+        if show_blocked != 'true':
+            q = q.filter(Task.enabled == True)
+        q = apply_date_filter(q)
+        q = apply_role_filter(q)
+        if filter_assignee:
+            q = q.filter(Task.assignees.any(id=int(filter_assignee)))
+        return q
     
-    if show_blocked != 'true':
-        active_query = active_query.filter(Task.enabled == True)
+    # === QUERY FOR EACH COLUMN (with load more support) ===
+    COLUMN_LIMIT = 10
     
-    active_query = apply_date_filter(active_query)
-    active_query = apply_role_filter(active_query)
+    # Get offset parameters for each column (for load more)
+    pending_offset = request.args.get('pending_offset', 0, type=int)
+    in_progress_offset = request.args.get('in_progress_offset', 0, type=int)
+    in_review_offset = request.args.get('in_review_offset', 0, type=int)
+    completed_offset = request.args.get('completed_offset', 0, type=int)
     
-    if filter_assignee:
-        active_query = active_query.filter(Task.assignees.any(id=int(filter_assignee)))
+    # Pending (includes Scheduled)
+    pending_query = build_filtered_query(['Pending', 'Scheduled'])
+    pending_total = pending_query.count()
+    pending_tasks = pending_query.order_by(Task.due_date.asc()).limit(COLUMN_LIMIT + pending_offset).all()
     
-    active_tasks = active_query.order_by(Task.due_date.asc()).all()
+    # In Progress
+    in_progress_query = build_filtered_query('In Progress')
+    in_progress_total = in_progress_query.count()
+    in_progress_tasks = in_progress_query.order_by(Task.due_date.asc()).limit(COLUMN_LIMIT + in_progress_offset).all()
     
-    # === QUERY 2: Completed tasks (LIMITED for performance) ===
+    # In Review
+    in_review_query = build_filtered_query('In Review')
+    in_review_total = in_review_query.count()
+    in_review_tasks = in_review_query.order_by(Task.due_date.asc()).limit(COLUMN_LIMIT + in_review_offset).all()
+    
+    # Completed (different date filter logic)
     completed_query = Task.query.options(*query_options).filter(Task.status == 'Completed')
     completed_query = apply_role_filter(completed_query)
-    
     if filter_assignee:
         completed_query = completed_query.filter(Task.assignees.any(id=int(filter_assignee)))
-    
-    # Apply date filter only for non-'all' periods (for 'all', show recent completed)
     if filter_period != 'all':
         completed_query = apply_date_filter(completed_query)
-    
-    # Count total completed (for "showing X of Y")
     completed_total = completed_query.count()
-    
-    # Get limited completed tasks, ordered by completion date (most recent first)
-    completed_tasks = completed_query.order_by(Task.completed_at.desc()).offset(completed_offset).limit(COMPLETED_LIMIT).all()
+    completed_tasks = completed_query.order_by(Task.completed_at.desc()).limit(COLUMN_LIMIT + completed_offset).all()
     
     # Group tasks by status
     tasks_by_status = {
-        'Pending': [],
-        'In Progress': [],
-        'In Review': [],
+        'Pending': pending_tasks,
+        'In Progress': in_progress_tasks,
+        'In Review': in_review_tasks,
         'Completed': completed_tasks
     }
     
-    for task in active_tasks:
-        if task.status == 'Scheduled':
-            tasks_by_status['Pending'].append(task)
-        elif task.status in tasks_by_status:
-            tasks_by_status[task.status].append(task)
+    # Total counts per column
+    column_totals = {
+        'Pending': pending_total,
+        'In Progress': in_progress_total,
+        'In Review': in_review_total,
+        'Completed': completed_total
+    }
     
     # Get users for filter
     if current_user.can_see_all_areas():
@@ -2050,6 +2064,8 @@ def scrum_board():
     
     return render_template('scrum_board.html',
                            tasks_by_status=tasks_by_status,
+                           column_totals=column_totals,
+                           column_limit=COLUMN_LIMIT,
                            all_areas=available_areas,
                            show_area_filter=show_area_filter,
                            users=users,
@@ -2059,10 +2075,7 @@ def scrum_board():
                            filter_date_from=filter_date_from,
                            filter_date_to=filter_date_to,
                            status_labels=STATUS_LABELS,
-                           today=today,
-                           completed_total=completed_total,
-                           completed_limit=COMPLETED_LIMIT,
-                           completed_offset=completed_offset)
+                           today=today)
 
 @main_bp.route('/export_pdf')
 @login_required

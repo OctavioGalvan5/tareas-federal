@@ -21,24 +21,26 @@ def to_buenos_aires(dt):
     return dt.astimezone(BUENOS_AIRES_TZ)
 
 class PDFReport(FPDF):
-    def __init__(self):
+    def __init__(self, area_name=None):
         super().__init__()
         self.set_auto_page_break(auto=True, margin=15)
+        self.area_name = area_name or 'Todas las áreas'
 
     def header(self):
         # Brand Colors - Caja de Abogados (Bright Blue)
         self.set_fill_color(0, 119, 190)  # Bright Blue
-        self.rect(0, 0, 210, 40, 'F')
-        
+        self.rect(0, 0, 210, 45, 'F')
+
         # Title
-        self.set_font('Arial', 'B', 24)
+        self.set_font('Arial', 'B', 28)
         self.set_text_color(255, 255, 255)
-        self.set_y(15)
-        self.cell(0, 10, 'Gestor de Tareas Federal', 0, 1, 'C')
-        
-        self.set_font('Arial', '', 12)
-        self.cell(0, 10, 'Reporte de Tareas', 0, 1, 'C')
-        
+        self.set_y(12)
+        self.cell(0, 10, 'Gestor de Tareas', 0, 1, 'C')
+
+        # Area name
+        self.set_font('Arial', '', 14)
+        self.cell(0, 8, self.area_name, 0, 1, 'C')
+
         self.ln(20)
 
     def footer(self):
@@ -496,7 +498,7 @@ def generate_report_pdf(data):
             time_str = "-"
         pdf.cell(w_time, 10, time_str, 0, 0, 'C', fill)
         
-        pdf.cell(w_date, 10, to_buenos_aires(task.due_date).strftime('%d/%m/%Y'), 0, 0, 'C', fill)
+        pdf.cell(w_date, 10, task.due_date.strftime('%d/%m/%Y'), 0, 0, 'C', fill)
         
         # Completed by (Multi-cell)
         x_current = pdf.get_x()
@@ -513,7 +515,8 @@ def generate_report_pdf(data):
     return pdf
 
 def generate_task_pdf(tasks, filters):
-    pdf = PDFReport()
+    area_name = filters.get('area_name', 'Todas las áreas')
+    pdf = PDFReport(area_name=area_name)
     pdf.alias_nb_pages()
     pdf.add_page()
     
@@ -642,73 +645,101 @@ def generate_task_pdf(tasks, filters):
     pdf.set_auto_page_break(False)
     
     for task in tasks:
-        # Check for page break (Threshold set to 260mm to be safe, A4 is 297mm)
-        if pdf.get_y() > 260:
+        # Calculate space needed for this task (row + description if exists)
+        has_description = task.description and task.description.strip()
+        row_height = 10
+        desc_height = 0
+        if has_description:
+            # Estimate description height (roughly 50 chars per line at font size 7)
+            desc_lines = len(task.description) // 80 + 1
+            desc_lines = min(desc_lines, 4)  # Max 4 lines
+            desc_height = desc_lines * 4 + 2
+
+        total_height = row_height + desc_height
+
+        # Check for page break
+        if pdf.get_y() + total_height > 260:
             pdf.add_page()
             draw_table_header()
-            fill = False # Reset zebra fill on new page
-            
+            fill = False
+
         # Zebra striping
         if fill:
             pdf.set_fill_color(243, 244, 246) # Gray 100
         else:
             pdf.set_fill_color(255, 255, 255)
-            
-        # Truncate title if needed
-        title = task.title[:25] + '...' if len(task.title) > 25 else task.title
-        
+
+        # Truncate title if needed (increased limit)
+        title = task.title[:35] + '...' if len(task.title) > 35 else task.title
+
         # Creator name truncated
         creator = task.creator.full_name[:15] + '..' if len(task.creator.full_name) > 15 else task.creator.full_name
 
         # Assignees
-        assignees_list = [u.full_name.split()[0] for u in task.assignees] # First names only to save space
+        assignees_list = [u.full_name.split()[0] for u in task.assignees]
         assignees_str = ", ".join(assignees_list)
         assignees_str = assignees_str[:15] + '..' if len(assignees_str) > 15 else assignees_str
-        
+
         # Status Translation & Color
         status_text = "Completada" if task.status == 'Completed' else "Pendiente"
-        
+
         # Completed by info
         if task.completed_by:
             completed_info = f"{task.completed_by.full_name}\n{to_buenos_aires(task.completed_at).strftime('%d/%m/%Y')}"
         else:
             completed_info = "-"
-        
+
         # Save current Y position for cells
         y_start = pdf.get_y()
         x_start = pdf.get_x()
-        
+
         # Draw cells
         pdf.cell(w_title, 10, title, 0, 0, 'L', fill)
         pdf.cell(w_creator, 10, creator, 0, 0, 'L', fill)
         pdf.cell(w_assigned, 10, assignees_str, 0, 0, 'L', fill)
-        
+
         # Status Color
         if task.status == 'Completed':
             pdf.set_text_color(4, 120, 87) # Green
         else:
             pdf.set_text_color(193, 39, 45) # Vivid Red - Brand Color
-            
+
         pdf.cell(w_status, 10, status_text, 0, 0, 'C', fill)
-        
+
         # Reset color
         pdf.set_text_color(0, 0, 0)
-        
+
         pdf.cell(w_priority, 10, task.priority, 0, 0, 'C', fill)
-        pdf.cell(w_date, 10, to_buenos_aires(task.due_date).strftime('%d/%m/%Y'), 0, 0, 'C', fill)
-        
+        pdf.cell(w_date, 10, task.due_date.strftime('%d/%m/%Y'), 0, 0, 'C', fill)
+
         # Completed by (Multi-cell needs special handling)
-        # We manually position this last cell
         pdf.set_font('Arial', '', 7)
         pdf.multi_cell(w_completed, 5, completed_info, 0, 'C', fill)
         pdf.set_font('Arial', '', 8)
-        
-        # Force move to next line 
-        # CAUTION: multi_cell moves Y. We need to ensure we align next row correctly.
-        # Since the height is fixed at 10 (2 lines of 5), and multi_cell takes height as line height
-        # If content < 2 lines, it might be less. We force spacing.
+
+        # Move to next line after main row
         pdf.set_xy(x_start, y_start + 10)
-        
+
+        # Draw description if exists
+        if has_description:
+            # Light background for description
+            pdf.set_fill_color(250, 250, 252) if not fill else pdf.set_fill_color(238, 240, 244)
+            pdf.set_font('Arial', 'I', 7)
+            pdf.set_text_color(80, 80, 80)
+
+            # Truncate description if too long
+            desc_text = task.description.strip()
+            if len(desc_text) > 300:
+                desc_text = desc_text[:297] + '...'
+
+            # Draw description cell spanning full width
+            pdf.set_x(x_start + 5)  # Small indent
+            pdf.multi_cell(185, 4, desc_text, 0, 'L', False)
+
+            # Reset font and color
+            pdf.set_font('Arial', '', 8)
+            pdf.set_text_color(0, 0, 0)
+
         fill = not fill
         
     # Re-enable auto page break

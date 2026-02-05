@@ -33,25 +33,37 @@ def generate_task_excel(tasks, filters):
     # Brand Colors - Caja de Abogados
     brand_blue = "0077BE"  # RGB(0, 119, 190)
     brand_red = "C1272D"   # RGB(193, 39, 45)
-    
+
+    # Get area name from filters
+    area_name = filters.get('area_name', 'Todas las áreas')
+
     # --- Header Section ---
-    ws.merge_cells('A1:H1')
+    ws.merge_cells('A1:J1')
     header_cell = ws['A1']
-    header_cell.value = "Gestor Federal - Reporte de Tareas"
-    header_cell.font = Font(name='Arial', size=18, bold=True, color="FFFFFF")
+    header_cell.value = "Gestor de Tareas"
+    header_cell.font = Font(name='Arial', size=22, bold=True, color="FFFFFF")
     header_cell.fill = PatternFill(start_color=brand_blue, end_color=brand_blue, fill_type="solid")
     header_cell.alignment = Alignment(horizontal='center', vertical='center')
-    ws.row_dimensions[1].height = 30
-    
+    ws.row_dimensions[1].height = 35
+
+    # --- Area Name ---
+    ws.merge_cells('A2:J2')
+    area_cell = ws['A2']
+    area_cell.value = area_name
+    area_cell.font = Font(name='Arial', size=14, bold=False, color="FFFFFF")
+    area_cell.fill = PatternFill(start_color=brand_blue, end_color=brand_blue, fill_type="solid")
+    area_cell.alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[2].height = 25
+
     # --- Date and Time ---
-    ws.merge_cells('A2:H2')
-    date_cell = ws['A2']
+    ws.merge_cells('A3:J3')
+    date_cell = ws['A3']
     date_cell.value = f"Generado el {to_buenos_aires(datetime.utcnow()).strftime('%d/%m/%Y %H:%M')}"
     date_cell.font = Font(name='Arial', size=10, italic=True)
     date_cell.alignment = Alignment(horizontal='center')
     
     # --- Summary Section ---
-    row = 4
+    row = 5
     total_tasks = len(tasks)
     completed_tasks = sum(1 for t in tasks if t.status == 'Completed')
     pending_tasks = total_tasks - completed_tasks
@@ -158,7 +170,7 @@ def generate_task_excel(tasks, filters):
             task.description or '-',
             status_text,
             task.priority,
-            to_buenos_aires(task.due_date).strftime('%d/%m/%Y'),
+            task.due_date.strftime('%d/%m/%Y'),
             time_str,
             task.creator.full_name,
             assignees_list,
@@ -211,19 +223,23 @@ def generate_import_template():
     ws = wb.active
     ws.title = "Plantilla Importación"
     
-    # Headers
+    # Headers - Must match the order expected by import_tasks in routes.py
+    # Columns: 0:Título, 1:Descripción, 2:Prioridad, 3:Fecha Inicio, 4:Hora Inicio,
+    #          5:Fecha Vencimiento, 6:Hora Vencimiento, 7:Asignados, 8:Etiquetas,
+    #          9:ID Proceso, 10:Estado, 11:Completado Por
     headers = [
         'Título (Requerido)', 
         'Descripción', 
         'Prioridad (Normal, Media, Urgente)', 
         'Fecha Inicio (DD/MM/YYYY)',
+        'Hora Inicio (HH:MM)',
         'Fecha Vencimiento (Requerido, DD/MM/YYYY)', 
+        'Hora Vencimiento (HH:MM)',
         'Asignados (Usuarios separados por coma)', 
         'Etiquetas (Separadas por coma)',
         'ID Proceso (Opcional)',
-        'Estado (Pendiente, En Proceso, Completado)',
-        'Completado Por (Usuario, si Estado=Completado)',
-        'Fecha Completado (DD/MM/YYYY, si Estado=Completado)'
+        'Estado (Pendiente/Completado)',
+        'Completado Por (Usuario, si Estado=Completado)'
     ]
     
     # Header Style
@@ -236,11 +252,28 @@ def generate_import_template():
         cell.border = Border(bottom=Side(style='thin'))
         
         # Set column width
-        ws.column_dimensions[get_column_letter(col_num)].width = 25
-
-    # Add example row (optional, maybe as a comment)
-    # ws.merge_cells('A2:H2')
-    # ws['A2'] = "Ejemplo: Revisar Contrato | Revisar cláusulas | Alta | 20/01/2026 | juan.perez, maria.gomez | Legales, Urgente | 123"
+        ws.column_dimensions[get_column_letter(col_num)].width = 22
+    
+    # Add example row
+    example_row = [
+        'Revisar Contrato',  # Título
+        'Revisar cláusulas del contrato',  # Descripción
+        'Normal',  # Prioridad
+        '05/02/2026',  # Fecha Inicio
+        '08:00',  # Hora Inicio
+        '10/02/2026',  # Fecha Vencimiento
+        '18:00',  # Hora Vencimiento
+        'admin',  # Asignados
+        'Legales',  # Etiquetas
+        '',  # ID Proceso
+        'Pendiente',  # Estado
+        ''  # Completado Por
+    ]
+    for col_num, value in enumerate(example_row, 1):
+        cell = ws.cell(row=2, column=col_num)
+        cell.value = value
+        cell.font = Font(name='Arial', size=10, italic=True, color="888888")
+        cell.alignment = Alignment(horizontal='center')
     
     return wb
 

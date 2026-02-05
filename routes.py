@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
 from models import User, Task, Tag, TaskTemplate, SubtaskTemplate, Expiration, RecurringTask, ActivityLog, ProcessType, Process, StatusTransition, TaskAttachment
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time
 from pdf_utils import generate_task_pdf
 from excel_utils import generate_task_excel, generate_import_template, process_excel_import
 from io import BytesIO
@@ -2080,47 +2080,43 @@ def scrum_board():
 @main_bp.route('/export_pdf')
 @login_required
 def export_pdf():
+    from models import Area
+
     # Re-use filter logic from dashboard
     filter_assignee = request.args.get('assignee')
     filter_creator = request.args.get('creator')
     filter_status = request.args.get('status')
-    
+    filter_area = request.args.get('area')
+
     # Calendar specific filters
     period = request.args.get('period')
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
-    
+
     filters = {}
-    
-    # Determine if this is from calendar (has period) or dashboard
-    if period:
-        # Calendar mode: show all tasks, filter by user (assignee) if selected
-        query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
-        
-        # The calendar's 'creator' param is actually filtering by assignee now
-        filter_user = request.args.get('creator')  # Calendar sends user filter as 'creator'
-        if filter_user:
-            query = query.filter(Task.assignees.any(id=filter_user))
-            user = User.query.get(filter_user)
-            filters['assignee_name'] = user.full_name if user else 'Desconocido'
-        # If no user filter in calendar, show all tasks (no assignee_name filter shown)
-    else:
-        # Dashboard mode: start without user filter
-        query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
-        
-        # Apply Assignee Filter (dashboard uses this)
-        if filter_assignee:
-            query = query.filter(Task.assignees.any(id=filter_assignee))
-            assignee = User.query.get(filter_assignee)
-            filters['assignee_name'] = assignee.full_name if assignee else 'Desconocido'
-        
-        # Apply Creator Filter (dashboard also has this)
-        if filter_creator:
-            query = query.filter(Task.creator_id == filter_creator)
-            creator = User.query.get(filter_creator)
-            filters['creator_name'] = creator.full_name if creator else 'Desconocido'
-            filters['creator'] = filter_creator
-        
+
+    # Start query
+    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
+
+    # Apply Assignee Filter (works for both calendar and dashboard)
+    if filter_assignee:
+        query = query.filter(Task.assignees.any(id=filter_assignee))
+        assignee = User.query.get(filter_assignee)
+        filters['assignee_name'] = assignee.full_name if assignee else 'Desconocido'
+
+    # Apply Creator Filter
+    if filter_creator:
+        query = query.filter(Task.creator_id == filter_creator)
+        creator = User.query.get(filter_creator)
+        filters['creator_name'] = creator.full_name if creator else 'Desconocido'
+        filters['creator'] = filter_creator
+
+    # Apply Area Filter
+    if filter_area:
+        query = query.filter(Task.area_id == int(filter_area))
+        area = Area.query.get(int(filter_area))
+        filters['area_name'] = area.name if area else 'Desconocida'
+
     # Apply Status Filter - exclude 'Anulado' by default like dashboard
     if filter_status:
         if filter_status in ['Pending', 'Completed', 'Anulado']:
@@ -2134,7 +2130,7 @@ def export_pdf():
     today = date.today()
     if period == 'today':
         query = query.filter(db.func.date(Task.due_date) == today)
-        filters['date_range'] = 'Hoy'
+        filters['date_range'] = f'Hoy ({today.strftime("%d/%m/%Y")})'
     elif period == 'week':
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
@@ -2190,47 +2186,43 @@ def export_pdf():
 @main_bp.route('/export_excel')
 @login_required
 def export_excel():
+    from models import Area
+
     # Re-use filter logic from dashboard (same as export_pdf)
     filter_assignee = request.args.get('assignee')
     filter_creator = request.args.get('creator')
     filter_status = request.args.get('status')
-    
+    filter_area = request.args.get('area')
+
     # Calendar specific filters
     period = request.args.get('period')
     start_date_str = request.args.get('start_date')
     end_date_str = request.args.get('end_date')
-    
+
     filters = {}
-    
-    # Determine if this is from calendar (has period) or dashboard
-    if period:
-        # Calendar mode: show all tasks, filter by user (assignee) if selected
-        query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
-        
-        # The calendar's 'creator' param is actually filtering by assignee now
-        filter_user = request.args.get('creator')  # Calendar sends user filter as 'creator'
-        if filter_user:
-            query = query.filter(Task.assignees.any(id=filter_user))
-            user = User.query.get(filter_user)
-            filters['assignee_name'] = user.full_name if user else 'Desconocido'
-        # If no user filter in calendar, show all tasks (no assignee_name filter shown)
-    else:
-        # Dashboard mode: start without user filter
-        query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
-        
-        # Apply Assignee Filter (dashboard uses this)
-        if filter_assignee:
-            query = query.filter(Task.assignees.any(id=filter_assignee))
-            assignee = User.query.get(filter_assignee)
-            filters['assignee_name'] = assignee.full_name if assignee else 'Desconocido'
-        
-        # Apply Creator Filter (dashboard also has this)
-        if filter_creator:
-            query = query.filter(Task.creator_id == filter_creator)
-            creator = User.query.get(filter_creator)
-            filters['creator_name'] = creator.full_name if creator else 'Desconocido'
-            filters['creator'] = filter_creator
-        
+
+    # Start query
+    query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
+
+    # Apply Assignee Filter (works for both calendar and dashboard)
+    if filter_assignee:
+        query = query.filter(Task.assignees.any(id=filter_assignee))
+        assignee = User.query.get(filter_assignee)
+        filters['assignee_name'] = assignee.full_name if assignee else 'Desconocido'
+
+    # Apply Creator Filter
+    if filter_creator:
+        query = query.filter(Task.creator_id == filter_creator)
+        creator = User.query.get(filter_creator)
+        filters['creator_name'] = creator.full_name if creator else 'Desconocido'
+        filters['creator'] = filter_creator
+
+    # Apply Area Filter
+    if filter_area:
+        query = query.filter(Task.area_id == int(filter_area))
+        area = Area.query.get(int(filter_area))
+        filters['area_name'] = area.name if area else 'Desconocida'
+
     # Apply Status Filter - exclude 'Anulado' by default like dashboard
     if filter_status:
         if filter_status in ['Pending', 'Completed', 'Anulado']:
@@ -2244,7 +2236,7 @@ def export_excel():
     today = date.today()
     if period == 'today':
         query = query.filter(db.func.date(Task.due_date) == today)
-        filters['date_range'] = 'Hoy'
+        filters['date_range'] = f'Hoy ({today.strftime("%d/%m/%Y")})'
     elif period == 'week':
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
@@ -3569,47 +3561,99 @@ def import_tasks():
             if not row or not row[0]:  # Skip empty rows
                 continue
             
+            # Columnas según la plantilla Excel:
+            # 0: Título, 1: Descripción, 2: Prioridad, 3: Fecha Inicio, 4: Hora Inicio,
+            # 5: Fecha Vencimiento, 6: Hora Vencimiento, 7: Asignados, 8: Etiquetas,
+            # 9: ID Proceso, 10: Estado, 11: Completado Por
             titulo = row[0] if len(row) > 0 else None
             descripcion = row[1] if len(row) > 1 else ''
             prioridad = row[2] if len(row) > 2 else 'Normal'
-            fecha_str = row[3] if len(row) > 3 else None
-            asignados_str = row[4] if len(row) > 4 else ''
-            etiquetas_str = row[5] if len(row) > 5 else ''
-            tiempo_str = row[6] if len(row) > 6 else ''
-            estado_str = row[7] if len(row) > 7 else 'Pendiente'
-            completado_por_str = row[8] if len(row) > 8 else ''
+            fecha_inicio_str = row[3] if len(row) > 3 else None
+            hora_inicio_str = row[4] if len(row) > 4 else None
+            fecha_vencimiento_str = row[5] if len(row) > 5 else None
+            hora_vencimiento_str = row[6] if len(row) > 6 else None
+            asignados_str = row[7] if len(row) > 7 else ''
+            etiquetas_str = row[8] if len(row) > 8 else ''
+            proceso_id_str = row[9] if len(row) > 9 else ''
+            estado_str = row[10] if len(row) > 10 else 'Pendiente'
+            completado_por_str = row[11] if len(row) > 11 else ''
             
             # Validate required fields
             if not titulo:
                 errors.append(f'Fila {row_num}: Título requerido')
                 continue
             
-            if not fecha_str:
+            if not fecha_vencimiento_str:
                 errors.append(f'Fila {row_num}: Fecha de vencimiento requerida')
                 continue
             
-            # Parse date
-            try:
-                if isinstance(fecha_str, str):
-                    due_date = datetime.strptime(fecha_str, '%Y-%m-%d')
+            # Helper function to parse date+time
+            def parse_datetime(fecha_val, hora_val, default_hour=0, default_minute=0):
+                """Parse date and optional time, returning a datetime object"""
+                if not fecha_val:
+                    return None
+                
+                # Parse date
+                if isinstance(fecha_val, datetime):
+                    base_date = fecha_val
+                elif isinstance(fecha_val, date):
+                    base_date = datetime.combine(fecha_val, datetime.min.time())
                 else:
-                    # Excel may return datetime object
-                    due_date = fecha_str if isinstance(fecha_str, datetime) else datetime.strptime(str(fecha_str), '%Y-%m-%d')
-            except (ValueError, TypeError):
-                errors.append(f'Fila {row_num}: Formato de fecha inválido (use AAAA-MM-DD)')
+                    fecha_str_clean = str(fecha_val).strip()
+                    # Try different date formats
+                    for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y']:
+                        try:
+                            base_date = datetime.strptime(fecha_str_clean, fmt)
+                            break
+                        except ValueError:
+                            continue
+                    else:
+                        return None  # Could not parse date
+                
+                # Parse time if provided
+                if hora_val:
+                    if isinstance(hora_val, datetime):
+                        hour, minute = hora_val.hour, hora_val.minute
+                    elif isinstance(hora_val, time):
+                        hour, minute = hora_val.hour, hora_val.minute
+                    else:
+                        hora_str_clean = str(hora_val).strip()
+                        # Try different time formats
+                        for fmt in ['%H:%M', '%H:%M:%S', '%I:%M %p']:
+                            try:
+                                parsed_time = datetime.strptime(hora_str_clean, fmt)
+                                hour, minute = parsed_time.hour, parsed_time.minute
+                                break
+                            except ValueError:
+                                continue
+                        else:
+                            hour, minute = default_hour, default_minute
+                else:
+                    hour, minute = default_hour, default_minute
+                
+                return base_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+            # Parse due date (required) - Default to 18:00 (end of workday)
+            try:
+                due_date = parse_datetime(fecha_vencimiento_str, hora_vencimiento_str, default_hour=18, default_minute=0)
+                if not due_date:
+                    errors.append(f'Fila {row_num}: Formato de fecha de vencimiento inválido')
+                    continue
+            except Exception:
+                errors.append(f'Fila {row_num}: Error al procesar fecha de vencimiento')
                 continue
+            
+            # Parse start date (optional) - Default to 08:00 (start of workday)
+            planned_start_date = None
+            if fecha_inicio_str:
+                try:
+                    planned_start_date = parse_datetime(fecha_inicio_str, hora_inicio_str, default_hour=8, default_minute=0)
+                except Exception:
+                    pass  # Ignore invalid start dates
             
             # Validate priority
             if prioridad not in ['Normal', 'Media', 'Urgente']:
                 prioridad = 'Normal'
-            
-            # Parse time_spent (optional, in minutes)
-            time_spent = None
-            if tiempo_str:
-                try:
-                    time_spent = int(tiempo_str)
-                except (ValueError, TypeError):
-                    pass  # Ignore invalid time values
             
             # Parse status
             status = 'Pending'  # Default
@@ -3652,16 +3696,30 @@ def import_tasks():
                     tags.append(tag)
                 # Silently ignore non-existing tags (they're optional)
             
+            # Parse process ID (optional)
+            process_id = None
+            if proceso_id_str:
+                try:
+                    process_id = int(proceso_id_str)
+                    # Verify process exists
+                    process = Process.query.get(process_id)
+                    if not process:
+                        errors.append(f'Fila {row_num}: Proceso ID {process_id} no encontrado')
+                        process_id = None
+                except (ValueError, TypeError):
+                    errors.append(f'Fila {row_num}: ID de Proceso inválido')
+            
             # Create task
             new_task = Task(
                 title=str(titulo),
                 description=str(descripcion) if descripcion else '',
                 priority=prioridad,
                 due_date=due_date,
+                planned_start_date=planned_start_date,
                 creator_id=current_user.id,
-                time_spent=time_spent,
                 status=status,
-                area_id=user_area_id  # For non-admins, assigns to their area; for admins, None (inherits default)
+                area_id=user_area_id,  # For non-admins, assigns to their area; for admins, None (inherits default)
+                process_id=process_id  # Link to process if provided
             )
             
             # Set completed info if status is Completed

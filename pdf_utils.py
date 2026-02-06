@@ -20,6 +20,46 @@ def to_buenos_aires(dt):
         dt = pytz.utc.localize(dt)
     return dt.astimezone(BUENOS_AIRES_TZ)
 
+def sanitize_text(text):
+    """
+    Sanitize text for PDF generation by replacing Unicode characters
+    that cannot be encoded in latin-1 with their ASCII equivalents.
+    """
+    if text is None:
+        return ""
+    
+    # Common Unicode replacements
+    replacements = {
+        '\u2013': '-',   # en-dash
+        '\u2014': '-',   # em-dash
+        '\u2018': "'",   # left single quote
+        '\u2019': "'",   # right single quote
+        '\u201c': '"',   # left double quote
+        '\u201d': '"',   # right double quote
+        '\u2026': '...', # ellipsis
+        '\u00a0': ' ',   # non-breaking space
+        '\u2022': '*',   # bullet
+        '\u2010': '-',   # hyphen
+        '\u2011': '-',   # non-breaking hyphen
+        '\u2012': '-',   # figure dash
+        '\u2015': '-',   # horizontal bar
+        '\u00b7': '*',   # middle dot
+        '\u2032': "'",   # prime
+        '\u2033': '"',   # double prime
+    }
+    
+    for unicode_char, ascii_char in replacements.items():
+        text = text.replace(unicode_char, ascii_char)
+    
+    # Replace any remaining non-latin1 characters with '?'
+    try:
+        text.encode('latin-1')
+    except UnicodeEncodeError:
+        # Filter out any remaining problematic characters
+        text = ''.join(c if ord(c) < 256 else '?' for c in text)
+    
+    return text
+
 class PDFReport(FPDF):
     def __init__(self, area_name=None):
         super().__init__()
@@ -440,23 +480,25 @@ def generate_report_pdf(data):
         else:
             pdf.set_fill_color(255, 255, 255)
             
-        # Truncate title
-        title = task.title[:25] + '...' if len(task.title) > 25 else task.title
+        # Truncate title and sanitize
+        title_raw = sanitize_text(task.title)
+        title = title_raw[:25] + '...' if len(title_raw) > 25 else title_raw
         
-        # Creator
-        creator = task.creator.full_name[:15] + '..' if len(task.creator.full_name) > 15 else task.creator.full_name
+        # Creator (sanitized)
+        creator_raw = sanitize_text(task.creator.full_name)
+        creator = creator_raw[:15] + '..' if len(creator_raw) > 15 else creator_raw
 
-        # Assignees
-        assignees_list = [u.full_name.split()[0] for u in task.assignees]
+        # Assignees (sanitized)
+        assignees_list = [sanitize_text(u.full_name.split()[0]) for u in task.assignees]
         assignees_str = ", ".join(assignees_list)
         assignees_str = assignees_str[:15] + '..' if len(assignees_str) > 15 else assignees_str
         
         # Status
         status_text = "Completada" if task.status == 'Completed' else "Pendiente"
         
-        # Completed by
+        # Completed by (sanitized)
         if task.completed_by:
-            completed_info = f"{task.completed_by.full_name}\n{to_buenos_aires(task.completed_at).strftime('%d/%m/%Y')}"
+            completed_info = f"{sanitize_text(task.completed_by.full_name)}\n{to_buenos_aires(task.completed_at).strftime('%d/%m/%Y')}"
         else:
             completed_info = "-"
         
@@ -669,23 +711,25 @@ def generate_task_pdf(tasks, filters):
         else:
             pdf.set_fill_color(255, 255, 255)
 
-        # Truncate title if needed (increased limit)
-        title = task.title[:35] + '...' if len(task.title) > 35 else task.title
+        # Truncate title if needed (increased limit) and sanitize
+        title_raw = sanitize_text(task.title)
+        title = title_raw[:35] + '...' if len(title_raw) > 35 else title_raw
 
-        # Creator name truncated
-        creator = task.creator.full_name[:15] + '..' if len(task.creator.full_name) > 15 else task.creator.full_name
+        # Creator name truncated and sanitized
+        creator_raw = sanitize_text(task.creator.full_name)
+        creator = creator_raw[:15] + '..' if len(creator_raw) > 15 else creator_raw
 
-        # Assignees
-        assignees_list = [u.full_name.split()[0] for u in task.assignees]
+        # Assignees (sanitized)
+        assignees_list = [sanitize_text(u.full_name.split()[0]) for u in task.assignees]
         assignees_str = ", ".join(assignees_list)
         assignees_str = assignees_str[:15] + '..' if len(assignees_str) > 15 else assignees_str
 
         # Status Translation & Color
         status_text = "Completada" if task.status == 'Completed' else "Pendiente"
 
-        # Completed by info
+        # Completed by info (sanitized)
         if task.completed_by:
-            completed_info = f"{task.completed_by.full_name}\n{to_buenos_aires(task.completed_at).strftime('%d/%m/%Y')}"
+            completed_info = f"{sanitize_text(task.completed_by.full_name)}\n{to_buenos_aires(task.completed_at).strftime('%d/%m/%Y')}"
         else:
             completed_info = "-"
 
@@ -727,8 +771,8 @@ def generate_task_pdf(tasks, filters):
             pdf.set_font('Arial', 'I', 7)
             pdf.set_text_color(80, 80, 80)
 
-            # Truncate description if too long
-            desc_text = task.description.strip()
+            # Truncate description if too long and sanitize
+            desc_text = sanitize_text(task.description.strip())
             if len(desc_text) > 300:
                 desc_text = desc_text[:297] + '...'
 

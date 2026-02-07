@@ -644,12 +644,12 @@ def generate_task_pdf(tasks, filters):
     pdf.set_font('Arial', 'B', 8)
     
     # Column widths (Total: 190)
-    w_title = 40
-    w_creator = 25
-    w_assigned = 25
-    w_status = 20
-    w_priority = 20
-    w_date = 25
+    w_title = 55      # Increased for long task titles
+    w_creator = 22
+    w_assigned = 22
+    w_status = 18
+    w_priority = 15
+    w_date = 23
     w_completed = 35
     
     pdf.cell(w_title, 10, 'Título', 0, 0, 'L', True)
@@ -713,16 +713,16 @@ def generate_task_pdf(tasks, filters):
 
         # Truncate title if needed (increased limit) and sanitize
         title_raw = sanitize_text(task.title)
-        title = title_raw[:35] + '...' if len(title_raw) > 35 else title_raw
+        title = title_raw[:45] + '...' if len(title_raw) > 45 else title_raw
 
         # Creator name truncated and sanitized
         creator_raw = sanitize_text(task.creator.full_name)
-        creator = creator_raw[:15] + '..' if len(creator_raw) > 15 else creator_raw
+        creator = creator_raw[:12] + '..' if len(creator_raw) > 12 else creator_raw
 
         # Assignees (sanitized)
         assignees_list = [sanitize_text(u.full_name.split()[0]) for u in task.assignees]
         assignees_str = ", ".join(assignees_list)
-        assignees_str = assignees_str[:15] + '..' if len(assignees_str) > 15 else assignees_str
+        assignees_str = assignees_str[:12] + '..' if len(assignees_str) > 12 else assignees_str
 
         # Status Translation & Color
         status_text = "Completada" if task.status == 'Completed' else "Pendiente"

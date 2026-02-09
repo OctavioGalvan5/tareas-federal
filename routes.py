@@ -306,7 +306,9 @@ def dashboard():
                 db.func.date(Task.due_date) == today,
                 db.func.date(Task.planned_start_date) == today,
                 Task.status.in_(['In Progress', 'In Review']), # Always show active work
-                overdue_condition
+                overdue_condition,
+                # Show completed tasks if completed TODAY
+                db.and_(Task.status == 'Completed', db.func.date(Task.completed_at) == today)
             )
         )
     elif filter_period == 'week':
@@ -317,7 +319,9 @@ def dashboard():
                 db.and_(db.func.date(Task.due_date) >= week_start, db.func.date(Task.due_date) <= week_end),
                 db.and_(db.func.date(Task.planned_start_date) >= week_start, db.func.date(Task.planned_start_date) <= week_end),
                 Task.status.in_(['In Progress', 'In Review']),
-                overdue_condition
+                overdue_condition,
+                # Show completed tasks if completed THIS WEEK
+                db.and_(Task.status == 'Completed', db.func.date(Task.completed_at) >= week_start, db.func.date(Task.completed_at) <= week_end)
             )
         )
     elif filter_period == 'month':
@@ -331,7 +335,9 @@ def dashboard():
                 db.and_(db.func.date(Task.due_date) >= month_start, db.func.date(Task.due_date) <= month_end),
                 db.and_(db.func.date(Task.planned_start_date) >= month_start, db.func.date(Task.planned_start_date) <= month_end),
                 Task.status.in_(['In Progress', 'In Review']),
-                overdue_condition
+                overdue_condition,
+                # Show completed tasks if completed THIS MONTH
+                db.and_(Task.status == 'Completed', db.func.date(Task.completed_at) >= month_start, db.func.date(Task.completed_at) <= month_end)
             )
         )
     elif filter_period == 'custom':
@@ -2030,13 +2036,47 @@ def scrum_board():
     in_review_total = in_review_query.count()
     in_review_tasks = in_review_query.order_by(Task.due_date.asc()).limit(COLUMN_LIMIT + in_review_offset).all()
     
-    # Completed (different date filter logic)
+    # Completed (filter by completed_at instead of due_date to avoid tasks disappearing)
     completed_query = Task.query.options(*query_options).filter(Task.status == 'Completed')
     completed_query = apply_role_filter(completed_query)
     if filter_assignee:
         completed_query = completed_query.filter(Task.assignees.any(id=int(filter_assignee)))
-    if filter_period != 'all':
-        completed_query = apply_date_filter(completed_query)
+    
+    # Apply date filter based on completed_at (not due_date) for completed tasks
+    if filter_period == 'today':
+        completed_query = completed_query.filter(db.func.date(Task.completed_at) == today)
+    elif filter_period == 'week':
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+        completed_query = completed_query.filter(
+            db.func.date(Task.completed_at) >= week_start,
+            db.func.date(Task.completed_at) <= week_end
+        )
+    elif filter_period == 'month':
+        month_start = today.replace(day=1)
+        if today.month == 12:
+            month_end = today.replace(day=31)
+        else:
+            month_end = (today.replace(month=today.month + 1, day=1) - timedelta(days=1))
+        completed_query = completed_query.filter(
+            db.func.date(Task.completed_at) >= month_start,
+            db.func.date(Task.completed_at) <= month_end
+        )
+    elif filter_period == 'custom':
+        if filter_date_from:
+            try:
+                date_from_obj = datetime.strptime(filter_date_from, '%Y-%m-%d').date()
+                completed_query = completed_query.filter(db.func.date(Task.completed_at) >= date_from_obj)
+            except ValueError:
+                pass
+        if filter_date_to:
+            try:
+                date_to_obj = datetime.strptime(filter_date_to, '%Y-%m-%d').date()
+                completed_query = completed_query.filter(db.func.date(Task.completed_at) <= date_to_obj)
+            except ValueError:
+                pass
+    # 'all' - no date filter
+    
     completed_total = completed_query.count()
     completed_tasks = completed_query.order_by(Task.completed_at.desc()).limit(COLUMN_LIMIT + completed_offset).all()
     

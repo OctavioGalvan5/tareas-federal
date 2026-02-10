@@ -5894,9 +5894,12 @@ def import_tasks():
         flash('No se seleccionó ningún archivo', 'danger')
         return redirect(url_for('main.dashboard'))
     
+    # Get selected area_id from form
+    area_id = request.form.get('area_id', type=int)
+
     # Process the file
     if file and (file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
-        success_count, errors = process_excel_import(file, current_user)
+        success_count, errors = process_excel_import(file, current_user, area_id=area_id)
         
         if success_count > 0:
             flash(f'Se importaron exitosamente {success_count} tarea(s).', 'success')

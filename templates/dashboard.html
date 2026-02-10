@@ -40,7 +40,24 @@
 
         <form action="{{ url_for('main.import_tasks') }}" method="POST" enctype="multipart/form-data">
             <div style="margin-bottom: 1rem;">
-                <p style="margin: 0 0 0.5rem 0; font-weight: 600;"><i class="fas fa-upload"></i> Paso 2: Sube tu archivo
+                <p style="margin: 0 0 0.5rem 0; font-weight: 600;"><i class="fas fa-building"></i> Paso 2: Selecciona el área</p>
+                <select name="area_id" required
+                    style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
+                    {% for area in current_user.areas %}
+                    <option value="{{ area.id }}">{{ area.name }}</option>
+                    {% endfor %}
+                    {% if current_user.is_admin %}
+                    {% for area in all_areas %}
+                    {% if area not in current_user.areas %}
+                    <option value="{{ area.id }}">{{ area.name }}</option>
+                    {% endif %}
+                    {% endfor %}
+                    {% endif %}
+                </select>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <p style="margin: 0 0 0.5rem 0; font-weight: 600;"><i class="fas fa-upload"></i> Paso 3: Sube tu archivo
                 </p>
                 <input type="file" name="file" accept=".xlsx,.xls" required
                     style="width: 100%; padding: 0.8rem; border: 2px dashed #e5e7eb; border-radius: 8px; cursor: pointer;">

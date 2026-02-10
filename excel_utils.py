@@ -332,7 +332,7 @@ def parse_time_flexible(value):
     return None
 
 
-def process_excel_import(file_stream, current_user):
+def process_excel_import(file_stream, current_user, area_id=None):
     """
     Parses an uploaded Excel file and creates tasks.
 
@@ -340,6 +340,11 @@ def process_excel_import(file_stream, current_user):
     0: Título, 1: Descripción, 2: Prioridad, 3: Fecha Inicio, 4: Hora Inicio,
     5: Fecha Vencimiento, 6: Hora Vencimiento, 7: Asignados, 8: Etiquetas,
     9: ID Proceso, 10: Estado, 11: Completado Por
+
+    Args:
+        file_stream: Excel file stream
+        current_user: The user performing the import
+        area_id: Area ID to assign tasks to (from form selection)
 
     Returns:
         tuple: (success_count, error_list)
@@ -437,7 +442,7 @@ def process_excel_import(file_stream, current_user):
                 planned_start_date=start_date,
                 creator_id=current_user.id,
                 status='Pending',
-                area_id=current_user.areas[0].id if current_user.areas else None
+                area_id=area_id or (current_user.areas[0].id if current_user.areas else None)
             )
 
             # Process ID

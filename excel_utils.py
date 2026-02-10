@@ -254,6 +254,13 @@ def generate_import_template():
         # Set column width
         ws.column_dimensions[get_column_letter(col_num)].width = 22
     
+    # Set date/time columns (D, E, F, G) as text format to prevent Excel auto-conversion
+    date_time_cols = [4, 5, 6, 7]  # Fecha Inicio, Hora Inicio, Fecha Vencimiento, Hora Vencimiento
+    for col in date_time_cols:
+        # Format the entire column as text (rows 2 to 1000 to cover typical usage)
+        for r in range(2, 1001):
+            ws.cell(row=r, column=col).number_format = '@'
+
     # Add example row
     example_row = [
         'Revisar Contrato',  # Título
@@ -274,115 +281,165 @@ def generate_import_template():
         cell.value = value
         cell.font = Font(name='Arial', size=10, italic=True, color="888888")
         cell.alignment = Alignment(horizontal='center')
+        # Ensure example date/time cells keep text format
+        if col_num in date_time_cols:
+            cell.number_format = '@'
     
     return wb
+
+
+def parse_date_flexible(value):
+    """
+    Parse a date value from Excel that could be a datetime object or a string
+    in various formats. Returns a datetime or None.
+    """
+    from datetime import date
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    # Try multiple string formats
+    fecha_str = str(value).strip()
+    for fmt in ['%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y']:
+        try:
+            return datetime.strptime(fecha_str, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def parse_time_flexible(value):
+    """
+    Parse a time value from Excel that could be a datetime/time object or a string.
+    Returns (hour, minute) tuple or None.
+    """
+    from datetime import time as time_type
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return (value.hour, value.minute)
+    if isinstance(value, time_type):
+        return (value.hour, value.minute)
+    hora_str = str(value).strip()
+    for fmt in ['%H:%M', '%H:%M:%S', '%I:%M %p']:
+        try:
+            parsed = datetime.strptime(hora_str, fmt)
+            return (parsed.hour, parsed.minute)
+        except ValueError:
+            continue
+    return None
 
 
 def process_excel_import(file_stream, current_user):
     """
     Parses an uploaded Excel file and creates tasks.
-    
+
+    Columns must match generate_import_template():
+    0: Título, 1: Descripción, 2: Prioridad, 3: Fecha Inicio, 4: Hora Inicio,
+    5: Fecha Vencimiento, 6: Hora Vencimiento, 7: Asignados, 8: Etiquetas,
+    9: ID Proceso, 10: Estado, 11: Completado Por
+
     Returns:
         tuple: (success_count, error_list)
     """
     from openpyxl import load_workbook
     from models import Task, User, Tag, Process
     from extensions import db
-    
+
     try:
         wb = load_workbook(file_stream)
         ws = wb.active
     except Exception as e:
         return 0, [f"Error al leer el archivo Excel: {str(e)}"]
-    
+
     success_count = 0
     errors = []
-    
+
     # Cache users and tags to avoid repeats
     all_users = {u.username.lower(): u for u in User.query.all()}
-    # Also map full names just in case
-    # Use list() to create a copy of values to avoid Runtime Error when modifying dict
     for u in list(all_users.values()):
         all_users[u.full_name.lower()] = u
-        
+
     all_tags = {t.name.lower(): t for t in Tag.query.all()}
-    
-    # Iterate rows (skip header)
+
     for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
-        # Unpack row (handle potentially missing columns if user used old template - though we encourage new one)
-        # We assume strict adherence to new template for now or robust fetch
-        if not row or not any(row):  # Skip empty rows
+        if not row or not any(row):
             continue
-            
+
         try:
-            # Safe get by index
             def get_col(idx):
                 return row[idx] if idx < len(row) else None
-            
+
+            # Column mapping matching generate_import_template()
             title = get_col(0)
             description = get_col(1)
             priority = get_col(2)
-            start_date_raw = get_col(3)
-            due_date_raw = get_col(4)
-            assignees_raw = get_col(5)
-            tags_raw = get_col(6)
-            process_id_raw = get_col(7)
-            status_raw = get_col(8)
-            completed_by_raw = get_col(9)
-            completed_at_raw = get_col(10)
-            
+            fecha_inicio_raw = get_col(3)
+            hora_inicio_raw = get_col(4)
+            fecha_vencimiento_raw = get_col(5)
+            hora_vencimiento_raw = get_col(6)
+            assignees_raw = get_col(7)
+            tags_raw = get_col(8)
+            process_id_raw = get_col(9)
+            status_raw = get_col(10)
+            completed_by_raw = get_col(11)
+
             # Validation: Title
             if not title:
                 errors.append(f"Fila {row_idx}: Falta el Título (Requerido).")
                 continue
-                
-            # Validation: Due Date
-            if not due_date_raw:
+
+            # Validation & Parse: Due Date (required)
+            if not fecha_vencimiento_raw:
                 errors.append(f"Fila {row_idx}: Falta Fecha Vencimiento (Requerido).")
                 continue
-            
-            # Parse Dates
-            due_date = None
-            if isinstance(due_date_raw, datetime):
-                due_date = due_date_raw
-            else:
-                try:
-                    due_date = datetime.strptime(str(due_date_raw).strip(), '%d/%m/%Y')
-                except ValueError:
-                    errors.append(f"Fila {row_idx}: Formato de Fecha Vencimiento inválido (use DD/MM/YYYY).")
-                    continue
 
+            due_date = parse_date_flexible(fecha_vencimiento_raw)
+            if not due_date:
+                errors.append(f"Fila {row_idx}: Formato de Fecha Vencimiento inválido. Use DD/MM/YYYY o YYYY-MM-DD.")
+                continue
+
+            # Apply time to due date
+            hora_venc = parse_time_flexible(hora_vencimiento_raw)
+            if hora_venc:
+                due_date = due_date.replace(hour=hora_venc[0], minute=hora_venc[1])
+            else:
+                due_date = due_date.replace(hour=18, minute=0)  # Default end of workday
+
+            # Parse Start Date (optional)
             start_date = None
-            if start_date_raw:
-                if isinstance(start_date_raw, datetime):
-                    start_date = start_date_raw
+            if fecha_inicio_raw:
+                start_date = parse_date_flexible(fecha_inicio_raw)
+                if not start_date:
+                    errors.append(f"Fila {row_idx}: Formato de Fecha Inicio inválido. Se ignoró.")
                 else:
-                    try:
-                        start_date = datetime.strptime(str(start_date_raw).strip(), '%d/%m/%Y')
-                    except ValueError:
-                        # Optional, so we log error but maybe proceed? No, strict dates usually better
-                         errors.append(f"Fila {row_idx}: Formato de Fecha Inicio inválido (use DD/MM/YYYY).")
-                         continue
-            
+                    hora_ini = parse_time_flexible(hora_inicio_raw)
+                    if hora_ini:
+                        start_date = start_date.replace(hour=hora_ini[0], minute=hora_ini[1])
+                    else:
+                        start_date = start_date.replace(hour=8, minute=0)  # Default start of workday
+
             # Priority
             valid_priorities = ['Normal', 'Media', 'Urgente']
-            if priority and priority.capitalize() in valid_priorities:
-                priority = priority.capitalize()
+            if priority and str(priority).strip().capitalize() in valid_priorities:
+                priority = str(priority).strip().capitalize()
             else:
                 priority = 'Normal'
-            
+
             # Create Task
             new_task = Task(
-                title=title,
-                description=description,
+                title=str(title),
+                description=str(description) if description else '',
                 priority=priority,
                 due_date=due_date,
                 planned_start_date=start_date,
                 creator_id=current_user.id,
-                status='Pending', # Default, overridden below
-                area_id=current_user.areas[0].id if current_user.areas else None # Default to first area of user
+                status='Pending',
+                area_id=current_user.areas[0].id if current_user.areas else None
             )
-            
+
             # Process ID
             if process_id_raw:
                 try:
@@ -390,77 +447,59 @@ def process_excel_import(file_stream, current_user):
                     process = Process.query.get(pid)
                     if process:
                         new_task.process_id = process.id
-                        # Inherit area from process if possible
                         new_task.area_id = process.area_id
                     else:
                         errors.append(f"Fila {row_idx}: Proceso ID {pid} no encontrado. Se creó sin proceso.")
-                except ValueError:
+                except (ValueError, TypeError):
                     errors.append(f"Fila {row_idx}: ID de Proceso inválido.")
-            
+
             # Assignees
             if assignees_raw:
                 names = [n.strip().lower() for n in str(assignees_raw).split(',')]
                 for name in names:
                     if name in all_users:
                         new_task.assignees.append(all_users[name])
-                    # Silent ignore if not found? Or warning?
-            
+
             # Tags
             if tags_raw:
                 tag_names = [t.strip().lower() for t in str(tags_raw).split(',')]
                 for t_name in tag_names:
                     if t_name in all_tags:
                         new_task.tags.append(all_tags[t_name])
-                    # If tag doesn't exist, we skip it for now (or could create it)
-            
+
             # Status & Completion
             if status_raw:
-                status_clean = str(status_raw).strip()
-                # Map common variations
                 status_map = {
                     'pendiente': 'Pending',
                     'pending': 'Pending',
-                    'en proceso': 'In Progress',
-                    'in progress': 'In Progress',
                     'completado': 'Completed',
                     'completed': 'Completed',
                     'completada': 'Completed'
                 }
-                
-                final_status = status_map.get(status_clean.lower(), 'Pending')
+                final_status = status_map.get(str(status_raw).strip().lower(), 'Pending')
                 new_task.status = final_status
-                
+
                 if final_status == 'Completed':
-                    # Handle completion details
-                    new_task.completed_at = datetime.utcnow() # Default
-                    new_task.completed_by_id = current_user.id # Default
-                    
-                    if completed_at_raw:
-                        if isinstance(completed_at_raw, datetime):
-                            new_task.completed_at = completed_at_raw
-                        else:
-                            try:
-                                new_task.completed_at = datetime.strptime(str(completed_at_raw).strip(), '%d/%m/%Y')
-                            except:
-                                pass # Keep default
-                    
+                    new_task.completed_at = datetime.utcnow()
+                    new_task.completed_by_id = current_user.id
+
                     if completed_by_raw:
                         c_name = str(completed_by_raw).strip().lower()
                         if c_name in all_users:
                             new_task.completed_by_id = all_users[c_name].id
-            
+
             db.session.add(new_task)
             success_count += 1
-            
+
         except Exception as e:
             errors.append(f"Fila {row_idx}: Error inesperado - {str(e)}")
             continue
-            
+
     try:
         if success_count > 0:
             db.session.commit()
     except Exception as e:
         db.session.rollback()
         return 0, [f"Error de base de datos al guardar: {str(e)}"]
-        
+
     return success_count, errors

@@ -151,8 +151,8 @@
                 </select>
             </div>
 
-            {% if all_areas and current_user.is_admin %}
-            <!-- Area filter - Only for admins -->
+            {% if all_areas and (current_user.is_admin or (current_user.role == 'supervisor' and all_areas|length > 1)) %}
+            <!-- Area filter - For admins and supervisors with multiple areas -->
             <div style="flex: 1; min-width: 130px;">
                 <label
                     style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.25rem;">Área</label>

@@ -452,9 +452,9 @@ def create_task():
         available_tags = Tag.query.order_by(Tag.name).all()
         templates = TaskTemplate.query.order_by(TaskTemplate.name).all()
     else:
-        # Supervisor/usuario_plus: only their assigned area(s)
-        available_areas = current_user.areas[:1] if current_user.areas else []
-        # Only see users in their area
+        # Supervisor/usuario_plus: all their assigned areas
+        available_areas = current_user.areas if current_user.areas else []
+        # Only see users in their areas
         if available_areas:
             users = [u for u in User.query.all() if any(area in u.areas for area in available_areas)]
             # Filter tags and templates by area
@@ -1220,14 +1220,17 @@ def task_tree():
         available_areas = Area.query.order_by(Area.name).all()
         show_area_filter = True
     else:
-        # Supervisors see all tasks in their area
+        # Supervisors see all tasks in their areas
         if user_area_ids:
             query = query.filter(Task.area_id.in_(user_area_ids))
+            # Allow supervisor to filter by specific area if they have multiple
+            if filter_area and int(filter_area) in user_area_ids:
+                query = query.filter(Task.area_id == int(filter_area))
         else:
             query = query.filter(Task.area_id == -1)
         available_areas = current_user.areas
-        show_area_filter = False
-    
+        show_area_filter = len(current_user.areas) > 1
+
     # Apply assignee filter
     if filter_assignee:
         query = query.filter(Task.assignees.any(id=filter_assignee))
@@ -1350,14 +1353,17 @@ def calendar():
         available_areas = Area.query.order_by(Area.name).all()
         show_area_filter = True
     else:
-        # Supervisors see all tasks in their area
+        # Supervisors see all tasks in their areas
         if user_area_ids:
             query = query.filter(Task.area_id.in_(user_area_ids))
+            # Allow supervisor to filter by specific area if they have multiple
+            if filter_area and int(filter_area) in user_area_ids:
+                query = query.filter(Task.area_id == int(filter_area))
         else:
             query = query.filter(Task.area_id == -1)
         available_areas = current_user.areas
-        show_area_filter = False
-    
+        show_area_filter = len(current_user.areas) > 1
+
     # Filter by user (assignee) if selected
     if filter_user:
         query = query.filter(Task.assignees.any(id=filter_user))
@@ -1982,9 +1988,12 @@ def scrum_board():
                 return query.filter(Task.area_id == int(filter_area))
             return query
         else:
-            # Supervisor
+            # Supervisor: filter by their areas, optionally narrowed to one area
             if user_area_ids:
-                return query.filter(Task.area_id.in_(user_area_ids))
+                q = query.filter(Task.area_id.in_(user_area_ids))
+                if filter_area and int(filter_area) in user_area_ids:
+                    q = q.filter(Task.area_id == int(filter_area))
+                return q
             else:
                 return query.filter(Task.area_id == -1)
         return query
@@ -1998,8 +2007,9 @@ def scrum_board():
         available_areas = Area.query.order_by(Area.name).all()
         show_area_filter = True
     else:
+        # Supervisor: show area filter if they have multiple areas
         available_areas = current_user.areas
-        show_area_filter = False
+        show_area_filter = len(current_user.areas) > 1
     
     # Helper to build base query with filters
     def build_filtered_query(status_filter):
@@ -3014,7 +3024,7 @@ def reports():
         else:
             users = []
         available_areas = current_user.areas
-        show_area_filter = False
+        show_area_filter = len(current_user.areas) > 1
     
     # Filter tags by area
     if current_user.is_admin:
@@ -4312,11 +4322,13 @@ def expiration_calendar():
         user_area_ids = [a.id for a in current_user.areas]
         if user_area_ids:
             query = query.filter(Expiration.area_id.in_(user_area_ids))
+            if filter_area and int(filter_area) in user_area_ids:
+                query = query.filter(Expiration.area_id == int(filter_area))
         else:
             # User has no areas - show nothing
             query = query.filter(Expiration.area_id == -1)
         available_areas = current_user.areas
-        show_area_filter = False
+        show_area_filter = len(current_user.areas) > 1
     
     # Apply date filters
     today = date.today()
@@ -5047,10 +5059,12 @@ def activity_log():
         user_area_ids = [a.id for a in current_user.areas]
         if user_area_ids:
             query = query.filter(ActivityLog.area_id.in_(user_area_ids))
+            if filter_area and int(filter_area) in user_area_ids:
+                query = query.filter(ActivityLog.area_id == int(filter_area))
         else:
             query = query.filter(ActivityLog.area_id == -1)  # No results
         available_areas = current_user.areas
-        show_area_filter = False
+        show_area_filter = len(current_user.areas) > 1
     
     # User filter
     if filter_user:
@@ -5379,10 +5393,12 @@ def list_processes():
     else:
         if user_area_ids:
             query = query.filter(Process.area_id.in_(user_area_ids))
+            if filter_area and int(filter_area) in user_area_ids:
+                query = query.filter(Process.area_id == int(filter_area))
         else:
             query = query.filter(Process.area_id == -1)
         available_areas = current_user.areas
-        show_area_filter = False
+        show_area_filter = len(current_user.areas) > 1
     
     # Status filter
     if filter_status and filter_status != 'all':

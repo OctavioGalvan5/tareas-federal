@@ -166,18 +166,17 @@
             </div>
         </div>
 
-        <!-- 🏢 Area Selector - Only for Admins -->
-        {% if current_user.is_admin and available_areas %}
+        <!-- 🏢 Area Selector - Admins and supervisors with multiple areas -->
+        {% if (current_user.is_admin or current_user.role == 'supervisor') and available_areas %}
         <div class="form-group">
             <label for="area_id"><i class="fas fa-building"></i> Área</label>
-            <select id="area_id" name="area_id" {% if available_areas|length==1 %}{% else %}required{% endif %}
-                style="padding: 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px;">
-                {% if available_areas|length > 1 %}
+            {% if available_areas|length > 1 %}
+            <!-- Multiple areas: show dropdown -->
+            <select id="area_id" name="area_id" required
+                style="padding: 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px; width: 100%;">
                 <option value="">-- Seleccionar área --</option>
-                {% endif %}
                 {% for area in available_areas %}
-                <option value="{{ area.id }}" {% if available_areas|length==1 %}selected{% endif %}
-                    style="color: {{ area.color }};">
+                <option value="{{ area.id }}" style="color: {{ area.color }};">
                     {{ area.name }}
                 </option>
                 {% endfor %}
@@ -185,21 +184,18 @@
             <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.3rem;">
                 <i class="fas fa-info-circle"></i> La tarea será visible solo para usuarios asignados a esta área
             </p>
-        </div>
-        {% elif current_user.role == 'supervisor' and available_areas %}
-        <!-- Supervisor: Fixed area badge (no selector) -->
-        <div class="form-group">
-            <label><i class="fas fa-building"></i> Área</label>
+            {% else %}
+            <!-- Single area: show fixed badge -->
             <div
                 style="padding: 0.75rem 1rem; background: {{ available_areas[0].color }}15; border: 2px solid {{ available_areas[0].color }}50; border-radius: 8px; display: inline-flex; align-items: center; gap: 0.5rem;">
                 <i class="fas fa-building" style="color: {{ available_areas[0].color }};"></i>
-                <span style="font-weight: 600; color: {{ available_areas[0].color }};">{{ available_areas[0].name
-                    }}</span>
+                <span style="font-weight: 600; color: {{ available_areas[0].color }};">{{ available_areas[0].name }}</span>
             </div>
             <input type="hidden" name="area_id" value="{{ available_areas[0].id }}">
             <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.3rem;">
                 <i class="fas fa-info-circle"></i> Las tareas se asignarán automáticamente a tu área
             </p>
+            {% endif %}
         </div>
         {% endif %}
 

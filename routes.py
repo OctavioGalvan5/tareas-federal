@@ -2382,10 +2382,6 @@ def manage_users():
             role = request.form.get('role', 'usuario')
             area_ids = request.form.getlist('areas')
         
-        # Enforce: supervisors can only have 1 area
-        if role == 'supervisor' and len(area_ids) > 1:
-            area_ids = area_ids[:1]  # Keep only the first area
-        
         if User.query.filter_by(username=username).first():
             flash('El nombre de usuario ya existe.', 'warning')
         else:
@@ -2511,11 +2507,6 @@ def edit_user(user_id):
         # Update areas
         area_ids = request.form.getlist('areas')
         
-        # Enforce: supervisors can only have 1 area
-        if user.role == 'supervisor' and len(area_ids) > 1:
-            area_ids = area_ids[:1]  # Keep only the first area
-            flash('Los supervisores solo pueden tener 1 área asignada. Se mantuvo la primera área seleccionada.', 'info')
-        
         user.areas.clear()
         for area_id in area_ids:
             area = Area.query.get(int(area_id))
@@ -2580,10 +2571,21 @@ def api_tasks_due_soon():
         elif business_days <= 2:  # Due in 0, 1, or 2 business days
             due_soon_tasks.append(task_data)
     
-    # Get all pending expirations (visible for everyone)
-    pending_expirations = Expiration.query.filter(
-        Expiration.completed == False
-    ).all()
+    # Get pending expirations filtered by area
+    # Gerentes and admins see all expirations; others only see expirations from their own areas
+    if current_user.can_see_all_areas():
+        pending_expirations = Expiration.query.filter(
+            Expiration.completed == False
+        ).all()
+    else:
+        user_area_ids = [area.id for area in current_user.areas]
+        if user_area_ids:
+            pending_expirations = Expiration.query.filter(
+                Expiration.completed == False,
+                Expiration.area_id.in_(user_area_ids)
+            ).all()
+        else:
+            pending_expirations = []
     
     # Separate expirations into due soon and overdue
     due_soon_expirations = []

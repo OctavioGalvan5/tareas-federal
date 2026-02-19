@@ -16,8 +16,8 @@
                 placeholder="Descripción detallada de la tarea">{{ task.description }}</textarea>
         </div>
 
-        <!-- Fecha y hora de inicio (solo admin) -->
-        {% if current_user.is_admin %}
+        <!-- Fecha y hora de inicio (admin y supervisor) -->
+        {% if current_user.is_admin or current_user.role == 'supervisor' %}
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div class="form-group">
                 <label for="start_date"><i class="fas fa-calendar-plus"></i> Fecha de Inicio</label>
@@ -37,7 +37,7 @@
             <p style="padding: 0.5rem; background: #f1f5f9; border-radius: 6px; color: #64748b; margin: 0;">
                 {{ task.planned_start_date.strftime('%d/%m/%Y %H:%M') }}
                 <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem;">(Solo
-                    administradores pueden editar)</span>
+                    administradores y supervisores pueden editar)</span>
             </p>
         </div>
         {% endif %}
@@ -46,7 +46,7 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
             <div class="form-group">
                 <label for="priority"><i class="fas fa-exclamation-circle"></i> Prioridad</label>
-                {% if current_user.is_admin %}
+                {% if current_user.is_admin or current_user.role == 'supervisor' %}
                 <select id="priority" name="priority" required>
                     <option value="Normal" {% if task.priority=='Normal' %}selected{% endif %}>Normal</option>
                     <option value="Media" {% if task.priority=='Media' %}selected{% endif %}>Media</option>
@@ -56,14 +56,14 @@
                 <p style="padding: 0.5rem; background: #f1f5f9; border-radius: 6px; color: #64748b; margin: 0;">
                     <span class="priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
                     <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem;">(Solo
-                        administradores pueden editar)</span>
+                        administradores y supervisores pueden editar)</span>
                 </p>
                 {% endif %}
             </div>
 
             <div class="form-group">
                 <label for="status"><i class="fas fa-tasks"></i> Estado</label>
-                {% if current_user.is_admin %}
+                {% if current_user.is_admin or current_user.role == 'supervisor' %}
                 <select id="status" name="status" required>
                     <option value="Pending" {% if task.status=='Pending' %}selected{% endif %}>Pendiente</option>
                     <option value="In Progress" {% if task.status=='In Progress' %}selected{% endif %}>En Proceso
@@ -80,14 +80,14 @@
                     <span style="color: #f59e0b; font-weight: 600;"><i class="fas fa-clock"></i> Pendiente</span>
                     {% endif %}
                     <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem;">(Solo
-                        administradores pueden editar)</span>
+                        administradores y supervisores pueden editar)</span>
                 </p>
                 {% endif %}
             </div>
 
             <div class="form-group">
                 <label for="due_date"><i class="fas fa-calendar-day"></i> Fecha de Vencimiento</label>
-                {% if current_user.is_admin %}
+                {% if current_user.is_admin or current_user.role == 'supervisor' %}
                 <div style="display: flex; gap: 0.5rem;">
                     <input type="date" id="due_date" name="due_date" required
                         value="{{ task.due_date.strftime('%Y-%m-%d') }}" style="flex: 1;">
@@ -98,13 +98,13 @@
                 <p style="padding: 0.5rem; background: #f1f5f9; border-radius: 6px; color: #64748b; margin: 0;">
                     {{ task.due_date.strftime('%d/%m/%Y %H:%M') }}
                     <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem;">(Solo
-                        administradores pueden editar)</span>
+                        administradores y supervisores pueden editar)</span>
                 </p>
                 {% endif %}
             </div>
         </div>
 
-        {% if current_user.is_admin %}
+        {% if current_user.is_admin or current_user.role == 'supervisor' %}
         <div class="form-group">
             <label for="time_spent"><i class="fas fa-clock"></i> Tiempo Utilizado (minutos) <span
                     title="1 día = 6 horas laborales" style="cursor: help; color: #0ea5e9;"><i

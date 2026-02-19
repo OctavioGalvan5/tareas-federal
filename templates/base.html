@@ -6,16 +6,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Sistema de gestión de tareas para profesionales legales">
     <title>Gestor de Tareas Federal - Caja de Abogados</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='sidebar.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='notifications.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='tags.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='buttons.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='calendar_widget.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='user_selector.css') }}">
+    <!-- Preconnect to CDNs for faster DNS/TLS -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+
+    <!-- Combined CSS (7 files → 1 request) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='combined.css') }}">
+
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Font Awesome (non-blocking: loads async, doesn't delay page render) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+        media="print" onload="this.media='all'">
+    <noscript>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    </noscript>
+
+    <!-- SweetAlert2 (deferred: doesn't block HTML parsing) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     {% block head %}{% endblock %}
 </head>
 

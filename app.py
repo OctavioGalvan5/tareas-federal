@@ -42,7 +42,7 @@ def create_app(test_config=None):
     if test_config:
         app.config.update(test_config)
 
-    print(f"DEBUG: Database URI: {app.config['SQLALCHEMY_DATABASE_URI']}")
+
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     # Initialize extensions with app

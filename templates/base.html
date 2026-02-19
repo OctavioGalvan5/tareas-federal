@@ -17,36 +17,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     {% block head %}{% endblock %}
-
-    <!-- Top progress bar styles (inline for instant render) -->
-    <style>
-        .top-loader {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 0;
-            height: 3px;
-            background: linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd);
-            z-index: 99999;
-            transition: width 0.3s ease;
-            box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
-        }
-
-        .top-loader.done {
-            width: 100% !important;
-            transition: width 0.2s ease;
-        }
-
-        .top-loader.fade-out {
-            opacity: 0;
-            transition: opacity 0.4s ease;
-        }
-    </style>
 </head>
 
 <body>
-    <!-- Top Progress Bar -->
-    <div class="top-loader" id="topLoader"></div>
     {% if current_user.is_authenticated %}
     <!-- Mobile Menu Button -->
     <button class="mobile-menu-btn" aria-label="Abrir menú">
@@ -207,7 +180,7 @@
     <div class="main-wrapper">
         {% else %}
         <!-- No sidebar for non-authenticated users -->
-        <div class="main-wrapper">
+        <div>
             {% endif %}
 
             <div class="container">
@@ -247,29 +220,6 @@
         <script src="{{ url_for('static', filename='notifications.js') }}"></script>
         <script src="{{ url_for('static', filename='sidebar.js') }}"></script>
         {% endif %}
-
-        <!-- Top Loader Script -->
-        <script>
-            (function () {
-                var bar = document.getElementById('topLoader');
-                if (!bar) return;
-                // Animate to 30% quickly, then slow crawl
-                bar.style.width = '30%';
-                setTimeout(function () { bar.style.width = '60%'; }, 300);
-                setTimeout(function () { bar.style.width = '80%'; }, 800);
-
-                function finish() {
-                    if (!bar || bar.classList.contains('done')) return;
-                    bar.classList.add('done');
-                    setTimeout(function () {
-                        bar.classList.add('fade-out');
-                        setTimeout(function () { bar.remove(); }, 400);
-                    }, 200);
-                }
-                window.addEventListener('load', finish);
-                setTimeout(finish, 5000);
-            })();
-        </script>
 </body>
 
 </html>

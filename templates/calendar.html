@@ -147,6 +147,7 @@
     <div class="tasks-list-section" id="tasks-section">
         <h3><i class="fas fa-list-alt"></i> Tareas del Período</h3>
 
+        {% if show_task_list %}
         {% if tasks %}
         {% set current_date = namespace(value=None) %}
         {% set days_map = {'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles', 'Thursday': 'Jueves',
@@ -203,6 +204,12 @@
     <div class="empty-state">
         <i class="fas fa-calendar-times"></i>
         <p>No hay tareas en el período seleccionado.</p>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-hand-pointer"></i>
+        <p>Hacé clic en un día del calendario o seleccioná un filtro para ver las tareas.</p>
     </div>
     {% endif %}
 </div>

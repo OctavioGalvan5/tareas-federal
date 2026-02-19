@@ -1393,9 +1393,14 @@ def calendar():
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
         query = query.filter(db.func.date(Task.due_date) >= start_date,
                            db.func.date(Task.due_date) <= end_date)
-    # else: period == 'all' - no date filtering
+    # Only load the task list when a specific filter is active (not default 'all')
+    # This avoids loading ALL tasks on every calendar page load
+    show_task_list = period != 'all' or (start_date_str and end_date_str)
     
-    tasks = query.order_by(Task.due_date.asc()).all()
+    if show_task_list:
+        tasks = query.order_by(Task.due_date.asc()).all()
+    else:
+        tasks = []
     
     # Filter users by area (same logic as dashboard)
     if current_user.can_see_all_areas():
@@ -1509,7 +1514,8 @@ def calendar():
     
     return render_template('calendar.html', 
                           tasks=tasks, 
-                          current_period=period, 
+                          current_period=period,
+                          show_task_list=show_task_list,
                           today=today, 
                           users=users, 
                           event_dates=event_dates,

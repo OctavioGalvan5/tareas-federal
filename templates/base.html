@@ -18,71 +18,35 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     {% block head %}{% endblock %}
 
-    <!-- Content Loading Styles (inline for instant render) -->
+    <!-- Top progress bar styles (inline for instant render) -->
     <style>
-        /* Main wrapper needs relative positioning for loader */
-        .main-wrapper {
-            position: relative;
-        }
-
-        /* Hide page content until loaded */
-        .main-wrapper>.container {
-            opacity: 0;
-            transition: opacity 0.35s ease;
-        }
-
-        body.loaded .main-wrapper>.container {
-            opacity: 1;
-        }
-
-        /* Content area loader */
-        .content-loader {
-            position: absolute;
+        .top-loader {
+            position: fixed;
             top: 0;
             left: 0;
-            right: 0;
-            bottom: 0;
-            min-height: 60vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 10;
-            transition: opacity 0.35s ease, visibility 0.35s ease;
-            pointer-events: none;
+            width: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd);
+            z-index: 99999;
+            transition: width 0.3s ease;
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
         }
 
-        .content-loader.fade-out {
+        .top-loader.done {
+            width: 100% !important;
+            transition: width 0.2s ease;
+        }
+
+        .top-loader.fade-out {
             opacity: 0;
-            visibility: hidden;
-        }
-
-        .loader-spinner {
-            width: 36px;
-            height: 36px;
-            border: 3px solid rgba(96, 165, 250, 0.15);
-            border-top-color: #60a5fa;
-            border-radius: 50%;
-            animation: loader-spin 0.7s linear infinite;
-            margin-bottom: 1rem;
-        }
-
-        .loader-label {
-            color: #94a3b8;
-            font-family: 'Inter', sans-serif;
-            font-size: 0.8rem;
-            letter-spacing: 0.05em;
-        }
-
-        @keyframes loader-spin {
-            to {
-                transform: rotate(360deg);
-            }
+            transition: opacity 0.4s ease;
         }
     </style>
 </head>
 
 <body>
+    <!-- Top Progress Bar -->
+    <div class="top-loader" id="topLoader"></div>
     {% if current_user.is_authenticated %}
     <!-- Mobile Menu Button -->
     <button class="mobile-menu-btn" aria-label="Abrir menú">
@@ -246,12 +210,6 @@
         <div class="main-wrapper">
             {% endif %}
 
-            <!-- Content Loader (inside main area only) -->
-            <div class="content-loader" id="contentLoader">
-                <div class="loader-spinner"></div>
-                <div class="loader-label">Cargando...</div>
-            </div>
-
             <div class="container">
                 {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
@@ -290,19 +248,27 @@
         <script src="{{ url_for('static', filename='sidebar.js') }}"></script>
         {% endif %}
 
-        <!-- Content Loader Script -->
+        <!-- Top Loader Script -->
         <script>
-            function hideContentLoader() {
-                var loader = document.getElementById('contentLoader');
-                document.body.classList.add('loaded');
-                if (loader) {
-                    loader.classList.add('fade-out');
-                    setTimeout(function () { loader.remove(); }, 400);
+            (function () {
+                var bar = document.getElementById('topLoader');
+                if (!bar) return;
+                // Animate to 30% quickly, then slow crawl
+                bar.style.width = '30%';
+                setTimeout(function () { bar.style.width = '60%'; }, 300);
+                setTimeout(function () { bar.style.width = '80%'; }, 800);
+
+                function finish() {
+                    if (!bar || bar.classList.contains('done')) return;
+                    bar.classList.add('done');
+                    setTimeout(function () {
+                        bar.classList.add('fade-out');
+                        setTimeout(function () { bar.remove(); }, 400);
+                    }, 200);
                 }
-            }
-            window.addEventListener('load', hideContentLoader);
-            // Safety timeout
-            setTimeout(hideContentLoader, 4000);
+                window.addEventListener('load', finish);
+                setTimeout(finish, 5000);
+            })();
         </script>
 </body>
 

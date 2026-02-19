@@ -40,7 +40,8 @@
 
         <form action="{{ url_for('main.import_tasks') }}" method="POST" enctype="multipart/form-data">
             <div style="margin-bottom: 1rem;">
-                <p style="margin: 0 0 0.5rem 0; font-weight: 600;"><i class="fas fa-building"></i> Paso 2: Selecciona el área</p>
+                <p style="margin: 0 0 0.5rem 0; font-weight: 600;"><i class="fas fa-building"></i> Paso 2: Selecciona el
+                    área</p>
                 <select name="area_id" required
                     style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px;">
                     {% for area in current_user.areas %}
@@ -151,7 +152,8 @@
                 </select>
             </div>
 
-            {% if all_areas and (current_user.is_admin or (current_user.role == 'supervisor' and all_areas|length > 1)) %}
+            {% if all_areas and (current_user.is_admin or (current_user.role == 'supervisor' and all_areas|length > 1))
+            %}
             <!-- Area filter - For admins and supervisors with multiple areas -->
             <div style="flex: 1; min-width: 130px;">
                 <label
@@ -239,6 +241,16 @@
         </div>
     </div>
 </form>
+
+<div class="tasks-grid-wrapper">
+    <div class="tasks-count"
+        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding: 0 0.25rem;">
+        <span style="font-size: 0.9rem; color: #64748b; font-weight: 500;">
+            <i class="fas fa-tasks" style="margin-right: 0.25rem;"></i>
+            Mostrando {{ tasks|length }} de {{ total_tasks }} tareas
+        </span>
+    </div>
+</div>
 
 <div class="tasks-grid">
     {% if tasks %}
@@ -436,6 +448,15 @@
 </div>
 {% endif %}
 </div>
+
+{% if has_more %}
+<div style="text-align: center; padding: 1.5rem 0;">
+    <button onclick="loadMoreTasks()" id="loadMoreBtn" class="button-secondary"
+        style="padding: 0.75rem 2rem; font-size: 0.95rem; border-radius: 10px; cursor: pointer;">
+        <i class="fas fa-chevron-down"></i> Cargar más tareas
+    </button>
+</div>
+{% endif %}
 
 <style>
     /* Dashboard Grid Layout */
@@ -1117,6 +1138,23 @@
 </style>
 
 <script>
+    // Restore scroll position after loading more tasks
+    (function () {
+        const savedScroll = sessionStorage.getItem('dashboardScroll');
+        if (savedScroll) {
+            window.scrollTo(0, parseInt(savedScroll));
+            sessionStorage.removeItem('dashboardScroll');
+        }
+    })();
+
+    function loadMoreTasks() {
+        sessionStorage.setItem('dashboardScroll', window.scrollY);
+        const url = new URL(window.location.href);
+        const currentLimit = parseInt(url.searchParams.get('limit') || '30');
+        url.searchParams.set('limit', currentLimit + 30);
+        window.location.href = url.toString();
+    }
+
     function updateTaskStatus(taskId, newStatus) {
         let statusLabel = newStatus;
         if (newStatus === 'In Progress') statusLabel = 'En Proceso';

@@ -371,10 +371,19 @@ def dashboard():
         else_=4
     )
     
+    # Pagination: limit initial load for performance
+    TASKS_PER_PAGE = 30
+    limit = int(request.args.get('limit', TASKS_PER_PAGE))
+    
     if sort_order == 'desc':
-        tasks = tasks_query.order_by(status_order, Task.due_date.desc()).all()
+        tasks_query = tasks_query.order_by(status_order, Task.due_date.desc())
     else:
-        tasks = tasks_query.order_by(status_order, Task.due_date.asc()).all()
+        tasks_query = tasks_query.order_by(status_order, Task.due_date.asc())
+    
+    # Get total count before pagination
+    total_tasks = tasks_query.count()
+    tasks = tasks_query.limit(limit).all()
+    has_more = limit < total_tasks
     
     today = date.today()
     now = datetime.now()  # Current datetime for time-based overdue checking
@@ -413,6 +422,10 @@ def dashboard():
         filter_assignee=filter_assignee,
         filter_area=filter_area,
         filter_creator=filter_creator,
+        # Pagination
+        has_more=has_more,
+        total_tasks=total_tasks,
+        current_limit=limit,
     )
 
 @main_bp.route('/task/new', methods=['GET', 'POST'])

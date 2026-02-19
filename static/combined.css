@@ -760,6 +760,7 @@ tbody td {
 .time-preset-btn::before {
     display: none;
 }
+
 /* ============================================
    SIDEBAR NAVIGATION STYLES
    ============================================ */
@@ -1231,6 +1232,7 @@ tbody td {
         display: block;
     }
 }
+
 /* Custom Button Styles */
 .button-secondary {
     background: white;
@@ -1257,6 +1259,7 @@ tbody td {
     background: #f8fafc;
     color: #005A94;
 }
+
 /* Notification Modal Styles */
 .modal-overlay {
     position: fixed;
@@ -1503,13 +1506,6 @@ tbody td {
     }
 }
 
-.button-secondary {
-    background: linear-gradient(135deg, #64748b 0%, #475569 100%);
-}
-
-.button-secondary:hover {
-    background: linear-gradient(135deg, #475569 0%, #334155 100%);
-}
 
 /* Postpone Button & Menu Styles */
 .postpone-btn {
@@ -1652,6 +1648,7 @@ tbody td {
     gap: 0.5rem;
     margin-top: 0.5rem;
 }
+
 /* Tags System Styles */
 
 .tag-chip {
@@ -1877,6 +1874,7 @@ tbody td {
     border-radius: 50%;
     margin-right: 0.25rem;
 }
+
 /* Calendar Widget - Dark Mode Style */
 .calendar-widget {
     background: linear-gradient(180deg, #1a2234 0%, #151c2c 100%);
@@ -2112,6 +2110,7 @@ tbody td {
 .calendar-widget-grid {
     animation: fadeIn 0.2s ease-out;
 }
+
 /**
  * User Selector Component Styles
  * Modern user selection with avatars, search, and chips

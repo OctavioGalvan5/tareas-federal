@@ -18,118 +18,71 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     {% block head %}{% endblock %}
 
-    <!-- Page Loading Overlay Styles (inline for instant render) -->
+    <!-- Content Loading Styles (inline for instant render) -->
     <style>
-        /* Hide page content until loaded, but keep loader visible */
-        .sidebar,
-        .main-wrapper,
-        .mobile-menu-btn,
-        .sidebar-overlay {
-            opacity: 0;
-            transition: opacity 0.4s ease;
+        /* Main wrapper needs relative positioning for loader */
+        .main-wrapper {
+            position: relative;
         }
 
-        body.loaded .sidebar,
-        body.loaded .main-wrapper,
-        body.loaded .mobile-menu-btn,
-        body.loaded .sidebar-overlay {
+        /* Hide page content until loaded */
+        .main-wrapper>.container {
+            opacity: 0;
+            transition: opacity 0.35s ease;
+        }
+
+        body.loaded .main-wrapper>.container {
             opacity: 1;
         }
 
-        /* Loading overlay */
-        .page-loader {
-            position: fixed;
+        /* Content area loader */
+        .content-loader {
+            position: absolute;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
+            right: 0;
+            bottom: 0;
+            min-height: 60vh;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            z-index: 99999;
-            transition: opacity 0.5s ease, visibility 0.5s ease;
+            z-index: 10;
+            transition: opacity 0.35s ease, visibility 0.35s ease;
+            pointer-events: none;
         }
 
-        .page-loader.fade-out {
+        .content-loader.fade-out {
             opacity: 0;
             visibility: hidden;
         }
 
-        .loader-icon {
-            font-size: 2.5rem;
-            color: #60a5fa;
-            animation: loader-pulse 1.5s ease-in-out infinite;
-            margin-bottom: 1.5rem;
-            filter: drop-shadow(0 0 15px rgba(96, 165, 250, 0.4));
+        .loader-spinner {
+            width: 36px;
+            height: 36px;
+            border: 3px solid rgba(96, 165, 250, 0.15);
+            border-top-color: #60a5fa;
+            border-radius: 50%;
+            animation: loader-spin 0.7s linear infinite;
+            margin-bottom: 1rem;
         }
 
-        .loader-bar {
-            width: 200px;
-            height: 3px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .loader-bar::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 60%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, #60a5fa, transparent);
-            animation: loader-shimmer 1.2s ease-in-out infinite;
-        }
-
-        .loader-text {
-            margin-top: 1rem;
-            color: rgba(255, 255, 255, 0.5);
+        .loader-label {
+            color: #94a3b8;
             font-family: 'Inter', sans-serif;
             font-size: 0.8rem;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
-        @keyframes loader-pulse {
-
-            0%,
-            100% {
-                transform: scale(1);
-                opacity: 0.7;
-            }
-
-            50% {
-                transform: scale(1.15);
-                opacity: 1;
-            }
-        }
-
-        @keyframes loader-shimmer {
-            0% {
-                left: -100%;
-            }
-
-            100% {
-                left: 200%;
+        @keyframes loader-spin {
+            to {
+                transform: rotate(360deg);
             }
         }
     </style>
 </head>
 
 <body>
-    <!-- Page Loading Overlay -->
-    <div class="page-loader" id="pageLoader">
-        <div class="loader-icon">
-            <i class="fas fa-gavel"></i>
-        </div>
-        <div class="loader-bar"></div>
-        <div class="loader-text">Cargando...</div>
-    </div>
-
     {% if current_user.is_authenticated %}
     <!-- Mobile Menu Button -->
     <button class="mobile-menu-btn" aria-label="Abrir menú">
@@ -293,6 +246,12 @@
         <div class="main-wrapper">
             {% endif %}
 
+            <!-- Content Loader (inside main area only) -->
+            <div class="content-loader" id="contentLoader">
+                <div class="loader-spinner"></div>
+                <div class="loader-label">Cargando...</div>
+            </div>
+
             <div class="container">
                 {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
@@ -331,28 +290,19 @@
         <script src="{{ url_for('static', filename='sidebar.js') }}"></script>
         {% endif %}
 
-        <!-- Page Loader Script -->
+        <!-- Content Loader Script -->
         <script>
-            window.addEventListener('load', function () {
-                var loader = document.getElementById('pageLoader');
-                if (loader) {
-                    document.body.classList.add('loaded');
-                    loader.classList.add('fade-out');
-                    setTimeout(function () {
-                        loader.remove();
-                    }, 600);
-                }
-            });
-
-            // Safety: force show content after 5 seconds even if load event didn't fire
-            setTimeout(function () {
+            function hideContentLoader() {
+                var loader = document.getElementById('contentLoader');
                 document.body.classList.add('loaded');
-                var loader = document.getElementById('pageLoader');
                 if (loader) {
                     loader.classList.add('fade-out');
-                    setTimeout(function () { loader.remove(); }, 600);
+                    setTimeout(function () { loader.remove(); }, 400);
                 }
-            }, 5000);
+            }
+            window.addEventListener('load', hideContentLoader);
+            // Safety timeout
+            setTimeout(hideContentLoader, 4000);
         </script>
 </body>
 

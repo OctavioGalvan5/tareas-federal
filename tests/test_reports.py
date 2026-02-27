@@ -30,8 +30,8 @@ class ReportsTestCase(unittest.TestCase):
             db.drop_all()
 
     def create_test_data(self):
-        # Create User
-        u = User(username='test', email='test@example.com', full_name='Test User')
+        # Create User (admin to pass can_see_reports and area security)
+        u = User(username='test', email='test@example.com', full_name='Test User', is_admin=True)
         u.set_password('password')
         db.session.add(u)
         

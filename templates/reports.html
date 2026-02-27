@@ -1,256 +1,304 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="dashboard-header">
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="reports-loading-overlay">
+    <div class="reports-loading-spinner"></div>
+    <div class="reports-loading-text">Cargando datos...</div>
+</div>
+
+<!-- Header -->
+<div class="reports-header">
     <h1><i class="fas fa-chart-line"></i> Reportes y Estadísticas</h1>
-    <div style="display: flex; gap: 1rem;">
-        <button onclick="toggleKPIs()" class="button-secondary">
-            <i class="fas fa-chart-bar"></i> Ver Métricas Detalladas
+    <div class="reports-header-actions">
+        <button onclick="toggleCalcSection()" class="button-secondary"
+            style="padding: 0.6rem 1rem; font-size: 0.85rem;">
+            <i class="fas fa-calculator"></i> Calculadora
         </button>
-        <button onclick="exportReport()" class="button">
-            <i class="fas fa-file-pdf"></i> Descargar Reporte PDF
+        <button onclick="exportReport()" class="button" style="padding: 0.6rem 1rem; font-size: 0.85rem;">
+            <i class="fas fa-file-pdf"></i> Descargar PDF
         </button>
     </div>
 </div>
 
-<div id="kpiSection"
-    style="display: none; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-    <div class="card" style="text-align: center; padding: 1.5rem;">
-        <h3 style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 0.5rem;">Total Tareas</h3>
-        <p id="kpiTotal" style="font-size: 2rem; font-weight: bold; color: var(--primary-color); margin: 0;">-</p>
+<!-- KPI Cards (always visible) -->
+<div class="reports-kpi-grid">
+    <div class="kpi-card kpi-total">
+        <div class="kpi-icon"><i class="fas fa-layer-group"></i></div>
+        <div class="kpi-label">Total Tareas</div>
+        <div class="kpi-value" id="kpiTotal">-</div>
     </div>
-    <div class="card" style="text-align: center; padding: 1.5rem;">
-        <h3 style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 0.5rem;">Tasa Finalización</h3>
-        <p id="kpiCompletion" style="font-size: 2rem; font-weight: bold; color: #10b981; margin: 0;">-%</p>
+    <div class="kpi-card kpi-completed">
+        <div class="kpi-icon"><i class="fas fa-check-circle"></i></div>
+        <div class="kpi-label">Tasa Finalización</div>
+        <div class="kpi-value" id="kpiCompletion">-%</div>
     </div>
-    <div class="card" style="text-align: center; padding: 1.5rem;">
-        <h3 style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 0.5rem;">Vencidas</h3>
-        <p id="kpiOverdue" style="font-size: 2rem; font-weight: bold; color: #ef4444; margin: 0;">-</p>
+    <div class="kpi-card kpi-overdue">
+        <div class="kpi-icon"><i class="fas fa-exclamation-triangle"></i></div>
+        <div class="kpi-label">Vencidas</div>
+        <div class="kpi-value" id="kpiOverdue">-</div>
     </div>
-    <div class="card" style="text-align: center; padding: 1.5rem;">
-        <h3 style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 0.5rem;">Tiempo Promedio</h3>
-        <p id="kpiAvgTime" style="font-size: 1.5rem; font-weight: bold; color: #3b82f6; margin: 0;">-</p>
+    <div class="kpi-card kpi-progress">
+        <div class="kpi-icon"><i class="fas fa-spinner"></i></div>
+        <div class="kpi-label">En Progreso</div>
+        <div class="kpi-value" id="kpiInProgress">-</div>
     </div>
-    <div class="card" style="text-align: center; padding: 1.5rem;">
-        <h3 style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 0.5rem;">Tiempo Total</h3>
-        <p id="kpiTotalTime" style="font-size: 1.5rem; font-weight: bold; color: #8b5cf6; margin: 0;">-</p>
+    <div class="kpi-card kpi-review">
+        <div class="kpi-icon"><i class="fas fa-eye"></i></div>
+        <div class="kpi-label">En Revisión</div>
+        <div class="kpi-value" id="kpiInReview">-</div>
+    </div>
+    <div class="kpi-card kpi-time">
+        <div class="kpi-icon"><i class="fas fa-clock"></i></div>
+        <div class="kpi-label">Tiempo Promedio</div>
+        <div class="kpi-value" id="kpiAvgTime">-</div>
+    </div>
+    <div class="kpi-card kpi-cycle">
+        <div class="kpi-icon"><i class="fas fa-sync-alt"></i></div>
+        <div class="kpi-label">Tiempo Ciclo</div>
+        <div class="kpi-value" id="kpiCycleTime">-</div>
+    </div>
+    <div class="kpi-card kpi-total-time">
+        <div class="kpi-icon"><i class="fas fa-hourglass-half"></i></div>
+        <div class="kpi-label">Tiempo Total</div>
+        <div class="kpi-value" id="kpiTotalTime">-</div>
     </div>
 </div>
 
-<div class="card" style="margin-bottom: 2rem;">
-    <div class="filters-section">
-        <!-- Primera fila: Selectores múltiples -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1rem;">
-            <!-- Selector de Usuarios -->
-            <div>
-                <label
-                    style="display: block; font-size: 0.9rem; color: var(--text-color); margin-bottom: 0.5rem; font-weight: 600;">
-                    <i class="fas fa-users" style="margin-right: 0.25rem;"></i> Usuarios
-                    <span style="float: right; font-weight: normal;">
-                        <button type="button" onclick="selectAllReportUsers()" class="mini-btn">Todos</button>
-                        <button type="button" onclick="selectNoReportUsers()" class="mini-btn">Ninguno</button>
-                    </span>
-                </label>
-
-                <!-- Chips de usuarios seleccionados -->
-                <div id="selectedReportUsersChips" class="user-chips-container"
-                    style="min-height: 36px; padding: 0.5rem;">
-                    <span class="no-selection">Todos los usuarios (sin filtro)</span>
-                </div>
-
-                <!-- Búsqueda de usuarios -->
-                <input type="text" id="reportUserSearch" placeholder="Buscar usuario..." class="user-search-input"
-                    style="padding: 0.5rem 0.75rem 0.5rem 2.25rem; font-size: 0.85rem;"
-                    oninput="filterReportUsers(this.value)">
-
-                <!-- Grid de usuarios -->
-                <div id="reportUsersGrid" class="users-grid"
-                    style="max-height: 180px; padding: 0.75rem; margin-top: 0.5rem;">
-                    {% for user in users %}
-                    <label class="user-card" data-username="{{ user.full_name|lower }}" style="padding: 0.5rem;">
-                        <input type="checkbox" name="report_users" value="{{ user.id }}"
-                            data-name="{{ user.full_name }}" onchange="updateReportUsers()">
-                        <div class="user-avatar" data-color="{{ user.id % 8 }}"
-                            style="width: 36px; height: 36px; font-size: 0.8rem;">{{ user.full_name[:2]|upper }}</div>
-                        <span class="user-name" style="font-size: 0.7rem;">{{ user.full_name }}</span>
-                        <span class="check-overlay" style="width: 18px; height: 18px; font-size: 0.6rem;"><i
-                                class="fas fa-check"></i></span>
-                    </label>
-                    {% endfor %}
-                </div>
+<!-- Filters -->
+<div class="reports-filters-card">
+    <div class="reports-filter-row">
+        <!-- User Selector -->
+        <div>
+            <label class="reports-filter-label">
+                <i class="fas fa-users"></i> Usuarios
+                <span class="filter-actions">
+                    <button type="button" onclick="selectAllReportUsers()" class="reports-mini-btn">Todos</button>
+                    <button type="button" onclick="selectNoReportUsers()" class="reports-mini-btn">Ninguno</button>
+                </span>
+            </label>
+            <div id="selectedReportUsersChips" class="user-chips-container" style="min-height: 36px; padding: 0.5rem;">
+                <span class="no-selection">Todos los usuarios (sin filtro)</span>
             </div>
-
-            <!-- Selector de Etiquetas -->
-            <div>
-                <label
-                    style="display: block; font-size: 0.9rem; color: var(--text-color); margin-bottom: 0.5rem; font-weight: 600;">
-                    <i class="fas fa-tags" style="margin-right: 0.25rem;"></i> Etiquetas
-                    <span style="float: right; font-weight: normal;">
-                        <button type="button" onclick="selectAllReportTags()" class="mini-btn">Todas</button>
-                        <button type="button" onclick="selectNoReportTags()" class="mini-btn">Ninguna</button>
-                    </span>
+            <input type="text" id="reportUserSearch" placeholder="Buscar usuario..." class="user-search-input"
+                style="padding: 0.5rem 0.75rem 0.5rem 2.25rem; font-size: 0.85rem;"
+                oninput="filterReportUsers(this.value)">
+            <div id="reportUsersGrid" class="users-grid"
+                style="max-height: 180px; padding: 0.75rem; margin-top: 0.5rem;">
+                {% for user in users %}
+                <label class="user-card" data-username="{{ user.full_name|lower }}" style="padding: 0.5rem;">
+                    <input type="checkbox" name="report_users" value="{{ user.id }}" data-name="{{ user.full_name }}"
+                        onchange="updateReportUsers()">
+                    <div class="user-avatar" data-color="{{ user.id % 8 }}"
+                        style="width: 36px; height: 36px; font-size: 0.8rem;">{{ user.full_name[:2]|upper }}</div>
+                    <span class="user-name" style="font-size: 0.7rem;">{{ user.full_name }}</span>
+                    <span class="check-overlay" style="width: 18px; height: 18px; font-size: 0.6rem;"><i
+                            class="fas fa-check"></i></span>
                 </label>
-
-                <!-- Chips de etiquetas seleccionadas -->
-                <div id="selectedReportTagsChips" class="user-chips-container"
-                    style="min-height: 36px; padding: 0.5rem;">
-                    <span class="no-selection">Todas las etiquetas</span>
-                </div>
-
-                <!-- Búsqueda de etiquetas -->
-                <input type="text" id="reportTagSearch" placeholder="Buscar etiqueta..." class="user-search-input"
-                    style="padding: 0.5rem 0.75rem 0.5rem 2.25rem; font-size: 0.85rem;"
-                    oninput="filterReportTags(this.value)">
-
-                <!-- Grid de etiquetas -->
-                <div id="reportTagsGrid" class="users-grid"
-                    style="max-height: 180px; padding: 0.75rem; margin-top: 0.5rem;">
-                    {% for tag in tags %}
-                    <label class="user-card" data-tagname="{{ tag.name|lower }}" style="padding: 0.5rem;">
-                        <input type="checkbox" name="report_tags" value="{{ tag.id }}" data-name="{{ tag.name }}"
-                            data-color="{{ tag.color }}" onchange="updateReportTags()">
-                        <div class="user-avatar"
-                            style="width: 36px; height: 36px; font-size: 0.8rem; background: {{ tag.color }};">
-                            <i class="fas fa-tag" style="font-size: 0.9rem;"></i>
-                        </div>
-                        <span class="user-name" style="font-size: 0.7rem;">{{ tag.name }}</span>
-                        <span class="check-overlay" style="width: 18px; height: 18px; font-size: 0.6rem;"><i
-                                class="fas fa-check"></i></span>
-                    </label>
-                    {% endfor %}
-                </div>
+                {% endfor %}
             </div>
         </div>
 
-
-        <!-- Segunda fila: Filtros simples y botón -->
-        <div
-            style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; padding-top: 1rem; border-top: 1px solid #f0f0f0;">
-            <div style="min-width: 140px;">
-                <label
-                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem; font-weight: 500;">
-                    <i class="fas fa-filter" style="margin-right: 0.25rem;"></i> Estado
-                </label>
-                <select id="statusFilter"
-                    style="width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; font-size: 0.9rem; cursor: pointer;">
-                    <option value="All">Todos</option>
-                    <option value="Pending">Pendientes</option>
-                    <option value="Overdue">Vencidas</option>
-                    <option value="Completed">Completadas</option>
-                </select>
+        <!-- Tag Selector -->
+        <div>
+            <label class="reports-filter-label">
+                <i class="fas fa-tags"></i> Etiquetas
+                <span class="filter-actions">
+                    <button type="button" onclick="selectAllReportTags()" class="reports-mini-btn">Todas</button>
+                    <button type="button" onclick="selectNoReportTags()" class="reports-mini-btn">Ninguna</button>
+                </span>
+            </label>
+            <div id="selectedReportTagsChips" class="user-chips-container" style="min-height: 36px; padding: 0.5rem;">
+                <span class="no-selection">Todas las etiquetas</span>
             </div>
-
-            <div style="flex: 1; min-width: 280px; max-width: 400px;">
-                <label
-                    style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem; font-weight: 500;">
-                    <i class="fas fa-calendar-alt" style="margin-right: 0.25rem;"></i> Rango de Fechas
-                </label>
-                <div
-                    style="display: flex; align-items: center; gap: 0.5rem; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 0.4rem 0.75rem;">
-                    <input type="date" id="startDate"
-                        style="flex: 1; border: none; outline: none; font-size: 0.9rem; padding: 0.2rem; background: transparent; min-width: 100px;">
-                    <span style="color: #9ca3af; font-size: 0.85rem;">—</span>
-                    <input type="date" id="endDate"
-                        style="flex: 1; border: none; outline: none; font-size: 0.9rem; padding: 0.2rem; background: transparent; min-width: 100px;">
-                </div>
-            </div>
-
-            <button onclick="loadReportData()" class="button-secondary"
-                style="height: 42px; padding: 0 1.25rem; white-space: nowrap;">
-                <i class="fas fa-sync"></i> Actualizar
-            </button>
-        </div>
-    </div>
-</div>
-
-<div id="calcSection" class="card" style="margin-bottom: 2rem; display: none;">
-    <h3><i class="fas fa-calculator"></i> Calculadora de Diferencia de Horas</h3>
-    <p style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 1rem;">
-        Calcula la diferencia de tiempo invertido entre dos etiquetas (Etiqueta A - Etiqueta B).
-        Respeta el rango de fechas seleccionado arriba.
-    </p>
-    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 200px;">
-            <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem;">Etiqueta
-                A</label>
-            <select id="calcTagA" multiple
-                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; height: 120px; background: #fff;">
+            <input type="text" id="reportTagSearch" placeholder="Buscar etiqueta..." class="user-search-input"
+                style="padding: 0.5rem 0.75rem 0.5rem 2.25rem; font-size: 0.85rem;"
+                oninput="filterReportTags(this.value)">
+            <div id="reportTagsGrid" class="users-grid"
+                style="max-height: 180px; padding: 0.75rem; margin-top: 0.5rem;">
                 {% for tag in tags %}
-                <option value="{{ tag.id }}">{{ tag.name }}</option>
+                <label class="user-card" data-tagname="{{ tag.name|lower }}" style="padding: 0.5rem;">
+                    <input type="checkbox" name="report_tags" value="{{ tag.id }}" data-name="{{ tag.name }}"
+                        data-color="{{ tag.color }}" onchange="updateReportTags()">
+                    <div class="user-avatar"
+                        style="width: 36px; height: 36px; font-size: 0.8rem; background: {{ tag.color }};">
+                        <i class="fas fa-tag" style="font-size: 0.9rem;"></i>
+                    </div>
+                    <span class="user-name" style="font-size: 0.7rem;">{{ tag.name }}</span>
+                    <span class="check-overlay" style="width: 18px; height: 18px; font-size: 0.6rem;"><i
+                            class="fas fa-check"></i></span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Simple Filters Row -->
+    <div class="reports-filter-simple-row">
+        {% if show_area_filter %}
+        <div class="filter-group">
+            <label class="reports-filter-label"><i class="fas fa-building"></i> Área</label>
+            <select id="areaFilter"
+                style="width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; font-size: 0.9rem; cursor: pointer;">
+                <option value="all">Todas mis áreas</option>
+                {% for area in all_areas %}
+                <option value="{{ area.id }}">{{ area.name }}</option>
                 {% endfor %}
             </select>
-            <small style="color: var(--text-light); font-size: 0.75rem;">Ctrl + Click para múltiple</small>
         </div>
-        <div style="font-size: 1.5rem; color: var(--text-light); padding-top: 1.5rem;">-</div>
-        <div style="flex: 1; min-width: 200px;">
-            <label style="display: block; font-size: 0.8rem; color: var(--text-light); margin-bottom: 0.5rem;">Etiquetas
-                B</label>
-            <select id="calcTagB" multiple
-                style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; height: 120px; background: #fff;">
-                {% for tag in tags %}
-                <option value="{{ tag.id }}">{{ tag.name }}</option>
-                {% endfor %}
+        {% endif %}
+
+        <div class="filter-group">
+            <label class="reports-filter-label"><i class="fas fa-filter"></i> Estado</label>
+            <select id="statusFilter"
+                style="width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; font-size: 0.9rem; cursor: pointer;">
+                <option value="All">Todos</option>
+                <option value="Pending">Pendientes</option>
+                <option value="In Progress">En Progreso</option>
+                <option value="In Review">En Revisión</option>
+                <option value="Overdue">Vencidas</option>
+                <option value="Completed">Completadas</option>
             </select>
-            <small style="color: var(--text-light); font-size: 0.75rem;">Ctrl + Click para múltiple</small>
         </div>
-        <button onclick="calculateDifference()" class="button" style="margin-top: 1.5rem;">
-            <i class="fas fa-equals"></i> Calcular
+
+        <div class="filter-group filter-dates">
+            <label class="reports-filter-label"><i class="fas fa-calendar-alt"></i> Rango de Fechas</label>
+            <div class="reports-date-range">
+                <input type="date" id="startDate">
+                <span class="date-sep">—</span>
+                <input type="date" id="endDate">
+            </div>
+        </div>
+
+        <button onclick="loadReportData()" class="button-secondary reports-update-btn">
+            <i class="fas fa-sync"></i> Actualizar
         </button>
-    </div>
-    <div id="calcResult"
-        style="margin-top: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 6px; display: none; text-align: center;">
-        <span style="font-size: 0.9rem; color: var(--text-light);">Diferencia:</span>
-        <span id="diffValue"
-            style="font-size: 1.5rem; font-weight: bold; color: var(--primary-color); margin-left: 0.5rem;"></span>
-        <p id="diffDetails" style="font-size: 0.8rem; color: var(--text-light); margin-top: 0.5rem; margin-bottom: 0;">
-        </p>
     </div>
 </div>
 
-<div
-    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
-    <div class="card">
+<!-- Charts Row 1: Status + Priority -->
+<div class="reports-charts-grid">
+    <div class="report-chart-card">
         <h3><i class="fas fa-tasks"></i> Tareas por Usuario</h3>
         <canvas id="tasksByUserChart"></canvas>
     </div>
-    <div class="card">
+    <div class="report-chart-card">
         <h3><i class="fas fa-chart-pie"></i> Estado de Tareas</h3>
         <canvas id="statusChart"></canvas>
     </div>
 </div>
 
-<div class="card" style="margin-bottom: 2rem;">
-    <h3><i class="fas fa-history"></i> Tendencia Global (Completadas)</h3>
-    <canvas id="trendChart"></canvas>
+<!-- Charts Row 2: Priority + Area -->
+<div class="reports-charts-grid">
+    <div class="report-chart-card">
+        <h3><i class="fas fa-flag"></i> Distribución por Prioridad</h3>
+        <canvas id="priorityChart"></canvas>
+    </div>
+    <div class="report-chart-card" id="areaChartCard">
+        <h3><i class="fas fa-building"></i> Tareas por Área</h3>
+        <canvas id="areaChart"></canvas>
+    </div>
 </div>
 
-<div
-    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
-    <div class="card">
+<!-- Trend (full width) -->
+<div class="reports-charts-grid">
+    <div class="report-chart-card report-chart-full">
+        <h3><i class="fas fa-chart-area"></i> Tendencia Global (Completadas)</h3>
+        <canvas id="trendChart"></canvas>
+    </div>
+</div>
+
+<!-- Charts Row 3: Employee + Tag trends -->
+<div class="reports-charts-grid">
+    <div class="report-chart-card">
         <h3><i class="fas fa-user-clock"></i> Evolución por Empleado</h3>
         <canvas id="employeeTrendChart"></canvas>
     </div>
-    <div class="card">
+    <div class="report-chart-card">
         <h3><i class="fas fa-tags"></i> Evolución por Etiqueta</h3>
         <canvas id="tagTrendChart"></canvas>
     </div>
 </div>
 
+<!-- Process Progress Table -->
+<div class="reports-process-section" id="processSection">
+    <h3><i class="fas fa-folder-open"></i> Procesos Activos</h3>
+    <div id="processTableContainer">
+        <div class="process-empty">
+            <i class="fas fa-folder-open"></i>
+            Cargando procesos...
+        </div>
+    </div>
+</div>
+
+<!-- Calculator (hidden by default) -->
+<div class="reports-calc-card" id="calcSection" style="display: none;">
+    <h3><i class="fas fa-calculator"></i> Calculadora de Diferencia de Horas</h3>
+    <p style="font-size: 0.85rem; color: var(--text-light); margin-bottom: 1rem;">
+        Calcula la diferencia de tiempo entre etiquetas (A - B). Respeta el rango de fechas.
+    </p>
+    <div class="calc-tag-grid">
+        <div class="calc-tag-group">
+            <label>Etiqueta A</label>
+            <select id="calcTagA" multiple>
+                {% for tag in tags %}
+                <option value="{{ tag.id }}">{{ tag.name }}</option>
+                {% endfor %}
+            </select>
+            <small style="color: var(--text-light); font-size: 0.72rem;">Ctrl + Click para múltiple</small>
+        </div>
+        <div class="calc-separator">−</div>
+        <div class="calc-tag-group">
+            <label>Etiqueta B</label>
+            <select id="calcTagB" multiple>
+                {% for tag in tags %}
+                <option value="{{ tag.id }}">{{ tag.name }}</option>
+                {% endfor %}
+            </select>
+            <small style="color: var(--text-light); font-size: 0.72rem;">Ctrl + Click para múltiple</small>
+        </div>
+        <button onclick="calculateDifference()" class="button"
+            style="margin-top: 1.5rem; padding: 0.7rem 1.2rem; font-size: 0.85rem;">
+            <i class="fas fa-equals"></i> Calcular
+        </button>
+    </div>
+    <div id="calcResult" class="calc-result" style="display: none;">
+        <span class="calc-result-label">Diferencia:</span>
+        <span class="calc-result-value" id="diffValue"></span>
+        <p class="calc-result-details" id="diffDetails"></p>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 <script>
     let tasksByUserChart = null;
     let statusChart = null;
+    let priorityChart = null;
+    let areaChart = null;
     let trendChart = null;
     let employeeTrendChart = null;
     let tagTrendChart = null;
 
     document.addEventListener('DOMContentLoaded', function () {
+        console.log('[REPORTS] ========== DOM Content Loaded ==========');
+
+        // Prevent datalabels from auto-applying to ALL charts
+        if (typeof Chart !== 'undefined' && Chart.defaults && Chart.defaults.plugins && Chart.defaults.plugins.datalabels) {
+            Chart.defaults.plugins.datalabels.display = false;
+        }
+
         const end = new Date();
         const start = new Date();
         start.setDate(start.getDate() - 30);
 
-        document.getElementById('endDate').valueAsDate = end;
-        document.getElementById('startDate').valueAsDate = start;
+        const endDateEl = document.getElementById('endDate');
+        const startDateEl = document.getElementById('startDate');
+
+        if (endDateEl && startDateEl) {
+            endDateEl.valueAsDate = end;
+            startDateEl.valueAsDate = start;
+        }
 
         loadReportData();
     });
@@ -270,14 +318,9 @@
         const checkboxes = document.querySelectorAll('#reportUsersGrid input[name="report_users"]:checked');
         const display = document.getElementById('selectedReportUsersChips');
 
-        // Update card selected class
         document.querySelectorAll('#reportUsersGrid .user-card').forEach(card => {
             const cb = card.querySelector('input[type="checkbox"]');
-            if (cb.checked) {
-                card.classList.add('selected');
-            } else {
-                card.classList.remove('selected');
-            }
+            card.classList.toggle('selected', cb.checked);
         });
 
         if (checkboxes.length === 0) {
@@ -301,23 +344,14 @@
 
     function removeReportUser(userId) {
         const checkbox = document.querySelector(`#reportUsersGrid input[value="${userId}"]`);
-        if (checkbox) {
-            checkbox.checked = false;
-            updateReportUsers();
-        }
+        if (checkbox) { checkbox.checked = false; updateReportUsers(); }
     }
 
     function filterReportUsers(searchTerm) {
         const term = searchTerm.toLowerCase().trim();
-        const cards = document.querySelectorAll('#reportUsersGrid .user-card');
-
-        cards.forEach(card => {
+        document.querySelectorAll('#reportUsersGrid .user-card').forEach(card => {
             const username = card.dataset.username || '';
-            if (term === '' || username.includes(term)) {
-                card.classList.remove('hidden');
-            } else {
-                card.classList.add('hidden');
-            }
+            card.classList.toggle('hidden', term !== '' && !username.includes(term));
         });
     }
 
@@ -326,14 +360,9 @@
         const checkboxes = document.querySelectorAll('#reportTagsGrid input[name="report_tags"]:checked');
         const display = document.getElementById('selectedReportTagsChips');
 
-        // Update card selected class
         document.querySelectorAll('#reportTagsGrid .user-card').forEach(card => {
             const cb = card.querySelector('input[type="checkbox"]');
-            if (cb.checked) {
-                card.classList.add('selected');
-            } else {
-                card.classList.remove('selected');
-            }
+            card.classList.toggle('selected', cb.checked);
         });
 
         if (checkboxes.length === 0) {
@@ -357,92 +386,186 @@
 
     function removeReportTag(tagId) {
         const checkbox = document.querySelector(`#reportTagsGrid input[value="${tagId}"]`);
-        if (checkbox) {
-            checkbox.checked = false;
-            updateReportTags();
-        }
+        if (checkbox) { checkbox.checked = false; updateReportTags(); }
     }
 
     function filterReportTags(searchTerm) {
         const term = searchTerm.toLowerCase().trim();
-        const cards = document.querySelectorAll('#reportTagsGrid .user-card');
-
-        cards.forEach(card => {
+        document.querySelectorAll('#reportTagsGrid .user-card').forEach(card => {
             const tagname = card.dataset.tagname || '';
-            if (term === '' || tagname.includes(term)) {
-                card.classList.remove('hidden');
-            } else {
-                card.classList.add('hidden');
-            }
+            card.classList.toggle('hidden', term !== '' && !tagname.includes(term));
         });
     }
 
-    // ===== Select All / None Buttons =====
+    // ===== Select All / None =====
     function selectAllReportUsers() {
-        document.querySelectorAll('#reportUsersGrid input[name="report_users"]').forEach(cb => {
-            cb.checked = true;
-        });
+        document.querySelectorAll('#reportUsersGrid input[name="report_users"]').forEach(cb => cb.checked = true);
         updateReportUsers();
     }
-
     function selectNoReportUsers() {
-        document.querySelectorAll('#reportUsersGrid input[name="report_users"]').forEach(cb => {
-            cb.checked = false;
-        });
+        document.querySelectorAll('#reportUsersGrid input[name="report_users"]').forEach(cb => cb.checked = false);
         updateReportUsers();
     }
-
     function selectAllReportTags() {
-        document.querySelectorAll('#reportTagsGrid input[name="report_tags"]').forEach(cb => {
-            cb.checked = true;
-        });
+        document.querySelectorAll('#reportTagsGrid input[name="report_tags"]').forEach(cb => cb.checked = true);
         updateReportTags();
     }
-
     function selectNoReportTags() {
-        document.querySelectorAll('#reportTagsGrid input[name="report_tags"]').forEach(cb => {
-            cb.checked = false;
-        });
+        document.querySelectorAll('#reportTagsGrid input[name="report_tags"]').forEach(cb => cb.checked = false);
         updateReportTags();
     }
 
-    // Keep old function for compatibility with calcTagA/calcTagB
+    // ===== Helpers =====
     function getSelectedValues(selectId) {
         const select = document.getElementById(selectId);
         if (!select) return [];
         return Array.from(select.selectedOptions).map(option => option.value);
     }
 
+    function showLoading() {
+        document.getElementById('loadingOverlay').classList.add('active');
+    }
+    function hideLoading() {
+        document.getElementById('loadingOverlay').classList.remove('active');
+    }
+
+    // ===== Main Data Loader =====
     function loadReportData() {
+        console.log('[REPORTS] ========== loadReportData called ==========');
+
         const userIds = getSelectedUserIds();
         const tagIds = getSelectedTagIds();
-        const status = document.getElementById('statusFilter').value;
-        const startDate = document.getElementById('startDate').value;
-        const endDate = document.getElementById('endDate').value;
 
+        const statusEl = document.getElementById('statusFilter');
+        const startDateEl = document.getElementById('startDate');
+        const endDateEl = document.getElementById('endDate');
+        const areaEl = document.getElementById('areaFilter');
+
+        console.log('[REPORTS] Elements check:', {
+            statusEl: !!statusEl,
+            startDateEl: !!startDateEl,
+            endDateEl: !!endDateEl,
+            areaEl: !!areaEl
+        });
+
+        if (!statusEl || !startDateEl || !endDateEl) {
+            console.error('[REPORTS] Missing required elements');
+            return;
+        }
+
+        const status = statusEl.value;
+        const startDate = startDateEl.value;
+        const endDate = endDateEl.value;
+        const area = areaEl ? areaEl.value : 'all';
+
+        console.log('[REPORTS] Request data:', { userIds, tagIds, status, area, startDate, endDate });
+
+        showLoading();
 
         fetch('/api/reports/data', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 user_ids: userIds,
                 tag_ids: tagIds,
                 status: status,
+                area: area,
                 start_date: startDate,
                 end_date: endDate
             })
         })
-            .then(response => response.json())
-            .then(data => {
-                updateCharts(data);
+            .then(response => {
+                console.log('[REPORTS] Response status:', response.status);
+                console.log('[REPORTS] Response ok:', response.ok);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
             })
-            .catch(error => console.error('Error loading report data:', error));
+            .then(data => {
+                console.log('[REPORTS] ========== Data received ==========');
+                console.log('[REPORTS] Full data:', data);
+                console.log('[REPORTS] User stats:', data.user_stats);
+                console.log('[REPORTS] Global stats:', data.global_stats);
+                console.log('[REPORTS] KPIs:', data.kpis);
+                console.log('[REPORTS] Calling updateCharts...');
+                updateCharts(data);
+                console.log('[REPORTS] Calling updateKPIs...');
+                updateKPIs(data.kpis);
+                console.log('[REPORTS] Calling updateProcessTable...');
+                updateProcessTable(data.process_stats);
+                console.log('[REPORTS] Hiding loading...');
+                hideLoading();
+                console.log('[REPORTS] ========== Done ==========');
+            })
+            .catch(error => {
+                console.error('[REPORTS] ========== ERROR ==========');
+                console.error('[REPORTS] Error:', error);
+                console.error('[REPORTS] Error stack:', error.stack);
+                alert('Error al cargar los datos: ' + error.message);
+                hideLoading();
+            });
     }
 
+    // ===== KPI Update =====
+    function updateKPIs(kpis) {
+        if (!kpis) return;
+        document.getElementById('kpiTotal').textContent = kpis.total;
+        document.getElementById('kpiCompletion').textContent = kpis.completion_rate + '%';
+        document.getElementById('kpiOverdue').textContent = kpis.overdue;
+        document.getElementById('kpiInProgress').textContent = kpis.in_progress;
+        document.getElementById('kpiInReview').textContent = kpis.in_review;
+        document.getElementById('kpiAvgTime').textContent = kpis.avg_time || '-';
+        document.getElementById('kpiCycleTime').textContent = kpis.avg_cycle_time || '-';
+        document.getElementById('kpiTotalTime').textContent = kpis.total_time || '-';
+    }
+
+    // ===== Process Table =====
+    function updateProcessTable(processes) {
+        const container = document.getElementById('processTableContainer');
+        if (!processes || processes.length === 0) {
+            container.innerHTML = '<div class="process-empty"><i class="fas fa-folder-open"></i>No hay procesos activos</div>';
+            return;
+        }
+
+        let html = `<table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+            <thead>
+                <tr>
+                    <th style="text-align: left; padding: 0.6rem 0.75rem;">Proceso</th>
+                    <th style="text-align: left; padding: 0.6rem 0.75rem;">Tipo</th>
+                    <th style="text-align: center; padding: 0.6rem 0.75rem;">Progreso</th>
+                    <th style="text-align: center; padding: 0.6rem 0.75rem;">Tareas</th>
+                    <th style="text-align: center; padding: 0.6rem 0.75rem;">Vencimiento</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+        processes.forEach(p => {
+            const fillClass = p.progress === 100 ? ' complete' : '';
+            html += `
+                <tr>
+                    <td style="padding: 0.6rem 0.75rem; font-weight: 500;">${p.name}</td>
+                    <td style="padding: 0.6rem 0.75rem; color: var(--text-light);">${p.type}</td>
+                    <td style="padding: 0.6rem 0.75rem;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div class="process-progress-bar-bg">
+                                <div class="process-progress-bar-fill${fillClass}" style="width: ${p.progress}%"></div>
+                            </div>
+                            <span style="font-size: 0.78rem; font-weight: 600; min-width: 35px; text-align: right;">${p.progress}%</span>
+                        </div>
+                    </td>
+                    <td style="padding: 0.6rem 0.75rem; text-align: center;">${p.completed_tasks}/${p.total_tasks}</td>
+                    <td style="padding: 0.6rem 0.75rem; text-align: center;">${p.due_date}</td>
+                </tr>`;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    // ===== Update All Charts =====
     function updateCharts(data) {
-        // Tasks by User Chart
+        // 1. Tasks by User (stacked bar)
         const ctxUser = document.getElementById('tasksByUserChart').getContext('2d');
         if (tasksByUserChart) tasksByUserChart.destroy();
         tasksByUserChart = new Chart(ctxUser, {
@@ -450,42 +573,114 @@
             data: {
                 labels: data.user_stats.map(u => u.name),
                 datasets: [
-                    {
-                        label: 'Completadas',
-                        data: data.user_stats.map(u => u.completed),
-                        backgroundColor: '#10b981'
-                    },
-                    {
-                        label: 'Pendientes',
-                        data: data.user_stats.map(u => u.pending),
-                        backgroundColor: '#f59e0b'
-                    }
+                    { label: 'Completadas', data: data.user_stats.map(u => u.completed), backgroundColor: '#10b981' },
+                    { label: 'Pendientes', data: data.user_stats.map(u => u.pending), backgroundColor: '#f59e0b' }
                 ]
             },
             options: {
                 responsive: true,
-                scales: {
-                    x: { stacked: true },
-                    y: { stacked: true, beginAtZero: true }
-                }
+                plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 15 } } },
+                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
             }
         });
 
-        // Status Chart
+        // 2. Status Chart (4 categories doughnut with %) 
         const ctxStatus = document.getElementById('statusChart').getContext('2d');
         if (statusChart) statusChart.destroy();
+        const gs = data.global_stats;
         statusChart = new Chart(ctxStatus, {
             type: 'doughnut',
             data: {
-                labels: ['Completadas', 'Pendientes'],
+                labels: ['Completadas', 'Pendientes', 'En Progreso', 'En Revisión'],
                 datasets: [{
-                    data: [data.global_stats.completed, data.global_stats.pending],
-                    backgroundColor: ['#10b981', '#f59e0b']
+                    data: [gs.completed, gs.pending, gs.in_progress, gs.in_review],
+                    backgroundColor: ['#10b981', '#f59e0b', '#3b82f6', '#8b5cf6'],
+                    borderWidth: 2,
+                    borderColor: '#fff'
                 }]
-            }
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 11 } } },
+                    datalabels: {
+                        display: true,
+                        color: '#fff',
+                        font: { weight: 'bold', size: 12 },
+                        formatter: (value, ctx) => {
+                            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                            if (total === 0 || value === 0) return '';
+                            return Math.round((value / total) * 100) + '%';
+                        }
+                    }
+                }
+            },
+            plugins: [ChartDataLabels]
         });
 
-        // Trend Chart
+        // 3. Priority Chart (doughnut with %)
+        const ctxPriority = document.getElementById('priorityChart').getContext('2d');
+        if (priorityChart) priorityChart.destroy();
+        const ps = data.priority_stats;
+        priorityChart = new Chart(ctxPriority, {
+            type: 'doughnut',
+            data: {
+                labels: ['Normal', 'Media', 'Urgente'],
+                datasets: [{
+                    data: [ps.normal, ps.media, ps.urgente],
+                    backgroundColor: ['#64748b', '#f59e0b', '#ef4444'],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 11 } } },
+                    datalabels: {
+                        display: true,
+                        color: '#fff',
+                        font: { weight: 'bold', size: 12 },
+                        formatter: (value, ctx) => {
+                            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                            if (total === 0 || value === 0) return '';
+                            return Math.round((value / total) * 100) + '%';
+                        }
+                    }
+                }
+            },
+            plugins: [ChartDataLabels]
+        });
+
+        // 4. Area Chart (horizontal bar)
+        const areaCard = document.getElementById('areaChartCard');
+        if (areaCard) {
+            if (data.area_stats && data.area_stats.length > 0) {
+                areaCard.style.display = '';
+                const ctxArea = document.getElementById('areaChart').getContext('2d');
+                if (areaChart) areaChart.destroy();
+                areaChart = new Chart(ctxArea, {
+                    type: 'bar',
+                    data: {
+                        labels: data.area_stats.map(a => a.name),
+                        datasets: [
+                            { label: 'Completadas', data: data.area_stats.map(a => a.completed), backgroundColor: '#10b981' },
+                            { label: 'Pendientes', data: data.area_stats.map(a => a.pending), backgroundColor: '#f59e0b' }
+                        ]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 15 } } },
+                        scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } }
+                    }
+                });
+            } else {
+                areaCard.style.display = 'none';
+            }
+        }
+
+        // 5. Trend Chart
         const ctxTrend = document.getElementById('trendChart').getContext('2d');
         if (trendChart) trendChart.destroy();
         trendChart = new Chart(ctxTrend, {
@@ -493,79 +688,59 @@
             data: {
                 labels: data.trend.dates,
                 datasets: [{
-                    label: 'Tareas Completadas (Global)',
+                    label: 'Tareas Completadas',
                     data: data.trend.completed_counts,
                     borderColor: '#3b82f6',
-                    tension: 0.1,
+                    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                    tension: 0.3,
                     fill: true,
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)'
+                    pointRadius: 3,
+                    pointHoverRadius: 6
                 }]
             },
             options: {
                 responsive: true,
-                scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
-                }
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
             }
         });
 
-        // Employee Trend Chart
+        // 6. Employee Trend
         const ctxEmpTrend = document.getElementById('employeeTrendChart').getContext('2d');
         if (employeeTrendChart) employeeTrendChart.destroy();
         employeeTrendChart = new Chart(ctxEmpTrend, {
             type: 'line',
-            data: {
-                labels: data.trend.dates,
-                datasets: data.employee_trend
-            },
+            data: { labels: data.trend.dates, datasets: data.employee_trend },
             options: {
                 responsive: true,
-                scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
-                }
+                plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 10, font: { size: 10 } } } },
+                scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
             }
         });
 
-        // Tag Trend Chart
+        // 7. Tag Trend
         const ctxTagTrend = document.getElementById('tagTrendChart').getContext('2d');
         if (tagTrendChart) tagTrendChart.destroy();
         tagTrendChart = new Chart(ctxTagTrend, {
             type: 'line',
-            data: {
-                labels: data.trend.dates,
-                datasets: data.tag_trend
-            },
+            data: { labels: data.trend.dates, datasets: data.tag_trend },
             options: {
                 responsive: true,
-                scales: {
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
-                }
+                plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 10, font: { size: 10 } } } },
+                scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
             }
         });
+    }
 
-        // Update KPIs if available
-        if (data.kpis) {
-            document.getElementById('kpiTotal').textContent = data.kpis.total;
-            document.getElementById('kpiCompletion').textContent = data.kpis.completion_rate + '%';
-            document.getElementById('kpiOverdue').textContent = data.kpis.overdue;
-            document.getElementById('kpiAvgTime').textContent = data.kpis.avg_time || '-';
-            document.getElementById('kpiTotalTime').textContent = data.kpis.total_time || '-';
+    // ===== Toggle Calculator =====
+    function toggleCalcSection() {
+        const section = document.getElementById('calcSection');
+        if (section) {
+            section.style.display = section.style.display === 'none' ? 'block' : 'none';
         }
     }
 
-    function toggleKPIs() {
-        const section = document.getElementById('kpiSection');
-        const calcSection = document.getElementById('calcSection');
-
-        if (section.style.display === 'none') {
-            section.style.display = 'grid';
-            calcSection.style.display = 'block';
-        } else {
-            section.style.display = 'none';
-            calcSection.style.display = 'none';
-        }
-    }
-
+    // ===== Export Report =====
     function exportReport() {
         const userIds = getSelectedUserIds();
         const tagIds = getSelectedTagIds();
@@ -573,67 +748,39 @@
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
 
-        // Check if KPIs are visible
-        const kpiSection = document.getElementById('kpiSection');
-        const includeKpis = kpiSection.style.display !== 'none';
-
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = '/reports/export';
 
-        const inputUsers = document.createElement('input');
-        inputUsers.type = 'hidden';
-        inputUsers.name = 'user_ids';
-        inputUsers.value = JSON.stringify(userIds);
-        form.appendChild(inputUsers);
+        const fields = {
+            'user_ids': JSON.stringify(userIds),
+            'tag_ids': JSON.stringify(tagIds),
+            'status': status,
+            'start_date': startDate,
+            'end_date': endDate,
+            'include_kpis': 'true'
+        };
 
-        const inputTags = document.createElement('input');
-        inputTags.type = 'hidden';
-        inputTags.name = 'tag_ids';
-        inputTags.value = JSON.stringify(tagIds);
-        form.appendChild(inputTags);
+        for (const [name, value] of Object.entries(fields)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = value;
+            form.appendChild(input);
+        }
 
-        const inputStatus = document.createElement('input');
-        inputStatus.type = 'hidden';
-        inputStatus.name = 'status';
-        inputStatus.value = status;
-        form.appendChild(inputStatus);
-
-        const inputStart = document.createElement('input');
-        inputStart.type = 'hidden';
-        inputStart.name = 'start_date';
-        inputStart.value = startDate;
-        form.appendChild(inputStart);
-
-        const inputEnd = document.createElement('input');
-        inputEnd.type = 'hidden';
-        inputEnd.name = 'end_date';
-        inputEnd.value = endDate;
-        form.appendChild(inputEnd);
-
-        const inputKpis = document.createElement('input');
-        inputKpis.type = 'hidden';
-        inputKpis.name = 'include_kpis';
-        inputKpis.value = includeKpis;
-        form.appendChild(inputKpis);
-
-        // Add calc tags if visible and selected
-        if (includeKpis) {
+        // Add calc tags if calculator is visible and selections made
+        const calcSection = document.getElementById('calcSection');
+        if (calcSection && calcSection.style.display !== 'none') {
             const tagA = getSelectedValues('calcTagA');
             const tagB = getSelectedValues('calcTagB');
-
             if (tagA.length > 0 && tagB.length > 0) {
-                const inputDiffA = document.createElement('input');
-                inputDiffA.type = 'hidden';
-                inputDiffA.name = 'diff_tag_a';
-                inputDiffA.value = JSON.stringify(tagA); // Send as JSON array
-                form.appendChild(inputDiffA);
-
-                const inputDiffB = document.createElement('input');
-                inputDiffB.type = 'hidden';
-                inputDiffB.name = 'diff_tag_b';
-                inputDiffB.value = JSON.stringify(tagB); // Send as JSON array
-                form.appendChild(inputDiffB);
+                const inputA = document.createElement('input');
+                inputA.type = 'hidden'; inputA.name = 'diff_tag_a'; inputA.value = JSON.stringify(tagA);
+                form.appendChild(inputA);
+                const inputB = document.createElement('input');
+                inputB.type = 'hidden'; inputB.name = 'diff_tag_b'; inputB.value = JSON.stringify(tagB);
+                form.appendChild(inputB);
             }
         }
 
@@ -642,14 +789,18 @@
         document.body.removeChild(form);
     }
 
+    // ===== Calculate Difference =====
     function calculateDifference() {
         const tagASelect = document.getElementById('calcTagA');
         const tagBSelect = document.getElementById('calcTagB');
 
-        // Use getSelectedValues helper that already exists or manual
+        if (!tagASelect || !tagBSelect) {
+            console.error('[CALC] Missing select elements');
+            return;
+        }
+
         const tagAIds = Array.from(tagASelect.selectedOptions).map(opt => opt.value);
         const tagBIds = Array.from(tagBSelect.selectedOptions).map(opt => opt.value);
-
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
 
@@ -663,9 +814,7 @@
 
         fetch('/api/reports/calculate_difference', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 tag_a_ids: tagAIds,
                 tag_b_ids: tagBIds,
@@ -679,26 +828,23 @@
                 const diffValue = document.getElementById('diffValue');
                 const diffDetails = document.getElementById('diffDetails');
 
+                if (!resultDiv || !diffValue || !diffDetails) {
+                    console.error('[CALC] Missing result elements');
+                    return;
+                }
+
                 resultDiv.style.display = 'block';
                 diffValue.textContent = data.formatted;
 
-                // Format time A and time B for details
                 const formatTime = (minutes) => {
                     const h = Math.floor(minutes / 60);
                     const m = Math.floor(minutes % 60);
                     return `${h}h ${m}m`;
                 };
-
-                // Truncate names if too long
-                const truncate = (str, n) => (str.length > n) ? str.substr(0, n - 1) + '&hellip;' : str;
+                const truncate = (str, n) => (str.length > n) ? str.substr(0, n - 1) + '…' : str;
 
                 diffDetails.innerHTML = `(${truncate(tagNamesA, 30)}: ${formatTime(data.time_a)} - ${truncate(tagNamesB, 30)}: ${formatTime(data.time_b)})`;
-
-                if (data.diff < 0) {
-                    diffValue.style.color = '#ef4444'; // Red for negative
-                } else {
-                    diffValue.style.color = '#10b981'; // Green (or primary) for positive
-                }
+                diffValue.style.color = data.diff < 0 ? '#ef4444' : '#10b981';
             })
             .catch(error => {
                 console.error('Error:', error);

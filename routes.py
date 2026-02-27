@@ -3029,31 +3029,25 @@ def reports():
         flash('No tienes acceso a los reportes.', 'danger')
         return redirect(url_for('main.dashboard'))
     
-    # Filter users by area for non-admins
+    # --- AREA-BASED SECURITY ---
+    # Admins see everything; non-admins see only their areas (can have multiple)
     if current_user.is_admin:
-
-        users = User.query.all()
+        users = User.query.order_by(User.full_name).all()
         available_areas = Area.query.order_by(Area.name).all()
+        tags = Tag.query.order_by(Tag.name).all()
         show_area_filter = True
     else:
-        # Non-admins see only users in their areas
         user_area_ids = [a.id for a in current_user.areas]
         if user_area_ids:
-            users = [u for u in User.query.all() if any(area in u.areas for area in current_user.areas)]
-        else:
-            users = []
-        available_areas = current_user.areas
-        show_area_filter = len(current_user.areas) > 1
-    
-    # Filter tags by area
-    if current_user.is_admin:
-        tags = Tag.query.order_by(Tag.name).all()
-    else:
-        user_area_ids = [a.id for a in current_user.areas]
-        if user_area_ids:
+            # Users who share at least one area with the current user
+            users = [u for u in User.query.order_by(User.full_name).all() 
+                     if any(a.id in user_area_ids for a in u.areas)]
             tags = Tag.query.filter(Tag.area_id.in_(user_area_ids)).order_by(Tag.name).all()
         else:
+            users = []
             tags = []
+        available_areas = list(current_user.areas)
+        show_area_filter = len(current_user.areas) > 1
             
     return render_template('reports.html', 
                           users=users, 
@@ -3061,41 +3055,52 @@ def reports():
                           all_areas=available_areas,
                           show_area_filter=show_area_filter)
 
+
+def _apply_area_security(query):
+    """Apply area-based security filter to a task query.
+    Admins see everything; non-admins only see tasks from their areas."""
+    if current_user.is_admin:
+        return query
+    user_area_ids = [a.id for a in current_user.areas]
+    if user_area_ids:
+        return query.filter(Task.area_id.in_(user_area_ids))
+    else:
+        return query.filter(db.literal(False))
+
+
 @main_bp.route('/api/reports/data', methods=['POST'])
 @login_required
 def reports_data():
+    from models import Area, Process, ProcessType
+
     # --- CHECK PERMISSION TO VIEW REPORTS ---
     if not current_user.can_see_reports():
+        print(f"[REPORTS] User {current_user.username} tried to access reports but doesn't have permission")
         return jsonify({'error': 'No tienes acceso a los reportes'}), 403
+
+    print(f"[REPORTS] Loading reports for user: {current_user.username}, is_admin: {current_user.is_admin}")
     
     data = request.get_json()
 
     user_ids = data.get('user_ids', [])
-    tag_ids = data.get('tag_ids', []) # New filter
-    status_filter = data.get('status') # New filter
-    area_filter = data.get('area')  # Area filter (admin only)
+    tag_ids = data.get('tag_ids', [])
+    status_filter = data.get('status')
+    area_filter = data.get('area')
     start_date_str = data.get('start_date')
     end_date_str = data.get('end_date')
     
-    # Base query - ALWAYS exclude 'Anulado' and blocked tasks from reports
+    # Base query - ALWAYS exclude 'Anulado' and blocked tasks
     query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags)).filter(
         Task.status != 'Anulado',
-        Task.enabled == True  # Only include enabled tasks in reports
+        Task.enabled == True
     )
     
-    # --- FILTER BY AREA ---
-    if current_user.is_admin:
-        # Admin can filter by specific area
-        if area_filter and area_filter != 'all':
-            query = query.filter(Task.area_id == int(area_filter))
-    else:
-        # Non-admins see only tasks from their specific areas (NOT including NULL areas)
-        user_area_ids = [a.id for a in current_user.areas]
-        if user_area_ids:
-            query = query.filter(Task.area_id.in_(user_area_ids))
-        else:
-            # User has no areas - show nothing
-            query = query.filter(Task.area_id == -1)
+    # --- AREA SECURITY (always applied) ---
+    query = _apply_area_security(query)
+    
+    # Additional area filter for admins who want to drill into a specific area
+    if current_user.is_admin and area_filter and area_filter != 'all':
+        query = query.filter(Task.area_id == int(area_filter))
     
     # Filter by users if provided
     if user_ids:
@@ -3108,10 +3113,10 @@ def reports_data():
     # Filter by status if provided
     if status_filter and status_filter != 'All':
         if status_filter == 'Overdue':
-            # Overdue = Pending tasks with due_date < today
+            # Overdue = any non-completed task with due_date < today
             today_date = date.today()
             query = query.filter(
-                Task.status == 'Pending',
+                Task.status.in_(['Pending', 'In Progress', 'In Review']),
                 db.func.date(Task.due_date) < today_date
             )
         else:
@@ -3120,24 +3125,26 @@ def reports_data():
     # Filter by date range
     if start_date_str and end_date_str:
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-        end_date = end_date.replace(hour=23, minute=59, second=59)
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
         query = query.filter(Task.due_date >= start_date, Task.due_date <= end_date)
         
     tasks = query.all()
     
-    # --- Aggregation ---
-    
-    # 1. Stats per User
+    # --- 1. Stats per User ---
     user_stats = []
-    target_users = User.query.filter(User.id.in_(user_ids)).all() if user_ids else User.query.all()
+    if user_ids:
+        # Specific users selected — show only those
+        target_users = User.query.filter(User.id.in_(user_ids)).all()
+    else:
+        # No user filter — show only users who appear in the filtered tasks
+        user_ids_in_tasks = set()
+        for t in tasks:
+            for a in t.assignees:
+                user_ids_in_tasks.add(a.id)
+        target_users = User.query.filter(User.id.in_(list(user_ids_in_tasks))).order_by(User.full_name).all() if user_ids_in_tasks else []
     
     for user in target_users:
         user_tasks = [t for t in tasks if user in t.assignees]
-        # Only skip if we are filtering by specific users and this user has no tasks
-        # But if we are showing all users, we might want to show 0s? 
-        # Let's keep existing logic: show all target_users
-        
         completed = sum(1 for t in user_tasks if t.status == 'Completed')
         pending = len(user_tasks) - completed
         user_stats.append({
@@ -3146,33 +3153,78 @@ def reports_data():
             'pending': pending
         })
         
-    # 2. Global Status
+    # --- 2. Global Status (4 categories) ---
     global_completed = sum(1 for t in tasks if t.status == 'Completed')
-    global_pending = len(tasks) - global_completed
+    global_in_progress = sum(1 for t in tasks if t.status == 'In Progress')
+    global_in_review = sum(1 for t in tasks if t.status == 'In Review')
+    global_pending = sum(1 for t in tasks if t.status == 'Pending')
+    
+    # --- 3. Priority Distribution ---
+    priority_normal = sum(1 for t in tasks if t.priority == 'Normal')
+    priority_media = sum(1 for t in tasks if t.priority == 'Media')
+    priority_urgente = sum(1 for t in tasks if t.priority == 'Urgente')
+    
+    # --- 4. Area Stats ---
+    area_stats = []
+    if current_user.is_admin:
+        report_areas = Area.query.order_by(Area.name).all()
+    else:
+        report_areas = list(current_user.areas)
+    
+    for area in report_areas:
+        area_tasks = [t for t in tasks if t.area_id == area.id]
+        a_completed = sum(1 for t in area_tasks if t.status == 'Completed')
+        a_pending = len(area_tasks) - a_completed
+        if len(area_tasks) > 0:
+            area_stats.append({
+                'name': area.name,
+                'color': area.color,
+                'completed': a_completed,
+                'pending': a_pending,
+                'total': len(area_tasks)
+            })
+    
+    # --- 5. Process Stats (active processes visible to user) ---
+    process_stats = []
+    proc_query = Process.query.filter(Process.status == 'Active')
+    if not current_user.is_admin:
+        user_area_ids = [a.id for a in current_user.areas]
+        if user_area_ids:
+            proc_query = proc_query.filter(Process.area_id.in_(user_area_ids))
+        else:
+            proc_query = proc_query.filter(db.literal(False))
+    
+    active_processes = proc_query.order_by(Process.due_date).limit(20).all()
+    for proc in active_processes:
+        process_stats.append({
+            'name': proc.name,
+            'type': proc.process_type.name if proc.process_type else '-',
+            'progress': proc.progress_percentage,
+            'total_tasks': proc.total_tasks_count,
+            'completed_tasks': proc.completed_tasks_count,
+            'due_date': proc.due_date.strftime('%d/%m/%Y') if proc.due_date else '-',
+            'status': proc.status
+        })
     
     # --- Trends (Time-based) ---
-    # We need a date range for the X-axis
     t_start = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else datetime.now() - timedelta(days=30)
-    
     if end_date_str:
         t_end = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
     else:
         t_end = datetime.now()
     
-    # Generate list of dates
     date_labels = []
-    current = t_start
-    while current <= t_end:
-        date_labels.append(current.strftime('%Y-%m-%d'))
-        current += timedelta(days=1)
+    current_d = t_start
+    while current_d <= t_end:
+        date_labels.append(current_d.strftime('%Y-%m-%d'))
+        current_d += timedelta(days=1)
         
-    # 3. Global Trend (Completed tasks over time)
-    # Base trend query needs to respect the same filters as above? 
-    # Usually "Trend" implies "History", so we look at completed_at.
-    # But we should respect the User/Tag filters.
-    
+    # 6. Global Trend (with area security applied!)
     trend_query = Task.query.filter(Task.status == 'Completed', Task.completed_at.isnot(None))
+    trend_query = _apply_area_security(trend_query)  # SECURITY FIX
     
+    if current_user.is_admin and area_filter and area_filter != 'all':
+        trend_query = trend_query.filter(Task.area_id == int(area_filter))
     if user_ids:
         trend_query = trend_query.filter(Task.assignees.any(User.id.in_(user_ids)))
     if tag_ids:
@@ -3181,7 +3233,6 @@ def reports_data():
     trend_query = trend_query.filter(Task.completed_at >= t_start, Task.completed_at <= t_end)
     completed_tasks_trend = trend_query.all()
     
-    # Group global completed by date
     global_date_counts = {d: 0 for d in date_labels}
     for t in completed_tasks_trend:
         d_str = t.completed_at.strftime('%Y-%m-%d')
@@ -3193,28 +3244,16 @@ def reports_data():
         'completed_counts': [global_date_counts[d] for d in date_labels]
     }
 
-    # 4. Employee Trend (Line chart per employee)
-    # We reuse 'completed_tasks_trend' but group by user
+    # 7. Employee Trend
     employee_trend_datasets = []
-    # If too many users, chart gets messy. Maybe limit to top 5 or selected?
-    # For now, do all selected users (or all if none selected)
-    
     for user in target_users:
-        # Get tasks for this user from the trend set
         user_trend_tasks = [t for t in completed_tasks_trend if user in t.assignees]
-        
-        # If user has 0 completed tasks in this period, maybe skip? Or show flat line?
-        # Let's show flat line if they are in the filter list.
-        
         u_date_counts = {d: 0 for d in date_labels}
         for t in user_trend_tasks:
             d_str = t.completed_at.strftime('%Y-%m-%d')
             if d_str in u_date_counts:
                 u_date_counts[d_str] += 1
         
-        # Only add dataset if there's at least one task or if explicitly filtered?
-        # Let's add all to be safe, frontend can hide if needed.
-        # Optimization: if sum is 0, maybe skip to keep chart clean?
         if sum(u_date_counts.values()) > 0 or user_ids:
              employee_trend_datasets.append({
                 'label': user.full_name,
@@ -3222,20 +3261,12 @@ def reports_data():
                 'fill': False
              })
 
-    # 5. Tag Trend (Line chart per tag)
-    # We need to query tags. If tag_ids filter is on, use those. Else all tags?
-    # If all tags, that might be too many lines. Let's use top 5 active tags or just the filtered ones.
-    
+    # 8. Tag Trend
     tag_trend_datasets = []
     target_tags = Tag.query.filter(Tag.id.in_(tag_ids)).all() if tag_ids else Tag.query.all()
     
-    # If no tag filter, maybe we only show tags that actually have data in this period to avoid clutter?
-    # Or just all tags. Let's try all tags but skip empty ones.
-    
     for tag in target_tags:
-        # Filter trend tasks that have this tag
         tag_trend_tasks = [t for t in completed_tasks_trend if tag in t.tags]
-        
         t_date_counts = {d: 0 for d in date_labels}
         for t in tag_trend_tasks:
             d_str = t.completed_at.strftime('%Y-%m-%d')
@@ -3245,17 +3276,31 @@ def reports_data():
         if sum(t_date_counts.values()) > 0 or tag_ids:
             tag_trend_datasets.append({
                 'label': tag.name,
-                'borderColor': tag.color, # Use tag color!
+                'borderColor': tag.color,
                 'data': [t_date_counts[d] for d in date_labels],
                 'fill': False
             })
 
-    # 6. Detailed KPIs
+    # 9. KPIs
     kpis = calculate_kpis(tasks, global_completed)
+
+    print(f"[REPORTS] Returning data: {len(tasks)} tasks, KPIs: {kpis}")
 
     return jsonify({
         'user_stats': user_stats,
-        'global_stats': {'completed': global_completed, 'pending': global_pending},
+        'global_stats': {
+            'completed': global_completed,
+            'in_progress': global_in_progress,
+            'in_review': global_in_review,
+            'pending': global_pending
+        },
+        'priority_stats': {
+            'normal': priority_normal,
+            'media': priority_media,
+            'urgente': priority_urgente
+        },
+        'area_stats': area_stats,
+        'process_stats': process_stats,
         'trend': global_trend_data,
         'employee_trend': employee_trend_datasets,
         'tag_trend': tag_trend_datasets,
@@ -3265,11 +3310,13 @@ def reports_data():
 @main_bp.route('/api/reports/calculate_difference', methods=['POST'])
 @login_required
 def api_calculate_difference():
+    if not current_user.can_see_reports():
+        return jsonify({'error': 'No tienes acceso'}), 403
+    
     data = request.get_json()
     tag_a_ids = data.get('tag_a_ids', [])
     tag_b_ids = data.get('tag_b_ids', [])
     
-    # Fallback for old single ID calls
     if not tag_a_ids and 'tag_a_id' in data:
         tag_a_ids = [data['tag_a_id']]
     if not tag_b_ids and 'tag_b_id' in data:
@@ -3281,7 +3328,7 @@ def api_calculate_difference():
     def get_group_time(t_ids):
         if not t_ids: return 0
         q = Task.query.filter(Task.status != 'Anulado')
-        # Filter tasks that have ANY of the tags in t_ids
+        q = _apply_area_security(q)  # SECURITY FIX
         q = q.filter(Task.tags.any(Tag.id.in_(t_ids)))
         
         if start_date_str and end_date_str:
@@ -3292,16 +3339,14 @@ def api_calculate_difference():
             except ValueError:
                 pass
                 
-        tasks = q.all()
-        # Sum time_spent (Task objects are unique due to SQLAlchemys identity map in this query context)
-        total = sum(t.time_spent for t in tasks if t.time_spent)
+        found_tasks = q.all()
+        total = sum(t.time_spent for t in found_tasks if t.time_spent)
         return total
 
     time_a = get_group_time(tag_a_ids)
     time_b = get_group_time(tag_b_ids)
     
     diff = time_a - time_b
-    
     abs_diff = abs(diff)
     hours = int(abs_diff / 60)
     minutes = int(abs_diff % 60)
@@ -3319,10 +3364,14 @@ def api_calculate_difference():
 @main_bp.route('/reports/export', methods=['POST'])
 @login_required
 def export_report():
+    if not current_user.can_see_reports():
+        flash('No tienes acceso a los reportes.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    
     # Get filters from form data
     user_ids_str = request.form.get('user_ids')
-    tag_ids_str = request.form.get('tag_ids') # New
-    status_filter = request.form.get('status') # New
+    tag_ids_str = request.form.get('tag_ids')
+    status_filter = request.form.get('status')
     start_date_str = request.form.get('start_date')
     end_date_str = request.form.get('end_date')
     include_kpis_str = request.form.get('include_kpis')
@@ -3330,19 +3379,18 @@ def export_report():
     
     import json
     user_ids = json.loads(user_ids_str) if user_ids_str else []
-    tag_ids = json.loads(tag_ids_str) if tag_ids_str else [] # New
+    tag_ids = json.loads(tag_ids_str) if tag_ids_str else []
     
-    # Fetch data - ALWAYS exclude 'Anulado' and blocked tasks from reports
+    # Fetch data - exclude 'Anulado' and blocked tasks
     query = Task.query.filter(Task.status != 'Anulado', Task.enabled == True)
+    query = _apply_area_security(query)  # SECURITY FIX
+    
     if user_ids:
         query = query.filter(Task.assignees.any(User.id.in_(user_ids)))
-        
-    if tag_ids: # New
+    if tag_ids:
         query = query.filter(Task.tags.any(Tag.id.in_(tag_ids)))
-        
-    if status_filter and status_filter != 'All': # New
+    if status_filter and status_filter != 'All':
         query = query.filter(Task.status == status_filter)
-        
     if start_date_str and end_date_str:
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
@@ -3350,46 +3398,34 @@ def export_report():
         
     tasks = query.order_by(Task.due_date).all()
     
-    # Prepare data for charts
-    
-    # Generate PDF
     from pdf_utils import generate_report_pdf
     
-    # Stats calculation:
+    # Stats calculation
     target_users = User.query.filter(User.id.in_(user_ids)).all() if user_ids else User.query.all()
     user_stats = []
     for user in target_users:
         u_tasks = [t for t in tasks if user in t.assignees]
-        # If filtering by users, only show those users. If not, show all.
-        # Logic: if user_ids is set, we only iterate those. If not, we iterate all.
-        # But if we filter by tag, a user might have 0 tasks with that tag.
-        # Should we show them? Yes, with 0.
-        
         completed = sum(1 for t in u_tasks if t.status == 'Completed')
         user_stats.append({'name': user.full_name, 'completed': completed, 'pending': len(u_tasks)-completed})
         
-    # Global Stats
     global_completed = sum(1 for t in tasks if t.status == 'Completed')
     global_pending = len(tasks) - global_completed
     
     # Trend Data
     t_start = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else datetime.now() - timedelta(days=30)
-    
     if end_date_str:
         t_end = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
     else:
         t_end = datetime.now()
     
-    # Filter completed tasks for trend (respecting all filters)
-    # We can just filter 'tasks' list since it already has all filters applied
     completed_tasks_trend = [t for t in tasks if t.status == 'Completed' and t.completed_at and t_start <= t.completed_at <= t_end]
     
     date_counts = {}
-    current = t_start
-    while current <= t_end:
-        date_str = current.strftime('%Y-%m-%d')
+    current_d = t_start
+    while current_d <= t_end:
+        date_str = current_d.strftime('%Y-%m-%d')
         date_counts[date_str] = 0
-        current += timedelta(days=1)
+        current_d += timedelta(days=1)
         
     for t in completed_tasks_trend:
         d_str = t.completed_at.strftime('%Y-%m-%d')
@@ -3401,7 +3437,7 @@ def export_report():
         'completed_counts': list(date_counts.values())
     }
     
-    # --- Employee Trend (for PDF) ---
+    # Employee Trend (for PDF)
     employee_trend_datasets = []
     for user in target_users:
         user_trend_tasks = [t for t in completed_tasks_trend if user in t.assignees]
@@ -3410,17 +3446,15 @@ def export_report():
             d_str = t.completed_at.strftime('%Y-%m-%d')
             if d_str in u_date_counts:
                 u_date_counts[d_str] += 1
-        
         if sum(u_date_counts.values()) > 0 or user_ids:
              employee_trend_datasets.append({
                 'label': user.full_name,
                 'data': [u_date_counts[d] for d in date_counts.keys()]
              })
 
-    # --- Tag Trend (for PDF) ---
+    # Tag Trend (for PDF)
     tag_trend_datasets = []
     target_tags = Tag.query.filter(Tag.id.in_(tag_ids)).all() if tag_ids else Tag.query.all()
-    
     for tag in target_tags:
         tag_trend_tasks = [t for t in completed_tasks_trend if tag in t.tags]
         t_date_counts = {d: 0 for d in date_counts.keys()}
@@ -3428,7 +3462,6 @@ def export_report():
             d_str = t.completed_at.strftime('%Y-%m-%d')
             if d_str in t_date_counts:
                 t_date_counts[d_str] += 1
-                
         if sum(t_date_counts.values()) > 0 or tag_ids:
             tag_trend_datasets.append({
                 'label': tag.name,
@@ -3436,7 +3469,6 @@ def export_report():
                 'data': [t_date_counts[d] for d in date_counts.keys()]
             })
     
-    # Filter Info for PDF
     filter_info = {
         'users': [u.full_name for u in target_users] if user_ids else ['Todos'],
         'tags': [t.name for t in Tag.query.filter(Tag.id.in_(tag_ids)).all()] if tag_ids else ['Todas'],
@@ -3448,8 +3480,8 @@ def export_report():
         'user_stats': user_stats,
         'global_stats': {'completed': global_completed, 'pending': global_pending},
         'trend': trend_data,
-        'employee_trend': employee_trend_datasets, # New
-        'tag_trend': tag_trend_datasets, # New
+        'employee_trend': employee_trend_datasets,
+        'tag_trend': tag_trend_datasets,
         'start_date': start_date_str,
         'end_date': end_date_str,
         'filters': filter_info
@@ -3459,7 +3491,6 @@ def export_report():
         report_data['kpis'] = calculate_kpis(tasks, global_completed)
         
     # Calculate difference if tags provided
-    # Input names are 'diff_tag_a' and 'diff_tag_b' which now contain JSON lists
     import json
     diff_tag_a_json = request.form.get('diff_tag_a')
     diff_tag_b_json = request.form.get('diff_tag_b')
@@ -3469,10 +3500,10 @@ def export_report():
             tag_a_ids = json.loads(diff_tag_a_json)
             tag_b_ids = json.loads(diff_tag_b_json)
             
-            # Helper to calculate group time (duplicated logic, should be refactored)
             def get_group_time_export(t_ids):
                 if not t_ids: return 0, "0h 0m"
                 q = Task.query.filter(Task.status != 'Anulado')
+                q = _apply_area_security(q)  # SECURITY FIX
                 q = q.filter(Task.tags.any(Tag.id.in_(t_ids)))
                 if start_date_str and end_date_str:
                     s_date = datetime.strptime(start_date_str, '%Y-%m-%d')
@@ -3480,23 +3511,18 @@ def export_report():
                     q = q.filter(Task.due_date >= s_date, Task.due_date <= e_date)
                 ts = q.all()
                 total_min = sum(t.time_spent for t in ts if t.time_spent)
-                
                 h = int(total_min / 60)
                 m = int(total_min % 60)
                 return total_min, f"{h}h {m}m"
 
-            # Get objects for names
             tags_a = Tag.query.filter(Tag.id.in_(tag_a_ids)).all()
             tags_b = Tag.query.filter(Tag.id.in_(tag_b_ids)).all()
-            
-            # Format names (e.g. "TagA, TagB")
             name_a = ", ".join([t.name for t in tags_a])
             name_b = ", ".join([t.name for t in tags_b])
             
             if tags_a and tags_b:
                 time_a, str_a = get_group_time_export(tag_a_ids)
                 time_b, str_b = get_group_time_export(tag_b_ids)
-                
                 diff = time_a - time_b
                 abs_diff = abs(diff)
                 d_h = int(abs_diff / 60)
@@ -3521,15 +3547,16 @@ def export_report():
     return response
 
 def calculate_kpis(tasks, global_completed):
-    # Total Tasks
     kpi_total = len(tasks)
-    
-    # Completion Rate
     kpi_completion_rate = round((global_completed / kpi_total * 100), 1) if kpi_total > 0 else 0
     
-    # Overdue Tasks (Pending and due_date < now)
+    # Overdue: any non-completed task past due date
     now = datetime.now()
-    kpi_overdue = sum(1 for t in tasks if t.status == 'Pending' and t.due_date < now)
+    kpi_overdue = sum(1 for t in tasks if t.status in ['Pending', 'In Progress', 'In Review'] and t.due_date < now)
+    
+    # Status counts
+    kpi_in_progress = sum(1 for t in tasks if t.status == 'In Progress')
+    kpi_in_review = sum(1 for t in tasks if t.status == 'In Review')
     
     # Time calculations (using time_spent field in minutes)
     tasks_with_time = [t for t in tasks if t.time_spent and t.time_spent > 0]
@@ -3538,26 +3565,40 @@ def calculate_kpis(tasks, global_completed):
         total_minutes = sum(t.time_spent for t in tasks_with_time)
         avg_minutes = total_minutes / len(tasks_with_time)
         
-        # Format avg_time: show hours if >= 60 min, otherwise minutes
         if avg_minutes >= 60:
             hours = avg_minutes / 60
             kpi_avg_time = f"{round(hours, 1)} horas"
         else:
             kpi_avg_time = f"{round(avg_minutes)} min"
         
-        # Format total_time: show both minutes and hours
         total_hours = total_minutes / 60
         kpi_total_time = f"{int(total_minutes)} min ({round(total_hours, 1)} hs)"
     else:
         kpi_avg_time = "N/A"
         kpi_total_time = "0 min"
+    
+    # Cycle time: average time from created_at to completed_at (in days)
+    completed_tasks = [t for t in tasks if t.status == 'Completed' and t.completed_at and t.created_at]
+    if completed_tasks:
+        cycle_times = [(t.completed_at - t.created_at).total_seconds() / 86400 for t in completed_tasks]
+        avg_cycle = sum(cycle_times) / len(cycle_times)
+        if avg_cycle < 1:
+            hours_cycle = avg_cycle * 24
+            kpi_avg_cycle = f"{round(hours_cycle, 1)} hs"
+        else:
+            kpi_avg_cycle = f"{round(avg_cycle, 1)} días"
+    else:
+        kpi_avg_cycle = "N/A"
 
     return {
         'total': kpi_total,
         'completion_rate': kpi_completion_rate,
         'overdue': kpi_overdue,
+        'in_progress': kpi_in_progress,
+        'in_review': kpi_in_review,
         'avg_time': kpi_avg_time,
-        'total_time': kpi_total_time
+        'total_time': kpi_total_time,
+        'avg_cycle_time': kpi_avg_cycle
     }
 
 # --- Excel Import Routes ---

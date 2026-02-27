@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"with open(''templates/base.html'', ''r'', encoding=''utf-8'') as f: lines = f.readlines(); print(f''Base.html has {len(lines)} lines'')\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

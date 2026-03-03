@@ -3558,14 +3558,20 @@ def calculate_kpis(tasks, global_completed):
     kpi_in_progress = sum(1 for t in tasks if t.status == 'In Progress')
     kpi_in_review = sum(1 for t in tasks if t.status == 'In Review')
     
-    # Time calculations (using time_spent field in minutes)
-    tasks_with_time = [t for t in tasks if t.time_spent and t.time_spent > 0]
+    # Time calculations: elapsed time from started_at (In Progress) to completed_at (Completed)
+    tasks_with_time = [t for t in tasks if t.started_at and t.completed_at and t.status == 'Completed']
     
     if tasks_with_time:
-        total_minutes = sum(t.time_spent for t in tasks_with_time)
+        total_minutes = sum(
+            (t.completed_at - t.started_at).total_seconds() / 60
+            for t in tasks_with_time
+        )
         avg_minutes = total_minutes / len(tasks_with_time)
         
-        if avg_minutes >= 60:
+        if avg_minutes >= 1440:  # more than 24 hours
+            days = avg_minutes / 1440
+            kpi_avg_time = f"{round(days, 1)} días"
+        elif avg_minutes >= 60:
             hours = avg_minutes / 60
             kpi_avg_time = f"{round(hours, 1)} horas"
         else:

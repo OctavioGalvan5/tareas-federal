@@ -3121,12 +3121,30 @@ def reports_data():
             )
         else:
             query = query.filter(Task.status == status_filter)
-    
+
     # Filter by date range
     if start_date_str and end_date_str:
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
-        query = query.filter(Task.due_date >= start_date, Task.due_date <= end_date)
+
+        # For completed tasks, filter by completed_at (when they were actually completed)
+        # For non-completed tasks, filter by due_date (when they are scheduled)
+        if status_filter == 'Completed':
+            query = query.filter(Task.completed_at >= start_date, Task.completed_at <= end_date)
+        elif status_filter and status_filter != 'All':
+            # For specific non-completed status (Pending, In Progress, In Review, Overdue)
+            # Use due_date for scheduling reference
+            query = query.filter(Task.due_date >= start_date, Task.due_date <= end_date)
+        else:
+            # No status filter or 'All': include tasks where either:
+            # - completed_at falls in range (for completed tasks)
+            # - due_date falls in range (for non-completed tasks)
+            query = query.filter(
+                db.or_(
+                    db.and_(Task.status == 'Completed', Task.completed_at >= start_date, Task.completed_at <= end_date),
+                    db.and_(Task.status != 'Completed', Task.due_date >= start_date, Task.due_date <= end_date)
+                )
+            )
         
     tasks = query.all()
     
@@ -3394,7 +3412,18 @@ def export_report():
     if start_date_str and end_date_str:
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
-        query = query.filter(Task.due_date >= start_date, Task.due_date <= end_date)
+        # Apply same date filter logic as in reports_data
+        if status_filter == 'Completed':
+            query = query.filter(Task.completed_at >= start_date, Task.completed_at <= end_date)
+        elif status_filter and status_filter != 'All':
+            query = query.filter(Task.due_date >= start_date, Task.due_date <= end_date)
+        else:
+            query = query.filter(
+                db.or_(
+                    db.and_(Task.status == 'Completed', Task.completed_at >= start_date, Task.completed_at <= end_date),
+                    db.and_(Task.status != 'Completed', Task.due_date >= start_date, Task.due_date <= end_date)
+                )
+            )
         
     tasks = query.order_by(Task.due_date).all()
     
@@ -3539,10 +3568,19 @@ def export_report():
             print(f"Error calculating diff for export: {e}")
     
     pdf = generate_report_pdf(report_data)
-    
+
+    # Generate filename with date range
+    if start_date_str and end_date_str:
+        # Format dates as DD-MM-YYYY for filename
+        start_formatted = datetime.strptime(start_date_str, '%Y-%m-%d').strftime('%d-%m-%Y')
+        end_formatted = datetime.strptime(end_date_str, '%Y-%m-%d').strftime('%d-%m-%Y')
+        filename = f'reporte_{start_formatted}_al_{end_formatted}.pdf'
+    else:
+        filename = f'reporte_avanzado_{date.today().strftime("%d-%m-%Y")}.pdf'
+
     response = make_response(pdf.output(dest='S').encode('latin-1'))
     response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = f'attachment; filename=reporte_avanzado_{date.today()}.pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename={filename}'
     
     return response
 

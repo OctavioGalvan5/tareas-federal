@@ -3128,21 +3128,21 @@ def reports_data():
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
 
         # For completed tasks, filter by completed_at (when they were actually completed)
-        # For non-completed tasks, filter by due_date (when they are scheduled)
+        # For non-completed tasks, show all tasks due ON or BEFORE the end_date (pending until that date)
         if status_filter == 'Completed':
             query = query.filter(Task.completed_at >= start_date, Task.completed_at <= end_date)
         elif status_filter and status_filter != 'All':
-            # For specific non-completed status (Pending, In Progress, In Review, Overdue)
-            # Use due_date for scheduling reference
-            query = query.filter(Task.due_date >= start_date, Task.due_date <= end_date)
+            # For specific non-completed status: show tasks due on or before end_date
+            # This includes overdue tasks and tasks due within the range
+            query = query.filter(Task.due_date <= end_date)
         else:
             # No status filter or 'All': include tasks where either:
             # - completed_at falls in range (for completed tasks)
-            # - due_date falls in range (for non-completed tasks)
+            # - due_date is on or before end_date (for non-completed tasks - all pending work)
             query = query.filter(
                 db.or_(
                     db.and_(Task.status == 'Completed', Task.completed_at >= start_date, Task.completed_at <= end_date),
-                    db.and_(Task.status != 'Completed', Task.due_date >= start_date, Task.due_date <= end_date)
+                    db.and_(Task.status != 'Completed', Task.due_date <= end_date)
                 )
             )
         
@@ -3416,12 +3416,13 @@ def export_report():
         if status_filter == 'Completed':
             query = query.filter(Task.completed_at >= start_date, Task.completed_at <= end_date)
         elif status_filter and status_filter != 'All':
-            query = query.filter(Task.due_date >= start_date, Task.due_date <= end_date)
+            # Show tasks due on or before end_date (all pending work until that date)
+            query = query.filter(Task.due_date <= end_date)
         else:
             query = query.filter(
                 db.or_(
                     db.and_(Task.status == 'Completed', Task.completed_at >= start_date, Task.completed_at <= end_date),
-                    db.and_(Task.status != 'Completed', Task.due_date >= start_date, Task.due_date <= end_date)
+                    db.and_(Task.status != 'Completed', Task.due_date <= end_date)
                 )
             )
         

@@ -3282,7 +3282,7 @@ def reports_data():
             })
 
     # 9. KPIs
-    kpis = calculate_kpis(tasks, global_completed)
+    kpis = calculate_kpis(tasks, global_completed, start_date_str, end_date_str)
 
     print(f"[REPORTS] Returning data: {len(tasks)} tasks, KPIs: {kpis}")
 
@@ -3488,7 +3488,7 @@ def export_report():
     }
     
     if include_kpis:
-        report_data['kpis'] = calculate_kpis(tasks, global_completed)
+        report_data['kpis'] = calculate_kpis(tasks, global_completed, start_date_str, end_date_str)
         
     # Calculate difference if tags provided
     import json
@@ -3546,7 +3546,7 @@ def export_report():
     
     return response
 
-def calculate_kpis(tasks, global_completed):
+def calculate_kpis(tasks, global_completed, start_date_str=None, end_date_str=None):
     kpi_total = len(tasks)
     kpi_completion_rate = round((global_completed / kpi_total * 100), 1) if kpi_total > 0 else 0
     
@@ -3558,43 +3558,24 @@ def calculate_kpis(tasks, global_completed):
     kpi_in_progress = sum(1 for t in tasks if t.status == 'In Progress')
     kpi_in_review = sum(1 for t in tasks if t.status == 'In Review')
     
-    # Time calculations: elapsed time from started_at (In Progress) to completed_at (Completed)
-    tasks_with_time = [t for t in tasks if t.started_at and t.completed_at and t.status == 'Completed']
+    # Completed count
+    kpi_completed = global_completed
     
-    if tasks_with_time:
-        total_minutes = sum(
-            (t.completed_at - t.started_at).total_seconds() / 60
-            for t in tasks_with_time
-        )
-        avg_minutes = total_minutes / len(tasks_with_time)
-        
-        if avg_minutes >= 1440:  # more than 24 hours
-            days = avg_minutes / 1440
-            kpi_avg_time = f"{round(days, 1)} días"
-        elif avg_minutes >= 60:
-            hours = avg_minutes / 60
-            kpi_avg_time = f"{round(hours, 1)} horas"
-        else:
-            kpi_avg_time = f"{round(avg_minutes)} min"
-        
-        total_hours = total_minutes / 60
-        kpi_total_time = f"{int(total_minutes)} min ({round(total_hours, 1)} hs)"
-    else:
-        kpi_avg_time = "N/A"
-        kpi_total_time = "0 min"
+    # Pending count (includes overdue - all non-completed tasks)
+    kpi_pending = kpi_total - kpi_completed
     
-    # Cycle time: average time from created_at to completed_at (in days)
-    completed_tasks = [t for t in tasks if t.status == 'Completed' and t.completed_at and t.created_at]
-    if completed_tasks:
-        cycle_times = [(t.completed_at - t.created_at).total_seconds() / 86400 for t in completed_tasks]
-        avg_cycle = sum(cycle_times) / len(cycle_times)
-        if avg_cycle < 1:
-            hours_cycle = avg_cycle * 24
-            kpi_avg_cycle = f"{round(hours_cycle, 1)} hs"
-        else:
-            kpi_avg_cycle = f"{round(avg_cycle, 1)} días"
+    # Average completed tasks per day (based on date range filter)
+    if start_date_str and end_date_str:
+        try:
+            d_start = datetime.strptime(start_date_str, '%Y-%m-%d')
+            d_end = datetime.strptime(end_date_str, '%Y-%m-%d')
+            num_days = max((d_end - d_start).days + 1, 1)
+            kpi_avg_per_day = round(kpi_completed / num_days, 1)
+        except ValueError:
+            kpi_avg_per_day = 0
     else:
-        kpi_avg_cycle = "N/A"
+        # Default to 30 days if no date filter
+        kpi_avg_per_day = round(kpi_completed / 30, 1) if kpi_completed > 0 else 0
 
     return {
         'total': kpi_total,
@@ -3602,9 +3583,9 @@ def calculate_kpis(tasks, global_completed):
         'overdue': kpi_overdue,
         'in_progress': kpi_in_progress,
         'in_review': kpi_in_review,
-        'avg_time': kpi_avg_time,
-        'total_time': kpi_total_time,
-        'avg_cycle_time': kpi_avg_cycle
+        'completed': kpi_completed,
+        'pending': kpi_pending,
+        'avg_per_day': kpi_avg_per_day
     }
 
 # --- Excel Import Routes ---

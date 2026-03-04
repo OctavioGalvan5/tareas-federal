@@ -259,73 +259,114 @@ def generate_report_pdf(data):
     if 'kpis' in data:
         kpis = data['kpis']
         
-        # Draw 4 cards
-        y_start = pdf.get_y()
-        card_width = 45
+        # Draw 8 cards in 2 rows of 4
+        card_width = 43
         spacing = 4
         x_start = 10
-        card_width = 35  # Narrower to fit 5 cards
+        row_height = 25
+        row_spacing = 5
+        
+        # === Row 1: Total, Tasa Finalización, Vencidas, En Progreso ===
+        y_start = pdf.get_y()
         
         # Card 1: Total
         pdf.set_fill_color(243, 244, 246) # Gray 100
-        pdf.rect(x_start, y_start, card_width, 25, 'F')
+        pdf.rect(x_start, y_start, card_width, row_height, 'F')
         pdf.set_xy(x_start, y_start + 5)
         pdf.set_font('Arial', 'B', 12)
         pdf.set_text_color(0, 119, 190) # Brand Blue
         pdf.cell(card_width, 6, str(kpis['total']), 0, 2, 'C')
-        pdf.set_font('Arial', '', 8)
+        pdf.set_font('Arial', '', 7)
         pdf.set_text_color(100, 100, 100)
         pdf.cell(card_width, 6, 'Total Tareas', 0, 0, 'C')
         
         # Card 2: Completion Rate
         x_pos = x_start + card_width + spacing
         pdf.set_fill_color(209, 250, 229) # Emerald 100
-        pdf.rect(x_pos, y_start, card_width, 25, 'F')
+        pdf.rect(x_pos, y_start, card_width, row_height, 'F')
         pdf.set_xy(x_pos, y_start + 5)
         pdf.set_font('Arial', 'B', 12)
         pdf.set_text_color(4, 120, 87) # Emerald 700
         pdf.cell(card_width, 6, f"{kpis['completion_rate']}%", 0, 2, 'C')
-        pdf.set_font('Arial', '', 8)
+        pdf.set_font('Arial', '', 7)
         pdf.set_text_color(100, 100, 100)
-        pdf.cell(card_width, 6, 'Tasa Finalización', 0, 0, 'C')
+        pdf.cell(card_width, 6, 'Tasa Finalizacion', 0, 0, 'C')
         
         # Card 3: Overdue
         x_pos += card_width + spacing
         pdf.set_fill_color(254, 226, 226) # Red 100
-        pdf.rect(x_pos, y_start, card_width, 25, 'F')
+        pdf.rect(x_pos, y_start, card_width, row_height, 'F')
         pdf.set_xy(x_pos, y_start + 5)
         pdf.set_font('Arial', 'B', 12)
         pdf.set_text_color(185, 28, 28) # Red 700
         pdf.cell(card_width, 6, str(kpis['overdue']), 0, 2, 'C')
-        pdf.set_font('Arial', '', 8)
+        pdf.set_font('Arial', '', 7)
         pdf.set_text_color(100, 100, 100)
         pdf.cell(card_width, 6, 'Vencidas', 0, 0, 'C')
         
-        # Card 4: Avg Time
+        # Card 4: In Progress
         x_pos += card_width + spacing
         pdf.set_fill_color(219, 234, 254) # Blue 100
-        pdf.rect(x_pos, y_start, card_width, 25, 'F')
+        pdf.rect(x_pos, y_start, card_width, row_height, 'F')
         pdf.set_xy(x_pos, y_start + 5)
-        pdf.set_font('Arial', 'B', 10) # Smaller font for text
+        pdf.set_font('Arial', 'B', 12)
         pdf.set_text_color(29, 78, 216) # Blue 700
-        pdf.cell(card_width, 6, str(kpis['avg_time']), 0, 2, 'C')
+        pdf.cell(card_width, 6, str(kpis.get('in_progress', 0)), 0, 2, 'C')
         pdf.set_font('Arial', '', 7)
         pdf.set_text_color(100, 100, 100)
-        pdf.cell(card_width, 6, 'Tiempo Promedio', 0, 0, 'C')
+        pdf.cell(card_width, 6, 'En Progreso', 0, 0, 'C')
         
-        # Card 5: Total Time
-        x_pos += card_width + spacing
+        # === Row 2: En Revisión, Completadas, Pendientes, Promedio/Día ===
+        y_start2 = y_start + row_height + row_spacing
+        
+        # Card 5: In Review
         pdf.set_fill_color(237, 233, 254) # Violet 100
-        pdf.rect(x_pos, y_start, card_width, 25, 'F')
-        pdf.set_xy(x_pos, y_start + 5)
-        pdf.set_font('Arial', 'B', 9)
+        pdf.rect(x_start, y_start2, card_width, row_height, 'F')
+        pdf.set_xy(x_start, y_start2 + 5)
+        pdf.set_font('Arial', 'B', 12)
         pdf.set_text_color(109, 40, 217) # Violet 700
-        pdf.cell(card_width, 6, str(kpis.get('total_time', '0 min')), 0, 2, 'C')
+        pdf.cell(card_width, 6, str(kpis.get('in_review', 0)), 0, 2, 'C')
         pdf.set_font('Arial', '', 7)
         pdf.set_text_color(100, 100, 100)
-        pdf.cell(card_width, 6, 'Tiempo Total', 0, 0, 'C')
+        pdf.cell(card_width, 6, 'En Revision', 0, 0, 'C')
         
-        pdf.ln(35) # Move down past cards
+        # Card 6: Completed
+        x_pos = x_start + card_width + spacing
+        pdf.set_fill_color(209, 250, 229) # Emerald 100
+        pdf.rect(x_pos, y_start2, card_width, row_height, 'F')
+        pdf.set_xy(x_pos, y_start2 + 5)
+        pdf.set_font('Arial', 'B', 12)
+        pdf.set_text_color(4, 120, 87) # Emerald 700
+        pdf.cell(card_width, 6, str(kpis.get('completed', 0)), 0, 2, 'C')
+        pdf.set_font('Arial', '', 7)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(card_width, 6, 'Completadas', 0, 0, 'C')
+        
+        # Card 7: Pending
+        x_pos += card_width + spacing
+        pdf.set_fill_color(254, 243, 199) # Amber 100
+        pdf.rect(x_pos, y_start2, card_width, row_height, 'F')
+        pdf.set_xy(x_pos, y_start2 + 5)
+        pdf.set_font('Arial', 'B', 12)
+        pdf.set_text_color(180, 83, 9) # Amber 700
+        pdf.cell(card_width, 6, str(kpis.get('pending', 0)), 0, 2, 'C')
+        pdf.set_font('Arial', '', 7)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(card_width, 6, 'Pendientes', 0, 0, 'C')
+        
+        # Card 8: Avg Per Day
+        x_pos += card_width + spacing
+        pdf.set_fill_color(243, 244, 246) # Gray 100
+        pdf.rect(x_pos, y_start2, card_width, row_height, 'F')
+        pdf.set_xy(x_pos, y_start2 + 5)
+        pdf.set_font('Arial', 'B', 12)
+        pdf.set_text_color(0, 119, 190) # Brand Blue
+        pdf.cell(card_width, 6, str(kpis.get('avg_per_day', 0)), 0, 2, 'C')
+        pdf.set_font('Arial', '', 7)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(card_width, 6, 'Promedio/Dia', 0, 0, 'C')
+        
+        pdf.set_y(y_start2 + row_height + 10) # Move down past both rows
 
     # --- Difference Calculator Section ---
     if 'diff_calc' in data:

@@ -48,20 +48,20 @@
         <div class="kpi-label">En Revisión</div>
         <div class="kpi-value" id="kpiInReview">-</div>
     </div>
-    <div class="kpi-card kpi-time">
+    <div class="kpi-card kpi-completed-count">
+        <div class="kpi-icon"><i class="fas fa-clipboard-check"></i></div>
+        <div class="kpi-label">Completadas</div>
+        <div class="kpi-value" id="kpiCompletedCount">-</div>
+    </div>
+    <div class="kpi-card kpi-pending-count">
         <div class="kpi-icon"><i class="fas fa-clock"></i></div>
-        <div class="kpi-label">Tiempo Promedio</div>
-        <div class="kpi-value" id="kpiAvgTime">-</div>
+        <div class="kpi-label">Pendientes</div>
+        <div class="kpi-value" id="kpiPendingCount">-</div>
     </div>
-    <div class="kpi-card kpi-cycle">
-        <div class="kpi-icon"><i class="fas fa-sync-alt"></i></div>
-        <div class="kpi-label">Tiempo Ciclo</div>
-        <div class="kpi-value" id="kpiCycleTime">-</div>
-    </div>
-    <div class="kpi-card kpi-total-time">
-        <div class="kpi-icon"><i class="fas fa-hourglass-half"></i></div>
-        <div class="kpi-label">Tiempo Total</div>
-        <div class="kpi-value" id="kpiTotalTime">-</div>
+    <div class="kpi-card kpi-avg-day">
+        <div class="kpi-icon"><i class="fas fa-calendar-day"></i></div>
+        <div class="kpi-label">Promedio/Día</div>
+        <div class="kpi-value" id="kpiAvgPerDay">-</div>
     </div>
 </div>
 
@@ -515,9 +515,9 @@
         document.getElementById('kpiOverdue').textContent = kpis.overdue;
         document.getElementById('kpiInProgress').textContent = kpis.in_progress;
         document.getElementById('kpiInReview').textContent = kpis.in_review;
-        document.getElementById('kpiAvgTime').textContent = kpis.avg_time || '-';
-        document.getElementById('kpiCycleTime').textContent = kpis.avg_cycle_time || '-';
-        document.getElementById('kpiTotalTime').textContent = kpis.total_time || '-';
+        document.getElementById('kpiCompletedCount').textContent = kpis.completed;
+        document.getElementById('kpiPendingCount').textContent = kpis.pending;
+        document.getElementById('kpiAvgPerDay').textContent = kpis.avg_per_day;
     }
 
     // ===== Process Table =====

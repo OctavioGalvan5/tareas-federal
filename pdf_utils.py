@@ -368,6 +368,83 @@ def generate_report_pdf(data):
         
         pdf.set_y(y_start2 + row_height + 10) # Move down past both rows
 
+    # --- Daily Breakdown Table ---
+    if 'trend' in data and data['trend']['dates']:
+        # Check if we need a new page
+        if pdf.get_y() > 200:
+            pdf.add_page()
+
+        pdf.set_font('Arial', 'B', 12)
+        pdf.set_text_color(50, 50, 50)
+        pdf.cell(0, 10, 'Tareas Completadas por Día', 0, 1)
+
+        # Prepare data
+        dates = data['trend']['dates']
+        counts = data['trend']['completed_counts']
+        total_completed = sum(counts)
+
+        # Table Header
+        pdf.set_fill_color(0, 119, 190)  # Brand Blue
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font('Arial', 'B', 9)
+
+        col_width = 63  # 190 / 3 columns = ~63 each
+
+        pdf.cell(col_width, 8, 'Fecha', 1, 0, 'C', True)
+        pdf.cell(col_width, 8, 'Tareas Completadas', 1, 0, 'C', True)
+        pdf.cell(col_width, 8, '% del Total', 1, 1, 'C', True)
+
+        # Table Body
+        pdf.set_font('Arial', '', 9)
+        pdf.set_text_color(0, 0, 0)
+
+        fill = False
+        max_rows_per_page = 25  # Limit rows to avoid overflow
+
+        for i, (date_str, count) in enumerate(zip(dates, counts)):
+            # Check for page break
+            if pdf.get_y() > 260:
+                pdf.add_page()
+                # Re-print header
+                pdf.set_fill_color(0, 119, 190)
+                pdf.set_text_color(255, 255, 255)
+                pdf.set_font('Arial', 'B', 9)
+                pdf.cell(col_width, 8, 'Fecha', 1, 0, 'C', True)
+                pdf.cell(col_width, 8, 'Tareas Completadas', 1, 0, 'C', True)
+                pdf.cell(col_width, 8, '% del Total', 1, 1, 'C', True)
+                pdf.set_font('Arial', '', 9)
+                pdf.set_text_color(0, 0, 0)
+                fill = False
+
+            # Zebra striping
+            if fill:
+                pdf.set_fill_color(243, 244, 246)
+            else:
+                pdf.set_fill_color(255, 255, 255)
+
+            # Format date as DD/MM/YYYY
+            formatted_date = datetime.strptime(date_str, '%Y-%m-%d').strftime('%d/%m/%Y')
+
+            # Calculate percentage
+            percentage = (count / total_completed * 100) if total_completed > 0 else 0
+
+            pdf.cell(col_width, 7, formatted_date, 1, 0, 'C', fill)
+            pdf.cell(col_width, 7, str(count), 1, 0, 'C', fill)
+            pdf.cell(col_width, 7, f'{percentage:.1f}%', 1, 1, 'C', fill)
+
+            fill = not fill
+
+        # Total row
+        pdf.set_fill_color(209, 250, 229)  # Emerald 100
+        pdf.set_font('Arial', 'B', 9)
+        pdf.set_text_color(4, 120, 87)  # Emerald 700
+        pdf.cell(col_width, 7, 'TOTAL', 1, 0, 'C', True)
+        pdf.cell(col_width, 7, str(total_completed), 1, 0, 'C', True)
+        pdf.cell(col_width, 7, '100.0%', 1, 1, 'C', True)
+
+        pdf.set_text_color(0, 0, 0)  # Reset color
+        pdf.ln(10)
+
     # --- Difference Calculator Section ---
     if 'diff_calc' in data:
         diff = data['diff_calc']

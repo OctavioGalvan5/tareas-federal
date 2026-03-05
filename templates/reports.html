@@ -43,10 +43,10 @@
         <div class="kpi-label">En Progreso</div>
         <div class="kpi-value" id="kpiInProgress">-</div>
     </div>
-    <div class="kpi-card kpi-review">
-        <div class="kpi-icon"><i class="fas fa-eye"></i></div>
-        <div class="kpi-label">En Revisión</div>
-        <div class="kpi-value" id="kpiInReview">-</div>
+    <div class="kpi-card kpi-avg-time">
+        <div class="kpi-icon"><i class="fas fa-stopwatch"></i></div>
+        <div class="kpi-label">Prom. Tiempo</div>
+        <div class="kpi-value" id="kpiAvgTime">-</div>
     </div>
     <div class="kpi-card kpi-completed-count">
         <div class="kpi-icon"><i class="fas fa-clipboard-check"></i></div>
@@ -514,7 +514,7 @@
         document.getElementById('kpiCompletion').textContent = kpis.completion_rate + '%';
         document.getElementById('kpiOverdue').textContent = kpis.overdue;
         document.getElementById('kpiInProgress').textContent = kpis.in_progress;
-        document.getElementById('kpiInReview').textContent = kpis.in_review;
+        document.getElementById('kpiAvgTime').textContent = kpis.avg_completion_time;
         document.getElementById('kpiCompletedCount').textContent = kpis.completed;
         document.getElementById('kpiPendingCount').textContent = kpis.pending;
         document.getElementById('kpiAvgPerDay').textContent = kpis.avg_per_day;
@@ -591,10 +591,10 @@
         statusChart = new Chart(ctxStatus, {
             type: 'doughnut',
             data: {
-                labels: ['Completadas', 'Pendientes', 'En Progreso', 'En Revisión'],
+                labels: ['Completadas', 'Pendientes', 'En Progreso'],
                 datasets: [{
-                    data: [gs.completed, gs.pending, gs.in_progress, gs.in_review],
-                    backgroundColor: ['#10b981', '#f59e0b', '#3b82f6', '#8b5cf6'],
+                    data: [gs.completed, gs.pending, gs.in_progress],
+                    backgroundColor: ['#10b981', '#f59e0b', '#3b82f6'],
                     borderWidth: 2,
                     borderColor: '#fff'
                 }]

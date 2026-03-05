@@ -319,16 +319,16 @@ def generate_report_pdf(data):
         # === Row 2: En Revisión, Completadas, Pendientes, Promedio/Día ===
         y_start2 = y_start + row_height + row_spacing
         
-        # Card 5: In Review
-        pdf.set_fill_color(237, 233, 254) # Violet 100
+        # Card 5: Promedio de Tiempo
+        pdf.set_fill_color(219, 234, 254) # Blue 100
         pdf.rect(x_start, y_start2, card_width, row_height, 'F')
         pdf.set_xy(x_start, y_start2 + 5)
         pdf.set_font('Arial', 'B', 12)
-        pdf.set_text_color(109, 40, 217) # Violet 700
-        pdf.cell(card_width, 6, str(kpis.get('in_review', 0)), 0, 2, 'C')
+        pdf.set_text_color(29, 78, 216) # Blue 700
+        pdf.cell(card_width, 6, str(kpis.get('avg_completion_time', 'N/A')), 0, 2, 'C')
         pdf.set_font('Arial', '', 7)
         pdf.set_text_color(100, 100, 100)
-        pdf.cell(card_width, 6, 'En Revision', 0, 0, 'C')
+        pdf.cell(card_width, 6, 'Prom. Tiempo', 0, 0, 'C')
         
         # Card 6: Completed
         x_pos = x_start + card_width + spacing

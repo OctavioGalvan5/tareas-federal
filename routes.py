@@ -3171,10 +3171,9 @@ def reports_data():
             'pending': pending
         })
         
-    # --- 2. Global Status (4 categories) ---
+    # --- 2. Global Status (3 categories) ---
     global_completed = sum(1 for t in tasks if t.status == 'Completed')
     global_in_progress = sum(1 for t in tasks if t.status == 'In Progress')
-    global_in_review = sum(1 for t in tasks if t.status == 'In Review')
     global_pending = sum(1 for t in tasks if t.status == 'Pending')
     
     # --- 3. Priority Distribution ---
@@ -3309,7 +3308,6 @@ def reports_data():
         'global_stats': {
             'completed': global_completed,
             'in_progress': global_in_progress,
-            'in_review': global_in_review,
             'pending': global_pending
         },
         'priority_stats': {
@@ -3588,21 +3586,35 @@ def export_report():
 def calculate_kpis(tasks, global_completed, start_date_str=None, end_date_str=None):
     kpi_total = len(tasks)
     kpi_completion_rate = round((global_completed / kpi_total * 100), 1) if kpi_total > 0 else 0
-    
+
     # Overdue: any non-completed task past due date
     now = datetime.now()
     kpi_overdue = sum(1 for t in tasks if t.status in ['Pending', 'In Progress', 'In Review'] and t.due_date < now)
-    
+
     # Status counts
     kpi_in_progress = sum(1 for t in tasks if t.status == 'In Progress')
-    kpi_in_review = sum(1 for t in tasks if t.status == 'In Review')
-    
+
     # Completed count
     kpi_completed = global_completed
-    
+
     # Pending count (includes overdue - all non-completed tasks)
     kpi_pending = kpi_total - kpi_completed
-    
+
+    # Average completion time: calculate average time from started_at to completed_at
+    completed_with_times = [t for t in tasks if t.status == 'Completed' and t.started_at and t.completed_at]
+    if completed_with_times:
+        total_seconds = 0
+        for t in completed_with_times:
+            delta = t.completed_at - t.started_at
+            total_seconds += delta.total_seconds()
+        avg_seconds = total_seconds / len(completed_with_times)
+        hours = int(avg_seconds // 3600)
+        minutes = int((avg_seconds % 3600) // 60)
+        seconds = int(avg_seconds % 60)
+        kpi_avg_completion_time = f"{hours}h {minutes}m {seconds}s"
+    else:
+        kpi_avg_completion_time = "N/A"
+
     # Average completed tasks per day (based on date range filter)
     if start_date_str and end_date_str:
         try:
@@ -3621,7 +3633,7 @@ def calculate_kpis(tasks, global_completed, start_date_str=None, end_date_str=No
         'completion_rate': kpi_completion_rate,
         'overdue': kpi_overdue,
         'in_progress': kpi_in_progress,
-        'in_review': kpi_in_review,
+        'avg_completion_time': kpi_avg_completion_time,
         'completed': kpi_completed,
         'pending': kpi_pending,
         'avg_per_day': kpi_avg_per_day

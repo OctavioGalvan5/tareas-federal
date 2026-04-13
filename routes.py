@@ -2167,6 +2167,27 @@ def export_pdf():
     # Start query
     query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
 
+    # Apply role-based visibility filtering (same logic as dashboard)
+    if current_user.can_only_see_own_tasks():
+        user_area_ids = [area.id for area in current_user.areas]
+        if user_area_ids:
+            query = query.filter(
+                db.or_(
+                    Task.assignees.any(id=current_user.id),
+                    Task.creator_id == current_user.id
+                )
+            ).filter(Task.area_id.in_(user_area_ids))
+        else:
+            query = query.filter(Task.area_id == -1)
+    elif not current_user.can_see_all_areas():
+        # Supervisors see all tasks in their area
+        user_area_ids = [area.id for area in current_user.areas]
+        if user_area_ids:
+            query = query.filter(Task.area_id.in_(user_area_ids))
+        else:
+            query = query.filter(Task.area_id == -1)
+    # Gerentes and admins see all tasks (no additional filter)
+
     # Apply Assignee Filter (works for both calendar and dashboard)
     if filter_assignee:
         query = query.filter(Task.assignees.any(id=filter_assignee))
@@ -2272,6 +2293,26 @@ def export_excel():
 
     # Start query
     query = Task.query.options(joinedload(Task.assignees), joinedload(Task.tags))
+
+    # Apply role-based visibility filtering (same logic as dashboard)
+    if current_user.can_only_see_own_tasks():
+        user_area_ids = [area.id for area in current_user.areas]
+        if user_area_ids:
+            query = query.filter(
+                db.or_(
+                    Task.assignees.any(id=current_user.id),
+                    Task.creator_id == current_user.id
+                )
+            ).filter(Task.area_id.in_(user_area_ids))
+        else:
+            query = query.filter(Task.area_id == -1)
+    elif not current_user.can_see_all_areas():
+        user_area_ids = [area.id for area in current_user.areas]
+        if user_area_ids:
+            query = query.filter(Task.area_id.in_(user_area_ids))
+        else:
+            query = query.filter(Task.area_id == -1)
+    # Gerentes and admins see all tasks (no additional filter)
 
     # Apply Assignee Filter (works for both calendar and dashboard)
     if filter_assignee:
@@ -2636,12 +2677,15 @@ def api_tasks_due_soon():
         elif business_days <= 2:  # Due in 0, 1, or 2 business days
             due_soon_expirations.append(exp_data)
     
-    return jsonify({
+    response = jsonify({
         'tasks': due_soon_tasks,
         'expirations': due_soon_expirations,
         'overdue_tasks': overdue_tasks,
         'overdue_expirations': overdue_expirations
     })
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    return response
 
 @main_bp.route('/api/user/toggle_notifications', methods=['POST'])
 @login_required

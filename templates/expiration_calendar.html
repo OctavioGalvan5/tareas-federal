@@ -240,13 +240,19 @@
 
                 <div class="form-group">
                     <label><i class="fas fa-tags"></i> Etiquetas</label>
-                    <div class="tags-container">
-                        {% for tag in available_tags %}
-                        <label class="tag-option">
-                            <input type="checkbox" name="tags" value="{{ tag.id }}">
-                            <span class="tag-chip" style="background: {{ tag.color }};">{{ tag.name }}</span>
-                        </label>
-                        {% endfor %}
+                    <div class="tag-picker">
+                        <div class="tag-selected-row" id="tagSelectedRow">
+                            <span class="tag-selected-placeholder" id="tagSelectedPlaceholder">Ninguna seleccionada</span>
+                        </div>
+                        <input type="text" class="tag-search-input" id="tagSearchInput" placeholder="Buscar etiqueta...">
+                        <div class="tag-dropdown" id="tagDropdown">
+                            {% for tag in available_tags %}
+                            <label class="tag-option" data-name="{{ tag.name|lower }}">
+                                <input type="checkbox" name="tags" value="{{ tag.id }}" onchange="updateSelectedTags()">
+                                <span class="tag-chip" style="background: {{ tag.color }};">{{ tag.name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -945,21 +951,65 @@
         background: #fef3c7;
     }
 
-    .tags-container {
+    /* Tag Picker */
+    .tag-picker {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        margin-top: 0.25rem;
+    }
+
+    .tag-selected-row {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.5rem;
-        margin-top: 0.5rem;
-        padding: 0.75rem;
+        gap: 0.35rem;
+        min-height: 2rem;
+        padding: 0.4rem 0.6rem;
+        background: #f8fafc;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 8px;
+    }
+
+    .tag-selected-placeholder {
+        color: #94a3b8;
+        font-size: 0.85rem;
+        align-self: center;
+    }
+
+    .tag-search-input {
+        width: 100%;
+        padding: 0.45rem 0.75rem;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        outline: none;
+        box-sizing: border-box;
+    }
+
+    .tag-search-input:focus {
+        border-color: #6366f1;
+    }
+
+    .tag-dropdown {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        max-height: 130px;
+        overflow-y: auto;
+        padding: 0.6rem;
         background: #fffbeb;
-        border-radius: 10px;
-        border: 2px solid #fde68a;
+        border-radius: 8px;
+        border: 1.5px solid #fde68a;
     }
 
     .tag-option {
         display: inline-flex;
         align-items: center;
         cursor: pointer;
+    }
+
+    .tag-option.hidden {
+        display: none;
     }
 
     .tag-option input[type="checkbox"] {
@@ -1029,6 +1079,9 @@
         document.getElementById('exp_description').value = '';
         document.getElementById('exp_due_date').value = new Date().toISOString().split('T')[0];
         document.querySelectorAll('.tag-option input').forEach(cb => cb.checked = false);
+        document.getElementById('tagSearchInput').value = '';
+        filterTags('');
+        updateSelectedTags();
         document.getElementById('expirationModal').style.display = 'flex';
     }
 
@@ -1048,6 +1101,9 @@
                     cb.checked = data.tag_ids.includes(parseInt(cb.value));
                 });
 
+                document.getElementById('tagSearchInput').value = '';
+                filterTags('');
+                updateSelectedTags();
                 document.getElementById('expirationModal').style.display = 'flex';
             })
             .catch(error => {
@@ -1059,6 +1115,43 @@
     function closeModal() {
         document.getElementById('expirationModal').style.display = 'none';
     }
+
+    function filterTags(query) {
+        const q = query.toLowerCase();
+        document.querySelectorAll('#tagDropdown .tag-option').forEach(opt => {
+            const name = opt.getAttribute('data-name') || '';
+            opt.classList.toggle('hidden', q.length > 0 && !name.includes(q));
+        });
+    }
+
+    function updateSelectedTags() {
+        const row = document.getElementById('tagSelectedRow');
+        const placeholder = document.getElementById('tagSelectedPlaceholder');
+        const checked = document.querySelectorAll('#tagDropdown .tag-option input:checked');
+
+        // Remove old selected chips (keep placeholder)
+        row.querySelectorAll('.tag-chip-selected').forEach(el => el.remove());
+
+        if (checked.length === 0) {
+            placeholder.style.display = '';
+        } else {
+            placeholder.style.display = 'none';
+            checked.forEach(cb => {
+                const chip = cb.nextElementSibling.cloneNode(true);
+                chip.classList.add('tag-chip-selected');
+                row.appendChild(chip);
+            });
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('tagSearchInput');
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                filterTags(this.value);
+            });
+        }
+    });
 
     function toggleExpiration(id) {
         fetch(`/expirations/${id}/toggle`, {
